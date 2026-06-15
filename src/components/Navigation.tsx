@@ -215,7 +215,7 @@ export default function Navigation({ user }: { user: SessionUser }) {
 
       {/* ─── MOBILE: Top bar ─── */}
       <header className="lg:hidden fixed top-0 left-0 right-0 bg-[image:var(--gradient)] z-40 px-4 flex items-center justify-between"
-        style={{ height: 'calc(48px + env(safe-area-inset-top, 0px))', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+        style={{ height: 'calc(48px + env(safe-area-inset-top, 0px))', paddingTop: 'env(safe-area-inset-top, 0px)', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
         <div className="flex items-center gap-2">
           <span className="bg-white/15 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">BCO</span>
           <span className="text-[13px] font-bold text-white">HUMAND</span>
@@ -237,7 +237,7 @@ export default function Navigation({ user }: { user: SessionUser }) {
 
       {/* ─── MOBILE: Bottom nav ─── */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
         <div className="flex">
           {mobileItems.map(item => {
             const active = path === item.href; const Icon = item.icon
