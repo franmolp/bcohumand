@@ -154,12 +154,12 @@ export default function Navigation({ user }: { user: SessionUser }) {
             const label = (!isAdminOrHR && (item as {labelEmp?: string}).labelEmp) || item.label
             return (
               <Link key={item.href} href={item.href}
-                className={`flex-1 flex flex-col items-center pt-3 pb-2.5 gap-1 min-h-[60px] ${active ? 'text-[var(--primary)]' : 'text-gray-400'}`}>
+                className={`flex-1 flex flex-col items-center pt-3 pb-4 gap-1 min-h-[68px] ${active ? 'text-[var(--primary)]' : 'text-gray-400'}`}>
                 <Icon size={22} /><span className="text-[10px] font-medium">{label}</span>
               </Link>
             )
           })}
-          <button onClick={() => setDrawer(true)} className="flex-1 flex flex-col items-center pt-3 pb-2.5 gap-1 min-h-[60px] text-gray-400 cursor-pointer">
+          <button onClick={() => setDrawer(true)} className="flex-1 flex flex-col items-center pt-3 pb-4 gap-1 min-h-[68px] text-gray-400 cursor-pointer">
             <IconMore size={22} /><span className="text-[10px] font-medium">Más</span>
           </button>
         </div>
