@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase, supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin } from '@/lib/supabase'
 import bcrypt from 'bcryptjs'
 import { SignJWT } from 'jose'
 import crypto from 'crypto'
@@ -45,8 +45,8 @@ export async function POST(request: NextRequest) {
 
     const usuarioTrimmed = usuarioInput.toLowerCase().trim()
 
-    // Buscar usuario con equipo y rol
-    const { data: usuario, error } = await supabase
+    // Buscar usuario con equipo y rol (supabaseAdmin bypasea RLS en el login)
+    const { data: usuario, error } = await supabaseAdmin
       .from('usuarios')
       .select('*, equipo:equipos(nombre), rol:roles(nombre)')
       .eq('usuario', usuarioTrimmed)
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       passwordValid = sha256 === usuario.password_hash
       if (passwordValid) {
         const newHash = await bcrypt.hash(password, 10)
-        await supabase.from('usuarios').update({ password_hash: newHash, salt: null }).eq('id', usuario.id)
+        await supabaseAdmin.from('usuarios').update({ password_hash: newHash, salt: null }).eq('id', usuario.id)
       }
     } else {
       passwordValid = await bcrypt.compare(password, usuario.password_hash)
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
       const updates: Record<string, unknown> = { intentos_fallidos: intentos }
       if (bloqueada) updates.estado_cuenta = 'bloqueada'
 
-      await supabase.from('usuarios').update(updates).eq('id', usuario.id)
+      await supabaseAdmin.from('usuarios').update(updates).eq('id', usuario.id)
 
       if (bloqueada) {
         await logSec('cuenta_bloqueada', `Cuenta bloqueada tras ${intentos} intentos fallidos`, ip, userAgent, usuario.id, usuarioTrimmed)
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Login exitoso: resetear intentos y actualizar último login
-    await supabase.from('usuarios').update({
+    await supabaseAdmin.from('usuarios').update({
       intentos_fallidos: 0,
       ultimo_login: new Date().toISOString()
     }).eq('id', usuario.id)
