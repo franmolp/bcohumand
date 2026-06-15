@@ -3,14 +3,14 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { requireAuth } from '@/lib/auth'
 import { crearNotificaciones, getAdminIds } from '@/lib/notificaciones'
 
-const ROLES_ALLOWED = ['Admin', 'admin', 'HR', 'Compras', 'Encargada']
+const ROLES_ALLOWED = ['Admin', 'admin', 'Compras', 'Encargada']
 
 export async function GET(request: NextRequest) {
   try {
     const session = await requireAuth()
     if (!ROLES_ALLOWED.includes(session.rol)) return NextResponse.json({ error: 'Sin acceso' }, { status: 403 })
 
-    const isAdmin = session.rol === 'Admin' || session.rol === 'admin' || session.rol === 'HR'
+    const isAdmin = session.rol === 'Admin' || session.rol === 'admin'
     const { searchParams } = new URL(request.url)
     const mes = searchParams.get('mes')
 

@@ -4,7 +4,7 @@ import { gasReady, gasUpload } from '@/lib/gas-upload'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf']
 const MAX_SIZE = 10 * 1024 * 1024 // 10MB
-const ROLES_ALLOWED = ['Admin', 'admin', 'HR', 'Compras', 'Encargada']
+const ROLES_ALLOWED = ['Admin', 'admin', 'Compras', 'Encargada']
 
 export async function POST(request: NextRequest) {
   const session = await requireAuth()

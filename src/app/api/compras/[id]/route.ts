@@ -5,7 +5,7 @@ import { requireAuth } from '@/lib/auth'
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth()
-    const isAdmin = session.rol === 'Admin' || session.rol === 'admin' || session.rol === 'HR'
+    const isAdmin = session.rol === 'Admin' || session.rol === 'admin'
     const { id } = await params
 
     const { data: existing } = await supabaseAdmin.from('compras').select('usuario_id').eq('id', id).single()
@@ -40,7 +40,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth()
-    const isAdmin = session.rol === 'Admin' || session.rol === 'admin' || session.rol === 'HR'
+    const isAdmin = session.rol === 'Admin' || session.rol === 'admin'
     const { id } = await params
 
     const { data: existing } = await supabaseAdmin.from('compras').select('usuario_id').eq('id', id).single()

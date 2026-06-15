@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { requireAuth } from '@/lib/auth'
 import ComprasClient from './client'
 
-const ROLES_ALLOWED = ['Admin', 'admin', 'HR', 'Compras', 'Encargada']
+const ROLES_ALLOWED = ['Admin', 'admin', 'Compras', 'Encargada']
 
 export default async function ComprasPage() {
   const session = await requireAuth()
