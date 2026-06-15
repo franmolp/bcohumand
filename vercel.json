@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/cumpleanos",
+      "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/certificados",
+      "schedule": "0 9 28 * *"
+    },
+    {
+      "path": "/api/monotributo/notificar",
+      "schedule": "0 9 26-31 * *"
+    }
+  ]
+}

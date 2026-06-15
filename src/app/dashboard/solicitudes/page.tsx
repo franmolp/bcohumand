@@ -1,0 +1,9 @@
+import { getSession } from '@/lib/auth'
+import { redirect } from 'next/navigation'
+import SolicitudesClient from './client'
+
+export default async function SolicitudesPage() {
+  const session = await getSession()
+  if (!session) redirect('/login')
+  return <SolicitudesClient user={session} />
+}
