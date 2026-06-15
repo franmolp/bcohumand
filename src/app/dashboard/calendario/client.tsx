@@ -27,6 +27,7 @@ interface CumpleanosUser {
   usuario_id: string
   nombre: string
   fecha_nacimiento: string
+  foto_perfil?: string | null
   equipo_nombre: string | null
   rol_nombre: string | null
 }
@@ -71,6 +72,7 @@ interface CalEvent {
   isPending: boolean
   usuarioId?: string
   hora?: string
+  fotoUrl?: string | null
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -222,6 +224,7 @@ function buildDayMap(
       color: COLOR_BIRTHDAY,
       isPending: false,
       usuarioId: b.usuario_id,
+      fotoUrl: b.foto_perfil ?? null,
     })
   }
 
@@ -305,12 +308,20 @@ function DayModal({
         {events.length === 0 && (
           <p className="text-center text-[13px] text-gray-400 py-6">Sin eventos este día</p>
         )}
-        {events.map(ev => (
+        {events.map(ev => {
+          const bdName = ev.type === 'birthday' ? ev.title.replace(/\s*🎂\s*$/, '') : ''
+          const bdIni  = bdName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+          return (
           <div
             key={ev.id}
             className="flex items-start gap-3 p-3 rounded-xl"
             style={{ borderLeft: `4px solid ${ev.color}`, backgroundColor: `${ev.color}18` }}
           >
+            {ev.type === 'birthday' && (
+              ev.fotoUrl
+                ? <img src={ev.fotoUrl} alt="" className="w-10 h-10 rounded-full object-cover shrink-0 shadow-sm" />
+                : <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-sm text-white font-bold text-[13px]" style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)' }}>{bdIni}</div>
+            )}
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-semibold leading-snug">{ev.title}</p>
               {ev.subtitle && <p className="text-[12px] text-gray-500 mt-0.5">{ev.subtitle}</p>}
@@ -330,7 +341,8 @@ function DayModal({
               </button>
             )}
           </div>
-        ))}
+          )
+        })}
       </div>
     </Modal>
   )

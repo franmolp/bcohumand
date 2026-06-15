@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
       .or(`fecha_fin.gte.${firstDay},fecha_fin.is.null`),
 
     supabase.from('usuarios')
-      .select('id, nombre, fecha_nacimiento, equipos(nombre), roles(nombre)')
+      .select('id, nombre, fecha_nacimiento, foto_perfil, equipos(nombre), roles(nombre)')
       .eq('estado_cuenta', 'activo'),
 
     supabaseAdmin.from('eventos_especiales')
@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
       usuario_id: u.id,
       nombre: u.nombre,
       fecha_nacimiento: u.fecha_nacimiento as string,
+      foto_perfil: u.foto_perfil ?? null,
       equipo_nombre: relNombre(u.equipos),
       rol_nombre: relNombre(u.roles),
     }))

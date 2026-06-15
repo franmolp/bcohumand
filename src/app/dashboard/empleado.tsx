@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { SessionUser } from '@/types'
 import { supabase } from '@/lib/supabase'
-import { IconCalendar, IconBell, IconFileText, IconAlertCircle } from '@/components/ui/Icons'
+import { IconCalendar, IconBell, IconFileText, IconAlertCircle, IconChevronRight } from '@/components/ui/Icons'
 
 const VACACIONES_DEFAULT = 14
 
@@ -185,6 +185,57 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
         </p>
       </div>
 
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Link href="/dashboard/solicitudes"
+          className="bg-[image:var(--gradient)] rounded-2xl p-4 text-white shadow-sm hover:opacity-90 transition-opacity">
+          <div className="flex items-start justify-between mb-3">
+            <div className="w-8 h-8 bg-white/15 rounded-xl flex items-center justify-center">
+              <IconCalendar size={16} className="text-white" />
+            </div>
+            <IconChevronRight size={14} className="text-white/50 mt-1" />
+          </div>
+          <p className="text-[32px] font-bold leading-none mb-1">{vacRest}</p>
+          <p className="text-[11px] text-white/70">Días de vacaciones</p>
+        </Link>
+
+        <Link href="/dashboard/solicitudes"
+          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-shadow">
+          <div className="flex items-start justify-between mb-3">
+            <div className="w-8 h-8 bg-amber-50 rounded-xl flex items-center justify-center">
+              <IconFileText size={16} className="text-amber-500" />
+            </div>
+            <IconChevronRight size={14} className="text-gray-300 mt-1" />
+          </div>
+          <p className="text-[32px] font-bold leading-none text-amber-600 mb-1">{misSOLS.length}</p>
+          <p className="text-[11px] text-gray-400">Mis solicitudes</p>
+        </Link>
+
+        <Link href="/dashboard/notificaciones"
+          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-shadow">
+          <div className="flex items-start justify-between mb-3">
+            <div className="w-8 h-8 bg-red-50 rounded-xl flex items-center justify-center">
+              <IconBell size={16} className="text-red-400" />
+            </div>
+            <IconChevronRight size={14} className="text-gray-300 mt-1" />
+          </div>
+          <p className="text-[32px] font-bold leading-none text-red-500 mb-1">{notifs.filter(n => !n.leida).length}</p>
+          <p className="text-[11px] text-gray-400">Notificaciones nuevas</p>
+        </Link>
+
+        <Link href="/dashboard/calendario"
+          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-shadow">
+          <div className="flex items-start justify-between mb-3">
+            <div className="w-8 h-8 bg-pink-50 rounded-xl flex items-center justify-center">
+              <IconCalendar size={16} className="text-pink-400" />
+            </div>
+            <IconChevronRight size={14} className="text-gray-300 mt-1" />
+          </div>
+          <p className="text-[32px] font-bold leading-none text-pink-500 mb-1">{proxCumple.length}</p>
+          <p className="text-[11px] text-gray-400">Próximos cumpleaños</p>
+        </Link>
+      </div>
+
       {/* Ausentes hoy — visible para HR y Encargada */}
       {showAusentes && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
@@ -250,10 +301,13 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
         <div className="lg:col-span-2 space-y-4">
 
           {/* Vacaciones */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <IconCalendar size={16} className="text-[var(--primary)]" />
-              <h2 className="text-[14px] font-bold text-[var(--text)]">Vacaciones {periodLabel}</h2>
+          <Link href="/dashboard/solicitudes" className="block bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between gap-2 mb-4">
+              <div className="flex items-center gap-2">
+                <IconCalendar size={16} className="text-[var(--primary)]" />
+                <h2 className="text-[14px] font-bold text-[var(--text)]">Vacaciones {periodLabel}</h2>
+              </div>
+              <IconChevronRight size={14} className="text-gray-300" />
             </div>
             <div className="flex items-end justify-between mb-2">
               <div>
@@ -274,13 +328,17 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
                 }}
               />
             </div>
-          </div>
+          </Link>
 
           {/* Mis solicitudes recientes */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100">
+            <Link href="/dashboard/solicitudes" className="flex items-center justify-between px-5 py-4 border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
               <h2 className="text-[14px] font-bold text-[var(--text)]">Mis Solicitudes</h2>
-            </div>
+              <div className="flex items-center gap-2">
+                {misSOLS.length > 0 && <span className="text-[12px] font-bold text-amber-600">{misSOLS.length}</span>}
+                <IconChevronRight size={14} className="text-gray-300" />
+              </div>
+            </Link>
             <div className="divide-y divide-gray-50">
               {misSOLS.length === 0 && (
                 <p className="text-center text-[13px] text-gray-400 py-8">Sin solicitudes</p>
@@ -310,15 +368,20 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
           {/* Notificaciones */}
           {notifs.length > 0 && (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
-                <IconBell size={15} className="text-[var(--primary)]" />
-                <h2 className="text-[14px] font-bold text-[var(--text)]">Notificaciones</h2>
-                {notifs.some(n => !n.leida) && (
-                  <span className="text-[10px] bg-red-500 text-white rounded-full px-1.5 py-0.5 font-bold ml-auto">
-                    {notifs.filter(n => !n.leida).length}
-                  </span>
-                )}
-              </div>
+              <Link href="/dashboard/notificaciones" className="flex items-center justify-between px-5 py-4 border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
+                <div className="flex items-center gap-2">
+                  <IconBell size={15} className="text-[var(--primary)]" />
+                  <h2 className="text-[14px] font-bold text-[var(--text)]">Notificaciones</h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  {notifs.some(n => !n.leida) && (
+                    <span className="text-[10px] bg-red-500 text-white rounded-full px-1.5 py-0.5 font-bold">
+                      {notifs.filter(n => !n.leida).length}
+                    </span>
+                  )}
+                  <IconChevronRight size={14} className="text-gray-300" />
+                </div>
+              </Link>
               <div className="divide-y divide-gray-50">
                 {notifs.map(n => (
                   <div key={n.id} className={`px-5 py-3.5 ${!n.leida ? 'bg-[var(--primary-light)]/30' : ''}`}>
@@ -336,9 +399,13 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
 
           {/* Próximos eventos */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100">
+            <Link href="/dashboard/calendario" className="flex items-center justify-between px-5 py-4 border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
               <h2 className="text-[14px] font-bold text-[var(--text)]">Próximos Eventos</h2>
-            </div>
+              <div className="flex items-center gap-2">
+                {eventos.length > 0 && <span className="text-[12px] font-bold text-violet-500">{eventos.length}</span>}
+                <IconChevronRight size={14} className="text-gray-300" />
+              </div>
+            </Link>
             <div className="p-4 space-y-2">
               {eventos.length === 0 && (
                 <p className="text-center text-[13px] text-gray-400 py-6">Sin eventos próximos</p>
@@ -367,9 +434,13 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
 
           {/* Próximos cumpleaños */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100">
+            <Link href="/dashboard/calendario" className="flex items-center justify-between px-5 py-4 border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
               <h2 className="text-[14px] font-bold text-[var(--text)]">Próximos Cumpleaños</h2>
-            </div>
+              <div className="flex items-center gap-2">
+                {proxCumple.length > 0 && <span className="text-[12px] font-bold text-pink-500">{proxCumple.length}</span>}
+                <IconChevronRight size={14} className="text-gray-300" />
+              </div>
+            </Link>
             <div className="p-4 space-y-2">
               {proxCumple.length === 0 && (
                 <p className="text-center text-[13px] text-gray-400 py-6">Sin cumpleaños próximos</p>
