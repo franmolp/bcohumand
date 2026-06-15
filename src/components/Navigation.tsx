@@ -316,9 +316,9 @@ export default function Navigation({ user }: { user: SessionUser }) {
 
       {/* ─── First-login photo prompt ─── */}
       {showPhotoPrompt && createPortal(
-        <div className="fixed inset-0 z-[60] flex items-end lg:items-center justify-center" onClick={dismissPhotoPrompt}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center px-5" onClick={dismissPhotoPrompt}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative bg-white rounded-t-2xl lg:rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
             <button onClick={dismissPhotoPrompt} className="absolute top-4 right-4 p-1.5 text-gray-400 hover:bg-gray-100 rounded-full cursor-pointer">
               <IconX size={16} />
             </button>
