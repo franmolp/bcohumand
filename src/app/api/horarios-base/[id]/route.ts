@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
   if (!isAdmin) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
 
-  const id = parseInt(params.id, 10)
+  const { id: idStr } = await params
+  const id = parseInt(idStr, 10)
   const body = await req.json()
   const { inicio_base, fin_base, horas_base } = body as {
     inicio_base?: string
@@ -39,13 +40,14 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json(data)
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
   if (!isAdmin) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
 
-  const id = parseInt(params.id, 10)
+  const { id: idStr } = await params
+  const id = parseInt(idStr, 10)
   const { error } = await supabase.from('horarios_base').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
