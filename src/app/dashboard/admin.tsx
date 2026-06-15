@@ -233,19 +233,25 @@ export default async function AdminDashboard({ session }: { session: SessionUser
 
   const firstName = session.nombre.split(' ')[0]
   const arHour = parseInt(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires', hour: 'numeric', hour12: false }))
-  const saludo = arHour >= 5 && arHour < 12
-    ? `Buen día ${firstName}, ¡que tengas un excelente día!`
+  const saludoBase = arHour >= 5 && arHour < 12
+    ? `Buen día, ${firstName}`
     : arHour >= 12 && arHour < 20
-    ? `Buenas tardes ${firstName}, ¡que tengas una linda tarde!`
-    : `Buenas noches ${firstName}`
+    ? `Buenas tardes, ${firstName}`
+    : `Buenas noches, ${firstName}`
+  const saludoDeseo = arHour >= 5 && arHour < 12
+    ? '¡que tengas un excelente día!'
+    : arHour >= 12 && arHour < 20
+    ? '¡que tengas una linda tarde!'
+    : null
 
   return (
     <div className="py-4 fade-in space-y-5">
       {/* Greeting */}
       <div>
-        <h1 className="font-bold text-[var(--text)] whitespace-nowrap overflow-hidden" style={{ fontSize: 'clamp(13px, 4vw, 22px)' }}>
-          {saludo}
+        <h1 className="text-[20px] lg:text-[22px] font-bold text-[var(--text)] leading-tight">
+          {saludoBase}
         </h1>
+        {saludoDeseo && <p className="text-[13px] text-gray-400 mt-0.5">{saludoDeseo}</p>}
         <p className="text-[13px] text-gray-400 mt-0.5">
           {fmtDateLabel(today)}
         </p>

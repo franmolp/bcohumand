@@ -45,11 +45,11 @@ export async function POST(request: NextRequest) {
 
     const usuarioTrimmed = usuarioInput.toLowerCase().trim()
 
-    // Buscar usuario con equipo y rol — ilike para tolerar diferencias de casing en la DB
+    // Buscar usuario con equipo y rol (supabaseAdmin bypasea RLS en el login)
     const { data: usuario, error } = await supabaseAdmin
       .from('usuarios')
       .select('*, equipo:equipos(nombre), rol:roles(nombre)')
-      .ilike('usuario', usuarioTrimmed)
+      .eq('usuario', usuarioTrimmed)
       .single()
 
     if (error || !usuario) {

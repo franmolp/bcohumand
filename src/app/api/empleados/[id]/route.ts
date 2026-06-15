@@ -37,7 +37,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (fecha_nacimiento !== undefined) updates.fecha_nacimiento = fecha_nacimiento || null
     if (reloj !== undefined) updates.reloj = reloj
     if (estado_cuenta !== undefined) updates.estado_cuenta = estado_cuenta
-    if (usuario !== undefined) updates.usuario = usuario
+    if (usuario !== undefined) updates.usuario = usuario.toLowerCase().trim()
 
     if (password) {
       updates.password_hash = await bcrypt.hash(password, 10)

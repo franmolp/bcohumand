@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('usuarios')
       .insert({
-        usuario: usuario || email.split('@')[0],
+        usuario: (usuario || email.split('@')[0]).toLowerCase().trim(),
         nombre,
         email: email.toLowerCase().trim(),
         equipo_id: equipo_id || null,

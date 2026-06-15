@@ -354,29 +354,42 @@ function CreateEventModal({
   onClose, onSave, empleados, equipos, roles,
 }: {
   onClose: () => void
-  onSave: (payload: typeof BLANK_EVENT) => Promise<void>
+  onSave: (payload: typeof BLANK_EVENT & { selected_employees?: string[] }) => Promise<void>
   empleados: EmpleadoOption[]
   equipos: string[]
   roles: string[]
 }) {
   const [form, setForm] = useState({ ...BLANK_EVENT })
   const [saving, setSaving] = useState(false)
+  const [selectedEmployees, setSelectedEmployees] = useState<string[]>([])
+  const [empSearch, setEmpSearch] = useState('')
 
   const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }))
 
+  function toggleEmployee(id: string) {
+    setSelectedEmployees(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
   async function submit() {
     if (!form.titulo.trim() || !form.fecha) return
+    if (form.tipo_destinatario === 'employee' && selectedEmployees.length === 0) return
     setSaving(true)
-    await onSave(form)
+    await onSave({ ...form, selected_employees: form.tipo_destinatario === 'employee' ? selectedEmployees : undefined })
     setSaving(false)
   }
 
+  const filteredEmpleados = useMemo(() =>
+    [...empleados]
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+      .filter(e => e.nombre.toLowerCase().includes(empSearch.toLowerCase())),
+    [empleados, empSearch]
+  )
+
   const valOptions = useMemo(() => {
-    if (form.tipo_destinatario === 'team')     return equipos.map(e => ({ id: e, label: e }))
-    if (form.tipo_destinatario === 'role')     return roles.map(r => ({ id: r, label: r }))
-    if (form.tipo_destinatario === 'employee') return empleados.map(e => ({ id: e.id, label: e.nombre }))
+    if (form.tipo_destinatario === 'team') return equipos.map(e => ({ id: e, label: e }))
+    if (form.tipo_destinatario === 'role') return roles.map(r => ({ id: r, label: r }))
     return []
-  }, [form.tipo_destinatario, equipos, roles, empleados])
+  }, [form.tipo_destinatario, equipos, roles])
 
   return (
     <Modal open onClose={onClose} title="Nuevo evento especial">
@@ -478,19 +491,20 @@ function CreateEventModal({
             className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] bg-white"
             style={{ fontSize: 16 }}
             value={form.tipo_destinatario}
-            onChange={e => { set('tipo_destinatario', e.target.value); set('valor_destinatario', '') }}
+            onChange={e => { set('tipo_destinatario', e.target.value); set('valor_destinatario', ''); setSelectedEmployees([]) }}
           >
             <option value="all">Todos</option>
             <option value="team">Equipo</option>
             <option value="role">Rol</option>
-            <option value="employee">Empleada específica</option>
+            <option value="employee">Empleadas específicas</option>
           </select>
         </div>
 
+        {/* Equipo o Rol — select simple */}
         {valOptions.length > 0 && (
           <div>
             <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">
-              {form.tipo_destinatario === 'team' ? 'Equipo' : form.tipo_destinatario === 'role' ? 'Rol' : 'Empleada'}
+              {form.tipo_destinatario === 'team' ? 'Equipo' : 'Rol'}
             </label>
             <select
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] bg-white"
@@ -504,6 +518,36 @@ function CreateEventModal({
           </div>
         )}
 
+        {/* Empleadas — checkboxes con buscador */}
+        {form.tipo_destinatario === 'employee' && (
+          <div>
+            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">
+              Empleadas {selectedEmployees.length > 0 && <span className="text-[var(--primary)]">({selectedEmployees.length} seleccionadas)</span>}
+            </label>
+            <input
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] outline-none focus:border-[var(--primary)] mb-2"
+              style={{ fontSize: 16 }}
+              placeholder="Buscar…"
+              value={empSearch}
+              onChange={e => setEmpSearch(e.target.value)}
+            />
+            <div className="border border-gray-200 rounded-xl overflow-y-auto max-h-44">
+              {filteredEmpleados.map(e => (
+                <label key={e.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0">
+                  <input
+                    type="checkbox"
+                    checked={selectedEmployees.includes(e.id)}
+                    onChange={() => toggleEmployee(e.id)}
+                    className="w-4 h-4 accent-[var(--primary)]"
+                  />
+                  <span className="text-[13px] text-gray-700">{e.nombre}</span>
+                </label>
+              ))}
+              {filteredEmpleados.length === 0 && <p className="text-[13px] text-gray-400 text-center py-4">Sin resultados</p>}
+            </div>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex gap-3 pt-1">
           <button
@@ -514,7 +558,7 @@ function CreateEventModal({
           </button>
           <button
             onClick={submit}
-            disabled={saving || !form.titulo.trim() || !form.fecha}
+            disabled={saving || !form.titulo.trim() || !form.fecha || (form.tipo_destinatario === 'employee' && selectedEmployees.length === 0)}
             className="flex-1 py-2.5 rounded-xl bg-[var(--primary)] text-white text-[14px] font-semibold disabled:opacity-50 cursor-pointer"
           >
             {saving ? <Spinner size={16} inline /> : 'Guardar'}
@@ -624,14 +668,24 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
   }, [data, anio, mes, canViewAll, user, filterUid, filterTeam, filterRole])
 
   // ── Create event ──
-  async function handleCreateEvent(payload: typeof BLANK_EVENT) {
-    const r = await fetch('/api/calendario', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    if (!r.ok) {
-      const body = await r.json().catch(() => ({}))
+  async function handleCreateEvent(payload: typeof BLANK_EVENT & { selected_employees?: string[] }) {
+    const { selected_employees, ...rest } = payload
+    // Si hay múltiples empleadas, crear un evento por cada una
+    const requests = (selected_employees && selected_employees.length > 0)
+      ? selected_employees.map(id => fetch('/api/calendario', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...rest, tipo_destinatario: 'employee', valor_destinatario: id }),
+        }))
+      : [fetch('/api/calendario', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(rest),
+        })]
+    const results = await Promise.all(requests)
+    const failed = results.find(r => !r.ok)
+    if (failed) {
+      const body = await failed.json().catch(() => ({}))
       showToast(body.error ?? 'Error al crear el evento')
       return
     }
