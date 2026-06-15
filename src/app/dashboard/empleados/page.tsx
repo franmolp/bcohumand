@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Button, Input, Select, Spinner, Modal, Toast, Confirm } from '@/components/ui'
-import { IconPlus, IconSearch, IconEdit, IconAlertCircle, IconRefresh, IconArchive, IconLock, IconLockOpen, IconUsers } from '@/components/ui/Icons'
+import { IconPlus, IconSearch, IconEdit, IconAlertCircle, IconRefresh, IconArchive, IconLock, IconLockOpen, IconUsers, IconBell } from '@/components/ui/Icons'
 
 interface Equipo { id: number; nombre: string }
 interface Rol { id: number; nombre: string }
@@ -47,6 +47,7 @@ export default function EmpleadosPage() {
   const [blockId, setBlockId]         = useState<string | null>(null)
   const [unblockId, setUnblockId]     = useState<string | null>(null)
   const [vacMap, setVacMap]           = useState<Record<string, { total: number; usadas: number; restantes: number }>>({})
+  const [pushSet, setPushSet]         = useState<Set<string>>(new Set())
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -62,6 +63,7 @@ export default function EmpleadosPage() {
   useEffect(() => { load() }, [load])
   useEffect(() => { fetch('/api/equipos').then(r => r.json()).then(setEquipos); fetch('/api/roles').then(r => r.json()).then(setRoles) }, [])
   useEffect(() => { fetch('/api/empleados/vacaciones').then(r => r.json()).then(d => { if (d && typeof d === 'object') setVacMap(d) }) }, [])
+  useEffect(() => { fetch('/api/push/subscribe').then(r => r.ok ? r.json() : []).then((ids: string[]) => setPushSet(new Set(ids))) }, [])
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(''), 3000); return () => clearTimeout(t) } }, [toast])
 
   function openNew() { setForm(blank); setEditId(null); setError(''); setModal(true) }
@@ -197,8 +199,10 @@ export default function EmpleadosPage() {
               <div key={emp.id} className={`bg-white rounded-xl border border-gray-200/60 p-3 flex items-center gap-3 ${emp.estado_cuenta !== 'activo' ? 'opacity-50' : ''}`}>
                 <EmpAvatar emp={emp} size={40} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">{emp.nombre}</p>
-                  <p className="text-[11px] text-gray-500 truncate">@{emp.usuario}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-semibold truncate">{emp.nombre}</p>
+                    {pushSet.has(emp.id) && <IconBell size={11} className="text-gray-400 shrink-0" />}
+                  </div>
                   <p className="text-[11px] text-[var(--primary)] mt-0.5">{emp.equipo?.nombre || '—'} · {(() => { const v = vacMap[emp.id] ?? { total: 14, restantes: 14 }; return `${v.restantes}/${v.total} vac.` })()}</p>
                 </div>
                 <div className="flex gap-1 shrink-0">
@@ -239,6 +243,7 @@ export default function EmpleadosPage() {
                       <div className="flex items-center gap-2.5">
                         <EmpAvatar emp={emp} size={32} />
                         <span className="font-medium">{emp.nombre}</span>
+                        {pushSet.has(emp.id) && <IconBell size={12} className="text-gray-400 shrink-0" />}
                       </div>
                     </td>
                     <td className="py-3 px-4 text-gray-500 text-[13px]">{emp.usuario}</td>

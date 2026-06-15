@@ -2,6 +2,21 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
+// GET — returns array of usuario_ids with at least one active push subscription (admin only)
+export async function GET() {
+  const session = await getSession()
+  if (!session) return NextResponse.json([], { status: 401 })
+  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+  if (!isAdmin) return NextResponse.json([], { status: 403 })
+
+  const { data } = await supabaseAdmin
+    .from('push_subscriptions')
+    .select('usuario_id')
+
+  const ids = [...new Set((data ?? []).map(r => r.usuario_id))]
+  return NextResponse.json(ids)
+}
+
 export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
