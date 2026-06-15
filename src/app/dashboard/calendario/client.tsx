@@ -214,14 +214,11 @@ function buildDayMap(
     const day = parseInt(b.fecha_nacimiento.slice(8, 10), 10)
     if (canViewAll && isFiltered && !allowed.has(b.usuario_id)) continue
 
-    // Year display: X años
-    const birthYear = parseInt(b.fecha_nacimiento.slice(0, 4), 10)
-    const anos = anio - birthYear
     add(day, {
       id: `bd-${b.usuario_id}`,
       type: 'birthday',
-      title: `${b.nombre.split(' ')[0]} 🎂`,
-      subtitle: anos > 0 ? `${anos} años` : undefined,
+      title: `${b.nombre} 🎂`,
+      subtitle: undefined,
       color: COLOR_BIRTHDAY,
       isPending: false,
       usuarioId: b.usuario_id,
