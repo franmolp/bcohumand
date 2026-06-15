@@ -56,18 +56,21 @@ export default function Navigation({ user }: { user: SessionUser }) {
 
   // Load photo from cache then server
   useEffect(() => {
-    const cached = localStorage.getItem('bco_foto_perfil')
+    const FOTO_KEY   = `bco_foto_perfil_${user.id}`
+    const PROMPT_KEY = `bco_foto_prompt_${user.id}`
+
+    const cached = localStorage.getItem(FOTO_KEY)
     if (cached) setFotoUrl(cached)
 
     fetch('/api/perfil/foto')
       .then(r => r.json())
       .then(({ url }) => {
         setFotoUrl(url)
-        if (url) localStorage.setItem('bco_foto_perfil', url)
+        if (url) localStorage.setItem(FOTO_KEY, url)
         else {
-          localStorage.removeItem('bco_foto_perfil')
+          localStorage.removeItem(FOTO_KEY)
           // Show first-login photo prompt if not dismissed
-          if (!localStorage.getItem('bco_foto_prompt')) {
+          if (!localStorage.getItem(PROMPT_KEY)) {
             setTimeout(() => setShowPhotoPrompt(true), 1500)
           }
         }
@@ -77,11 +80,12 @@ export default function Navigation({ user }: { user: SessionUser }) {
     const onFotoUpdated = (e: Event) => {
       const url = (e as CustomEvent<{ url: string | null }>).detail.url
       setFotoUrl(url)
-      if (url) localStorage.setItem('bco_foto_perfil', url)
-      else localStorage.removeItem('bco_foto_perfil')
+      if (url) localStorage.setItem(FOTO_KEY, url)
+      else localStorage.removeItem(FOTO_KEY)
     }
     window.addEventListener('bco-foto-updated', onFotoUpdated)
     return () => window.removeEventListener('bco-foto-updated', onFotoUpdated)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Notifications polling
@@ -110,8 +114,8 @@ export default function Navigation({ user }: { user: SessionUser }) {
 
   function handlePhotoSaved(url: string) {
     setFotoUrl(url)
-    localStorage.setItem('bco_foto_perfil', url)
-    localStorage.setItem('bco_foto_prompt', '1')
+    localStorage.setItem(`bco_foto_perfil_${user.id}`, url)
+    localStorage.setItem(`bco_foto_prompt_${user.id}`, '1')
     setShowCrop(false)
     setShowPhotoPrompt(false)
     window.dispatchEvent(new CustomEvent('bco-foto-updated', { detail: { url } }))
@@ -119,13 +123,13 @@ export default function Navigation({ user }: { user: SessionUser }) {
 
   function handlePhotoDeleted() {
     setFotoUrl(null)
-    localStorage.removeItem('bco_foto_perfil')
+    localStorage.removeItem(`bco_foto_perfil_${user.id}`)
     setShowCrop(false)
     window.dispatchEvent(new CustomEvent('bco-foto-updated', { detail: { url: null } }))
   }
 
   function dismissPhotoPrompt() {
-    localStorage.setItem('bco_foto_prompt', '1')
+    localStorage.setItem(`bco_foto_prompt_${user.id}`, '1')
     setShowPhotoPrompt(false)
   }
 

@@ -142,7 +142,7 @@ export default function MuroClient({ session }: { session: SessionUser }) {
   const LIMIT = 20
 
   useEffect(() => {
-    setMyFoto(localStorage.getItem('bco_foto_perfil'))
+    setMyFoto(localStorage.getItem(`bco_foto_perfil_${session.id}`))
     const onFoto = (e: Event) => setMyFoto((e as CustomEvent<{ url: string | null }>).detail.url)
     window.addEventListener('bco-foto-updated', onFoto)
     return () => window.removeEventListener('bco-foto-updated', onFoto)

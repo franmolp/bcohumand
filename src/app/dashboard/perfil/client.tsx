@@ -122,7 +122,7 @@ export default function PerfilClient({ user }: { user: SessionUser }) {
     showToast('Foto actualizada')
     // Notify Navigation to refresh
     if (typeof window !== 'undefined') {
-      localStorage.setItem('bco_foto_perfil', url)
+      localStorage.setItem(`bco_foto_perfil_${user.id}`, url)
       window.dispatchEvent(new CustomEvent('bco-foto-updated', { detail: { url } }))
     }
   }
@@ -132,7 +132,7 @@ export default function PerfilClient({ user }: { user: SessionUser }) {
     setShowCrop(false)
     showToast('Foto eliminada')
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('bco_foto_perfil')
+      localStorage.removeItem(`bco_foto_perfil_${user.id}`)
       window.dispatchEvent(new CustomEvent('bco-foto-updated', { detail: { url: null } }))
     }
   }
