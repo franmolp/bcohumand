@@ -33,6 +33,7 @@ export default function Navigation({ user }: { user: SessionUser }) {
   const isEncargada = user.rol === 'Encargada'
   const [drawer, setDrawer] = useState(false)
   const [unread, setUnread] = useState(0)
+  const [modulos, setModulos] = useState<Record<string, number>>({})
   const [toast, setToast] = useState({ visible: false, msg: '' })
   const prevUnread = useRef<number | null>(null)
 
@@ -53,7 +54,7 @@ export default function Navigation({ user }: { user: SessionUser }) {
       try {
         const res = await fetch('/api/notificaciones?count=true')
         if (!res.ok) return
-        const { count, titulo } = await res.json()
+        const { count, titulo, modulos: mods } = await res.json()
         if (prevUnread.current !== null && count > prevUnread.current) {
           const diff = count - prevUnread.current
           const msg = diff === 1 && titulo ? titulo : `Tenés ${diff} notificaciones nuevas`
@@ -62,6 +63,7 @@ export default function Navigation({ user }: { user: SessionUser }) {
         }
         prevUnread.current = count
         setUnread(count)
+        setModulos(mods ?? {})
       } catch { /* ignore */ }
     }
     fetchUnread()
@@ -100,11 +102,18 @@ export default function Navigation({ user }: { user: SessionUser }) {
           {items.map(item => {
             const active = path === item.href; const Icon = item.icon
             const label = (!isAdminOrHR && (item as {labelEmp?: string}).labelEmp) || item.label
+            const badge = modulos[item.href] ?? 0
             return (
               <Link key={item.href} href={item.href}
                 className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] mb-0.5 transition-colors ${
                   active ? 'bg-[var(--primary-light)] text-[var(--primary)] font-semibold' : 'text-[var(--text-sub)] hover:bg-gray-50 hover:text-[var(--text)]'}`}>
-                <Icon size={18} className={active ? 'text-[var(--primary)]' : 'text-gray-400'} />{label}
+                <Icon size={18} className={active ? 'text-[var(--primary)]' : 'text-gray-400'} />
+                <span className="flex-1">{label}</span>
+                {badge > 0 && !active && (
+                  <span className="min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                    {badge > 99 ? '99+' : badge}
+                  </span>
+                )}
               </Link>
             )
           })}
@@ -152,14 +161,23 @@ export default function Navigation({ user }: { user: SessionUser }) {
           {mobileItems.map(item => {
             const active = path === item.href; const Icon = item.icon
             const label = (!isAdminOrHR && (item as {labelEmp?: string}).labelEmp) || item.label
+            const badge = modulos[item.href] ?? 0
             return (
               <Link key={item.href} href={item.href}
-                className={`flex-1 flex flex-col items-center pt-3 pb-4 gap-1 min-h-[68px] ${active ? 'text-[var(--primary)]' : 'text-gray-400'}`}>
-                <Icon size={22} /><span className="text-[10px] font-medium">{label}</span>
+                className={`flex-1 flex flex-col items-center pt-3 pb-6 gap-1 min-h-[72px] ${active ? 'text-[var(--primary)]' : 'text-gray-400'}`}>
+                <span className="relative">
+                  <Icon size={22} />
+                  {badge > 0 && !active && (
+                    <span className="absolute -top-1 -right-1.5 min-w-[14px] h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5">
+                      {badge > 99 ? '99+' : badge}
+                    </span>
+                  )}
+                </span>
+                <span className="text-[10px] font-medium">{label}</span>
               </Link>
             )
           })}
-          <button onClick={() => setDrawer(true)} className="flex-1 flex flex-col items-center pt-3 pb-4 gap-1 min-h-[68px] text-gray-400 cursor-pointer">
+          <button onClick={() => setDrawer(true)} className="flex-1 flex flex-col items-center pt-3 pb-6 gap-1 min-h-[72px] text-gray-400 cursor-pointer">
             <IconMore size={22} /><span className="text-[10px] font-medium">Más</span>
           </button>
         </div>
@@ -188,11 +206,18 @@ export default function Navigation({ user }: { user: SessionUser }) {
               {items.map(item => {
                 const active = path === item.href; const Icon = item.icon
                 const label = (!isAdminOrHR && (item as {labelEmp?: string}).labelEmp) || item.label
+                const badge = modulos[item.href] ?? 0
                 return (
                   <Link key={item.href} href={item.href} onClick={() => setDrawer(false)}
                     className={`flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-[15px] ${
                       active ? 'bg-[var(--primary-light)] text-[var(--primary)] font-semibold' : 'text-[var(--text)] active:bg-gray-50'}`}>
-                    <Icon size={20} className={active ? 'text-[var(--primary)]' : 'text-gray-400'} />{label}
+                    <Icon size={20} className={active ? 'text-[var(--primary)]' : 'text-gray-400'} />
+                    <span className="flex-1">{label}</span>
+                    {badge > 0 && !active && (
+                      <span className="min-w-[20px] h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                        {badge > 99 ? '99+' : badge}
+                      </span>
+                    )}
                   </Link>
                 )
               })}

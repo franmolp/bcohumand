@@ -44,14 +44,36 @@ export async function GET(request: NextRequest) {
   const countOnly = searchParams.get('count') === 'true'
 
   if (countOnly) {
-    const { data: unread, count } = await supabaseAdmin
+    const { data: unread } = await supabaseAdmin
       .from('notificaciones')
-      .select('titulo', { count: 'exact' })
+      .select('titulo, tipo')
       .eq('usuario_id', session.id)
       .eq('leida', false)
       .order('created_at', { ascending: false })
-      .limit(1)
-    return NextResponse.json({ count: count ?? 0, titulo: unread?.[0]?.titulo ?? null })
+
+    const count = unread?.length ?? 0
+    const titulo = unread?.[0]?.titulo ?? null
+
+    // Mapeo tipo → módulo nav
+    const tipoModulo: Record<string, string> = {
+      solicitud_nueva: '/dashboard/solicitudes',
+      solicitud_aprobada: '/dashboard/solicitudes',
+      solicitud_rechazada: '/dashboard/solicitudes',
+      solicitud_creada_admin: '/dashboard/solicitudes',
+      solicitud_modificada: '/dashboard/solicitudes',
+      compra: '/dashboard/compras',
+      monotributo: '/dashboard/monotributo',
+      mural_post: '/dashboard/muro',
+      mural_respuesta: '/dashboard/muro',
+      recibo: '/dashboard/liquidador',
+    }
+    const modulos: Record<string, number> = {}
+    for (const n of (unread ?? [])) {
+      const mod = tipoModulo[n.tipo]
+      if (mod) modulos[mod] = (modulos[mod] ?? 0) + 1
+    }
+
+    return NextResponse.json({ count, titulo, modulos })
   }
 
   let { data, error } = await supabaseAdmin

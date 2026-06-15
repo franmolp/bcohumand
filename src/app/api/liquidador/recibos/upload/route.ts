@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
           usuario_id: emp.id,
           titulo: `Tu recibo de sueldo está disponible`,
           mensaje: `Ya podés ver tu liquidación de ${meses[mes - 1]} ${anio}.`,
-          tipo: 'aviso',
+          tipo: 'recibo',
         })
       }
     }

@@ -13,6 +13,7 @@ export type TipoNotif =
   | 'monotributo'
   | 'mural_post'
   | 'mural_respuesta'
+  | 'recibo'
   | 'aviso'
   | 'warning'
 
