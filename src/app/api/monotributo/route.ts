@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   const { mes, comprobante_url, comprobante_nombre, factura_url, factura_nombre } = await req.json()
   if (!mes || !comprobante_url) return NextResponse.json({ error: 'El comprobante es obligatorio' }, { status: 400 })
 
-  const { data, error } = await supabaseAdmin
+  const { error } = await supabaseAdmin
     .from('monotributo')
     .upsert({
       usuario_id: session.id,
@@ -49,10 +49,15 @@ export async function POST(req: NextRequest) {
       factura_nombre: factura_nombre ?? null,
       fecha_carga: new Date().toISOString(),
     }, { onConflict: 'usuario_id,mes' })
-    .select()
-    .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  const { data } = await supabaseAdmin
+    .from('monotributo')
+    .select('*')
+    .eq('usuario_id', session.id)
+    .eq('mes', mes)
+    .single()
 
   // Notificar admin+HR que el empleado cargó su monotributo
   const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
