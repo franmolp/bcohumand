@@ -18,27 +18,36 @@ export async function POST(req: NextRequest) {
   const ext   = file.name.split('.').pop()?.toLowerCase() ?? 'pdf'
   const bytes = await file.arrayBuffer()
 
+  const uploadToSupabase = async (): Promise<string> => {
+    const path = `${mes}/${session.id}/${tipo}.${ext}`
+    const { error } = await supabaseAdmin.storage.from('monotributo').upload(path, Buffer.from(bytes), {
+      contentType: file.type,
+      upsert: true,
+    })
+    if (error) throw new Error(error.message)
+    const { data: { publicUrl } } = supabaseAdmin.storage.from('monotributo').getPublicUrl(path)
+    return publicUrl
+  }
+
   try {
     let url: string
 
     if (gasReady()) {
-      const [anioStr, mesStr] = mes.split('-')
-      const fileName = `${session.id}_${tipo}.${ext}`
-      url = await gasUpload({
-        bytes, mimeType: file.type, fileName,
-        folderType: 'monotributo',
-        anio: parseInt(anioStr),
-        mes:  parseInt(mesStr),
-      })
+      try {
+        const [anioStr, mesStr] = mes.split('-')
+        const fileName = `${session.id}_${tipo}.${ext}`
+        url = await gasUpload({
+          bytes, mimeType: file.type, fileName,
+          folderType: 'monotributo',
+          anio: parseInt(anioStr),
+          mes:  parseInt(mesStr),
+        })
+      } catch {
+        // GAS falló, caer en Supabase Storage
+        url = await uploadToSupabase()
+      }
     } else {
-      const path = `${mes}/${session.id}/${tipo}.${ext}`
-      const { error } = await supabaseAdmin.storage.from('monotributo').upload(path, Buffer.from(bytes), {
-        contentType: file.type,
-        upsert: true,
-      })
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-      const { data: { publicUrl } } = supabaseAdmin.storage.from('monotributo').getPublicUrl(path)
-      url = publicUrl
+      url = await uploadToSupabase()
     }
 
     return NextResponse.json({ url, nombre: file.name })
