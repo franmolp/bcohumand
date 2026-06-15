@@ -111,10 +111,12 @@ export default function Sidebar({ user }: { user: SessionUser }) {
         </nav>
 
         <div className="p-3 border-t border-neutral-100">
-          <Link href="/dashboard/configuracion"
-            className="flex items-center gap-3 px-3 py-2 rounded-[var(--radius-sm)] text-[13px] text-neutral-600 hover:bg-neutral-50 transition-colors mb-1">
-            <IconSettings size={18} className="text-neutral-400" />Configuración
-          </Link>
+          {isAdmin && (
+            <Link href="/dashboard/configuracion"
+              className="flex items-center gap-3 px-3 py-2 rounded-[var(--radius-sm)] text-[13px] text-neutral-600 hover:bg-neutral-50 transition-colors mb-1">
+              <IconSettings size={18} className="text-neutral-400" />Configuración
+            </Link>
+          )}
           <div className="flex items-center gap-3 px-3 py-2.5">
             <div className="w-8 h-8 bg-primary-gradient rounded-full flex items-center justify-center shrink-0 shadow-sm">
               <span className="text-[11px] font-bold text-white">{user.nombre.split(' ').map(n => n[0]).join('').slice(0, 2)}</span>
@@ -199,10 +201,12 @@ export default function Sidebar({ user }: { user: SessionUser }) {
               })}
 
               <div className="border-t border-neutral-100 mt-2 pt-2">
-                <Link href="/dashboard/configuracion" onClick={() => setDrawerOpen(false)}
-                  className="flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-[15px] text-neutral-700 active:bg-neutral-50">
-                  <IconSettings size={20} className="text-neutral-400" />Configuración
-                </Link>
+                {isAdmin && (
+                  <Link href="/dashboard/configuracion" onClick={() => setDrawerOpen(false)}
+                    className="flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-[15px] text-neutral-700 active:bg-neutral-50">
+                    <IconSettings size={20} className="text-neutral-400" />Configuración
+                  </Link>
+                )}
                 <button onClick={handleLogout}
                   className="flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-[15px] text-red-500 active:bg-red-50 w-full cursor-pointer">
                   <IconLogout size={20} />Cerrar sesión

@@ -197,9 +197,11 @@ export default function Navigation({ user }: { user: SessionUser }) {
                 )
               })}
               <hr className="my-2 border-gray-100" />
-              <Link href="/dashboard/configuracion" onClick={() => setDrawer(false)} className="flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-[15px] text-[var(--text)] active:bg-gray-50">
-                <IconSettings size={20} className="text-gray-400" /> Configuración
-              </Link>
+              {isAdmin && (
+                <Link href="/dashboard/configuracion" onClick={() => setDrawer(false)} className="flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-[15px] text-[var(--text)] active:bg-gray-50">
+                  <IconSettings size={20} className="text-gray-400" /> Configuración
+                </Link>
+              )}
               <button onClick={logout} className="flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-[15px] text-red-500 w-full active:bg-red-50 cursor-pointer">
                 <IconLogout size={20} /> Cerrar sesión
               </button>
