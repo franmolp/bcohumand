@@ -376,8 +376,8 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
               )}
               {proxCumple.map((b, i) => (
                 <div key={i} className={`flex items-center gap-2.5 p-2.5 rounded-xl ${b.isThisWeek ? 'bg-pink-50' : 'bg-gray-50/60'}`}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${b.isThisWeek ? 'bg-pink-100' : 'bg-gray-100'}`}>
-                    <span className={`text-[10px] font-bold ${b.isThisWeek ? 'text-pink-500' : 'text-gray-400'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-[image:var(--gradient)] shadow-sm ${b.isThisWeek ? 'ring-2 ring-pink-300' : ''}`}>
+                    <span className="text-[10px] font-bold text-white">
                       {b.nombre.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
                     </span>
                   </div>
