@@ -5,8 +5,9 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { SessionUser } from '@/types'
-import { IconHome, IconUsers, IconClipboard, IconFileText, IconLogout, IconBell, IconShoppingBag, IconWall, IconDollar, IconSettings, IconX, IconMore, IconCalendar, IconReceipt, IconShield } from '@/components/ui/Icons'
+import { IconHome, IconUsers, IconClipboard, IconFileText, IconLogout, IconBell, IconShoppingBag, IconWall, IconDollar, IconSettings, IconX, IconMore, IconCalendar, IconReceipt, IconShield, IconCamera } from '@/components/ui/Icons'
 import { Toast } from '@/components/ui'
+import PhotoCropModal from '@/components/PhotoCropModal'
 
 const allNav = [
   { href: '/dashboard',              label: 'Inicio',         icon: IconHome,        mobile: true },
@@ -36,6 +37,11 @@ export default function Navigation({ user }: { user: SessionUser }) {
   const [toast, setToast] = useState({ visible: false, msg: '' })
   const prevUnread = useRef<number | null>(null)
 
+  // Photo state
+  const [fotoUrl, setFotoUrl] = useState<string | null>(null)
+  const [showCrop, setShowCrop] = useState(false)
+  const [showPhotoPrompt, setShowPhotoPrompt] = useState(false)
+
   const items = allNav.filter(i => {
     if (i.admin && !isAdmin) return false
     if ((i as {notAdmin?: boolean}).notAdmin && (isAdmin || isEncargada || isHR)) return false
@@ -48,6 +54,37 @@ export default function Navigation({ user }: { user: SessionUser }) {
 
   async function logout() { await fetch('/api/auth/logout', { method: 'POST' }); router.push('/login') }
 
+  // Load photo from cache then server
+  useEffect(() => {
+    const cached = localStorage.getItem('bco_foto_perfil')
+    if (cached) setFotoUrl(cached)
+
+    fetch('/api/perfil/foto')
+      .then(r => r.json())
+      .then(({ url }) => {
+        setFotoUrl(url)
+        if (url) localStorage.setItem('bco_foto_perfil', url)
+        else {
+          localStorage.removeItem('bco_foto_perfil')
+          // Show first-login photo prompt if not dismissed
+          if (!localStorage.getItem('bco_foto_prompt')) {
+            setTimeout(() => setShowPhotoPrompt(true), 1500)
+          }
+        }
+      })
+      .catch(() => {})
+
+    const onFotoUpdated = (e: Event) => {
+      const url = (e as CustomEvent<{ url: string | null }>).detail.url
+      setFotoUrl(url)
+      if (url) localStorage.setItem('bco_foto_perfil', url)
+      else localStorage.removeItem('bco_foto_perfil')
+    }
+    window.addEventListener('bco-foto-updated', onFotoUpdated)
+    return () => window.removeEventListener('bco-foto-updated', onFotoUpdated)
+  }, [])
+
+  // Notifications polling
   useEffect(() => {
     async function fetchUnread() {
       try {
@@ -71,9 +108,50 @@ export default function Navigation({ user }: { user: SessionUser }) {
     return () => { clearInterval(interval); window.removeEventListener('notif-updated', fetchUnread) }
   }, [])
 
+  function handlePhotoSaved(url: string) {
+    setFotoUrl(url)
+    localStorage.setItem('bco_foto_perfil', url)
+    localStorage.setItem('bco_foto_prompt', '1')
+    setShowCrop(false)
+    setShowPhotoPrompt(false)
+    window.dispatchEvent(new CustomEvent('bco-foto-updated', { detail: { url } }))
+  }
+
+  function handlePhotoDeleted() {
+    setFotoUrl(null)
+    localStorage.removeItem('bco_foto_perfil')
+    setShowCrop(false)
+    window.dispatchEvent(new CustomEvent('bco-foto-updated', { detail: { url: null } }))
+  }
+
+  function dismissPhotoPrompt() {
+    localStorage.setItem('bco_foto_prompt', '1')
+    setShowPhotoPrompt(false)
+  }
+
+  // Inline avatar helper
+  function Avatar({ size, border = false, white = false }: { size: number; border?: boolean; white?: boolean }) {
+    const imgClass = `rounded-full object-cover flex-shrink-0${border ? ' border-2 border-white/30' : ''}`
+    if (fotoUrl) {
+      return (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={fotoUrl} alt="" className={imgClass} style={{ width: size, height: size }} />
+      )
+    }
+    return (
+      <div
+        className={`rounded-full flex items-center justify-center flex-shrink-0 ${white ? 'bg-white/15' : 'bg-[image:var(--gradient)]'}`}
+        style={{ width: size, height: size }}
+      >
+        <span className="font-bold text-white" style={{ fontSize: Math.round(size * 0.37) }}>{initials}</span>
+      </div>
+    )
+  }
+
   return (
     <>
       <Toast visible={toast.visible} message={toast.msg} type="info" onClose={() => setToast(t => ({ ...t, visible: false }))} />
+
       {/* ─── DESKTOP: Top header ─── */}
       <header className="hidden lg:flex fixed top-0 left-0 right-0 h-14 bg-[image:var(--gradient)] z-40 items-center justify-between px-6 shadow-sm">
         <div className="flex items-center gap-2.5">
@@ -89,8 +167,8 @@ export default function Navigation({ user }: { user: SessionUser }) {
               </span>
             )}
           </Link>
-          <Link href="/dashboard/perfil" className="w-8 h-8 bg-white/15 hover:bg-white/25 rounded-full flex items-center justify-center border border-white/10 transition-colors" title="Mi perfil">
-            <span className="text-[11px] font-bold text-white">{initials}</span>
+          <Link href="/dashboard/perfil" className="rounded-full overflow-hidden border-2 border-white/30 hover:border-white/60 transition-all" title="Mi perfil" style={{ width: 32, height: 32 }}>
+            <Avatar size={32} white />
           </Link>
         </div>
       </header>
@@ -119,8 +197,8 @@ export default function Navigation({ user }: { user: SessionUser }) {
         </nav>
         <div className="p-3 border-t border-gray-100">
           <Link href="/dashboard/perfil" className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-gray-50 transition-colors group">
-            <div className="w-8 h-8 bg-[image:var(--gradient)] rounded-full flex items-center justify-center shadow-sm">
-              <span className="text-[10px] font-bold text-white">{initials}</span>
+            <div className="w-8 h-8 flex-shrink-0">
+              <Avatar size={32} />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-medium truncate group-hover:text-[var(--primary)]">{user.nombre}</p>
@@ -147,8 +225,8 @@ export default function Navigation({ user }: { user: SessionUser }) {
               </span>
             )}
           </Link>
-          <Link href="/dashboard/perfil" className="w-7 h-7 bg-white/15 rounded-full flex items-center justify-center">
-            <span className="text-[9px] font-bold text-white">{initials}</span>
+          <Link href="/dashboard/perfil" className="rounded-full overflow-hidden border-2 border-white/30" style={{ width: 28, height: 28 }}>
+            <Avatar size={28} white />
           </Link>
         </div>
       </header>
@@ -191,8 +269,8 @@ export default function Navigation({ user }: { user: SessionUser }) {
             <div className="flex justify-center pt-2.5 pb-1"><div className="w-9 h-1 bg-gray-300 rounded-full" /></div>
             <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3">
               <Link href="/dashboard/perfil" onClick={() => setDrawer(false)} className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="w-10 h-10 bg-[image:var(--gradient)] rounded-full flex items-center justify-center shadow-sm flex-shrink-0">
-                  <span className="text-xs font-bold text-white">{initials}</span>
+                <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
+                  <Avatar size={40} />
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold truncate">{user.nombre}</p>
@@ -234,6 +312,55 @@ export default function Navigation({ user }: { user: SessionUser }) {
           </div>
         </div>,
         document.body
+      )}
+
+      {/* ─── First-login photo prompt ─── */}
+      {showPhotoPrompt && createPortal(
+        <div className="fixed inset-0 z-[60] flex items-end lg:items-center justify-center" onClick={dismissPhotoPrompt}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative bg-white rounded-t-2xl lg:rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+            <button onClick={dismissPhotoPrompt} className="absolute top-4 right-4 p-1.5 text-gray-400 hover:bg-gray-100 rounded-full cursor-pointer">
+              <IconX size={16} />
+            </button>
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div className="w-20 h-20 rounded-full bg-[image:var(--gradient)] flex items-center justify-center shadow-lg">
+                <IconCamera size={32} className="text-white" />
+              </div>
+              <div>
+                <h3 className="text-[16px] font-bold text-[var(--text)] mb-1">¿Agregás una foto de perfil?</h3>
+                <p className="text-[13px] text-gray-400 leading-relaxed">
+                  Personalizá tu cuenta con una foto. La podés cambiar cuando quieras desde Mi Perfil.
+                </p>
+              </div>
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={dismissPhotoPrompt}
+                  className="flex-1 py-2.5 border border-gray-200 rounded-xl text-[14px] text-gray-500 cursor-pointer hover:bg-gray-50"
+                >
+                  Después
+                </button>
+                <button
+                  onClick={() => { setShowPhotoPrompt(false); setShowCrop(true) }}
+                  className="flex-1 py-2.5 bg-[image:var(--gradient)] text-white text-[14px] font-semibold rounded-xl cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <IconCamera size={15} /> Agregar foto
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Photo crop modal */}
+      {showCrop && (
+        <PhotoCropModal
+          currentUrl={fotoUrl}
+          initials={initials}
+          onClose={() => setShowCrop(false)}
+          onSaved={handlePhotoSaved}
+          onDeleted={handlePhotoDeleted}
+        />
       )}
     </>
   )

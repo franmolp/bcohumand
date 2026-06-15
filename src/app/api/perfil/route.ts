@@ -10,7 +10,7 @@ export async function GET() {
 
   const [userRes, vacUsadasRes, configRes] = await Promise.all([
     supabase.from('usuarios')
-      .select('id, usuario, nombre, email, telefono, dni, fecha_nacimiento, estado_cuenta, equipo:equipos(nombre), rol:roles(nombre)')
+      .select('id, usuario, nombre, email, telefono, dni, fecha_nacimiento, estado_cuenta, foto_perfil, equipo:equipos(nombre), rol:roles(nombre)')
       .eq('id', session.id)
       .single(),
 
