@@ -7,6 +7,7 @@ import {
   IconReceipt, IconCheck, IconX, IconPlus, IconAlertCircle,
   IconEye, IconSettings, IconUsers, IconTrash, IconUpload, IconBell,
 } from '@/components/ui/Icons'
+import { compressImage } from '@/lib/compress-image'
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
@@ -335,8 +336,9 @@ function EmployeeView({ userId }: { userId: string }) {
   useEffect(() => { load() }, [load])
 
   async function uploadFile(file: File, tipo: string): Promise<{ url: string; nombre: string } | null> {
+    const toUpload = await compressImage(file)
     const fd = new FormData()
-    fd.append('file', file)
+    fd.append('file', toUpload)
     fd.append('tipo', tipo)
     fd.append('mes', mes)
     const res = await fetch('/api/monotributo/upload', { method: 'POST', body: fd })

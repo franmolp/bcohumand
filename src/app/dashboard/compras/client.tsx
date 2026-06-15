@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import type { SessionUser, Compra, Proveedor } from '@/types'
 import { Modal, Button, Input, Confirm, Spinner } from '@/components/ui'
 import { IconShoppingBag, IconEdit, IconTrash, IconPlus, IconAlertCircle } from '@/components/ui/Icons'
+import { compressImage } from '@/lib/compress-image'
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 const ESTADOS: { value: string; label: string }[] = [
@@ -119,8 +120,9 @@ function CompraModal({ open, editTarget, proveedores, onClose, onSaved, onProvee
     // Upload foto to Drive if a new file was selected
     let fotoUrl: string | null = editTarget?.foto_url ?? null
     if (fotoFile) {
+      const toUpload = await compressImage(fotoFile)
       const fd = new FormData()
-      fd.append('file', fotoFile)
+      fd.append('file', toUpload)
       const ur = await fetch('/api/compras/upload', { method: 'POST', body: fd })
       const ud = await ur.json()
       if (!ur.ok) { setError(ud.error || 'Error al subir la factura'); setSaving(false); return }

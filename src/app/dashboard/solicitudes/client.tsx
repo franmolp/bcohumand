@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Button, Spinner, Modal, Toast, Confirm } from '@/components/ui'
 import { IconPlus, IconCheck, IconX, IconTrash, IconCalendar, IconEdit, IconAlertCircle, IconPaperclip, IconFileText, IconUpload, IconClock } from '@/components/ui/Icons'
 import type { SessionUser, Solicitud } from '@/types'
+import { compressImage } from '@/lib/compress-image'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -621,26 +622,6 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
   }, [tipoFilter, isAdminOrHR])
 
   // ─── Compresión de imagen client-side ───
-  function compressImage(file: File): Promise<File> {
-    return new Promise(resolve => {
-      const img = new Image()
-      const url = URL.createObjectURL(file)
-      img.onload = () => {
-        const MAX = 1200
-        let { width, height } = img
-        if (width > MAX) { height = Math.round(height * MAX / width); width = MAX }
-        const canvas = document.createElement('canvas')
-        canvas.width = width; canvas.height = height
-        canvas.getContext('2d')!.drawImage(img, 0, 0, width, height)
-        URL.revokeObjectURL(url)
-        canvas.toBlob(blob => {
-          resolve(new File([blob!], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }))
-        }, 'image/jpeg', 0.82)
-      }
-      img.src = url
-    })
-  }
-
   // ─── Abrir modales ───
   function openNew()              { setForm(blankForm);       setEditId(null);  setFormError(''); setModalCertFile(null); setModal(true) }
   function openEdit(s: Solicitud) { setForm(solToForm(s)); setEditId(s.id);  setFormError(''); setModalCertFile(null); setModal(true) }
