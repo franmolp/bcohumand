@@ -143,6 +143,8 @@ export default async function AdminDashboard({ session }: { session: SessionUser
     (usersData.data ?? []) as { nombre: string; fecha_nacimiento: string }[],
     today,
   )
+  const isAdminRole = session.rol === 'admin' || session.rol === 'Admin'
+
   // Fuentes adicionales de actividad (últimos 7 días)
   const [muroPostsRes, votosRes, fotosLogRes, comprasRes, monoRes] = await Promise.all([
     supabaseAdmin.from('muro_posts')
@@ -155,12 +157,16 @@ export default async function AdminDashboard({ session }: { session: SessionUser
       .select('id, usuario_id, created_at')
       .eq('accion', 'foto_perfil_actualizada')
       .gte('created_at', hace7Str).order('created_at', { ascending: false }).limit(8),
-    supabaseAdmin.from('compras')
-      .select('id, created_at, usuario_id, monto, detalle, proveedor_nombre')
-      .gte('created_at', hace7Str).order('created_at', { ascending: false }).limit(8),
-    supabaseAdmin.from('monotributo')
-      .select('id, created_at, usuario_id, mes')
-      .gte('created_at', hace7Str).order('created_at', { ascending: false }).limit(8),
+    isAdminRole
+      ? supabaseAdmin.from('compras')
+          .select('id, created_at, usuario_id, monto, detalle, proveedor_nombre')
+          .gte('created_at', hace7Str).order('created_at', { ascending: false }).limit(8)
+      : Promise.resolve({ data: [] }),
+    isAdminRole
+      ? supabaseAdmin.from('monotributo')
+          .select('id, created_at, usuario_id, mes')
+          .gte('created_at', hace7Str).order('created_at', { ascending: false }).limit(8)
+      : Promise.resolve({ data: [] }),
   ])
 
   // Batch fetch nombres para items extra
