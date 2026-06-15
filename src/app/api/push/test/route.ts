@@ -26,8 +26,8 @@ export async function POST() {
   webpush.setVapidDetails(`mailto:${email}`, publicKey, privateKey)
 
   const payload = JSON.stringify({
-    titulo: '¡Test push!',
-    mensaje: 'Si ves esto, las notificaciones push funcionan.',
+    titulo: 'Notificaciones activadas',
+    mensaje: '¡No te pierdas de nada!',
     url: '/dashboard/notificaciones',
   })
 
