@@ -551,6 +551,7 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
   const [empleadoFilter, setEmpleadoFilter] = useState('')
   const [empleados, setEmpleados]           = useState<Empleado[]>([])
   const [subFilter, setSubFilter]           = useState<'en_curso' | 'futuras' | 'archivadas'>('en_curso')
+  const [fotosMap, setFotosMap]             = useState<Record<string, string | null>>({})
 
   // Modal nueva / edición
   const [modal, setModal]           = useState(false)
@@ -598,8 +599,13 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
     if (empleadoFilter) p.set('empleado', empleadoFilter)
     const r = await fetch(`/api/solicitudes?${p}`)
     const d = await r.json()
-    setList(Array.isArray(d) ? d : [])
+    const data: Solicitud[] = Array.isArray(d) ? d : []
+    setList(data)
     setLoading(false)
+    if (data.length) {
+      const ids = [...new Set(data.map(s => s.usuario_id))].join(',')
+      fetch(`/api/usuarios/fotos?ids=${ids}`).then(r => r.json()).then(setFotosMap).catch(() => {})
+    }
   }, [estadoFilter, tipoFilter, empleadoFilter])
 
   useEffect(() => { load() }, [load])
@@ -915,9 +921,12 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
               <div key={sol.id} className="bg-white rounded-xl border border-gray-200/60 p-3.5">
                 <div className="flex items-start gap-3">
                   {isAdminOrHR ? (
-                    <div className="w-9 h-9 bg-[image:var(--gradient)] rounded-full flex items-center justify-center shrink-0 shadow-sm mt-0.5">
-                      <span className="text-[10px] font-bold text-white">{initials(sol.empleado_nombre)}</span>
-                    </div>
+                    fotosMap[sol.usuario_id]
+                      // eslint-disable-next-line @next/next/no-img-element
+                      ? <img src={fotosMap[sol.usuario_id]!} alt="" className="w-9 h-9 rounded-full object-cover shrink-0 shadow-sm mt-0.5" />
+                      : <div className="w-9 h-9 bg-[image:var(--gradient)] rounded-full flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+                          <span className="text-[10px] font-bold text-white">{initials(sol.empleado_nombre)}</span>
+                        </div>
                   ) : (
                     <div className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center shrink-0 mt-0.5">
                       <IconCalendar size={16} className="text-gray-400" />
@@ -1013,9 +1022,13 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
                     {isAdminOrHR && (
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 bg-[image:var(--gradient)] rounded-full flex items-center justify-center shrink-0 shadow-sm">
-                            <span className="text-[9px] font-bold text-white">{initials(sol.empleado_nombre)}</span>
-                          </div>
+                          {fotosMap[sol.usuario_id]
+                            // eslint-disable-next-line @next/next/no-img-element
+                            ? <img src={fotosMap[sol.usuario_id]!} alt="" className="w-7 h-7 rounded-full object-cover shrink-0 shadow-sm" />
+                            : <div className="w-7 h-7 bg-[image:var(--gradient)] rounded-full flex items-center justify-center shrink-0 shadow-sm">
+                                <span className="text-[9px] font-bold text-white">{initials(sol.empleado_nombre)}</span>
+                              </div>
+                          }
                           <p className="font-medium text-[13px]">{sol.empleado_nombre}</p>
                         </div>
                       </td>

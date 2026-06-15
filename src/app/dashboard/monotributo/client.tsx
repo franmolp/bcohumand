@@ -96,6 +96,7 @@ function AdminResumen() {
   const [notifying, setNotifying] = useState(false)
   const [toast, setToast] = useState({ visible: false, msg: '', type: 'success' as 'success' | 'error' })
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [fotosMap, setFotosMap] = useState<Record<string, string | null>>({})
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ visible: true, msg, type })
@@ -106,8 +107,13 @@ function AdminResumen() {
     setLoading(true)
     const res = await fetch(`/api/monotributo?mes=${mes}`)
     const json = await res.json()
-    setData(Array.isArray(json) ? json : [])
+    const d: EmpResumen[] = Array.isArray(json) ? json : []
+    setData(d)
     setLoading(false)
+    if (d.length) {
+      const ids = d.map(e => e.id).join(',')
+      fetch(`/api/usuarios/fotos?ids=${ids}`).then(r => r.json()).then(setFotosMap).catch(() => {})
+    }
   }, [mes])
 
   useEffect(() => { load() }, [load])
@@ -199,6 +205,13 @@ function AdminResumen() {
             {data.map(emp => (
               <div key={emp.id} className="bg-white rounded-xl border border-[var(--border)] p-3">
                 <div className="flex items-center gap-2 mb-2">
+                  {fotosMap[emp.id]
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={fotosMap[emp.id]!} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0 shadow-sm" />
+                    : <div className="w-7 h-7 rounded-full bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
+                        <span className="text-[9px] font-bold text-white">{emp.nombre.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase()}</span>
+                      </div>
+                  }
                   <span className="text-sm font-medium text-[var(--text)] flex-1">{emp.nombre}</span>
                   <EstadoBadge record={emp.record} />
                   {emp.record && (
@@ -240,6 +253,7 @@ function AdminConfig() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [toast, setToast] = useState({ visible: false, msg: '', type: 'success' as 'success' | 'error' })
+  const [fotosMap, setFotosMap] = useState<Record<string, string | null>>({})
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ visible: true, msg, type })
@@ -248,8 +262,13 @@ function AdminConfig() {
 
   useEffect(() => {
     fetch('/api/monotributo/config').then(r => r.json()).then(d => {
-      setEmpleados(Array.isArray(d) ? d : [])
+      const data: EmpConfig[] = Array.isArray(d) ? d : []
+      setEmpleados(data)
       setLoading(false)
+      if (data.length) {
+        const ids = data.map(e => e.id).join(',')
+        fetch(`/api/usuarios/fotos?ids=${ids}`).then(r => r.json()).then(setFotosMap).catch(() => {})
+      }
     })
   }, [])
 
@@ -284,11 +303,13 @@ function AdminConfig() {
         <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
           {empleados.map((emp, i) => (
             <div key={emp.id} className={`flex items-center gap-3 px-4 py-3.5 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
-              <div className="w-8 h-8 rounded-full bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0">
-                <span className="text-[10px] font-bold text-white">
-                  {emp.nombre.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                </span>
-              </div>
+              {fotosMap[emp.id]
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={fotosMap[emp.id]!} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0 shadow-sm" />
+                : <div className="w-8 h-8 rounded-full bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
+                    <span className="text-[10px] font-bold text-white">{emp.nombre.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}</span>
+                  </div>
+              }
               <span className="text-sm text-[var(--text)] flex-1">{emp.nombre}</span>
               {saving === emp.id && <div className="w-4 h-4 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" />}
               <button

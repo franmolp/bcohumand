@@ -8,9 +8,22 @@ interface Equipo { id: number; nombre: string }
 interface Rol { id: number; nombre: string }
 interface Empleado {
   id: string; usuario: string; reloj: string | null; nombre: string; email: string
-  estado_cuenta: string; telefono: string | null; dni: string | null
+  estado_cuenta: string; foto_perfil?: string | null; telefono: string | null; dni: string | null
   fecha_nacimiento: string | null; ultimo_login: string | null
   equipo: Equipo | null; rol: Rol | null
+}
+
+function EmpAvatar({ emp, size }: { emp: Empleado; size: number }) {
+  const ini = emp.nombre.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+  if (emp.foto_perfil) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={emp.foto_perfil} alt="" className="rounded-full object-cover shrink-0 shadow-sm" style={{ width: size, height: size }} />
+  }
+  return (
+    <div className="bg-[image:var(--gradient)] rounded-full flex items-center justify-center shrink-0 shadow-sm" style={{ width: size, height: size }}>
+      <span className="font-bold text-white" style={{ fontSize: size * 0.3 }}>{ini}</span>
+    </div>
+  )
 }
 
 const blank = { nombre: '', email: '', usuario: '', telefono: '', dni: '', fecha_nacimiento: '', reloj: '', password: '', equipo_id: '', rol_id: '2' }
@@ -182,9 +195,7 @@ export default function EmpleadosPage() {
           <div className="lg:hidden space-y-2">
             {list.map(emp => (
               <div key={emp.id} className={`bg-white rounded-xl border border-gray-200/60 p-3 flex items-center gap-3 ${emp.estado_cuenta !== 'activo' ? 'opacity-50' : ''}`}>
-                <div className="w-10 h-10 bg-[image:var(--gradient)] rounded-full flex items-center justify-center shrink-0 shadow-sm">
-                  <span className="text-[11px] font-bold text-white">{initials(emp.nombre)}</span>
-                </div>
+                <EmpAvatar emp={emp} size={40} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold truncate">{emp.nombre}</p>
                   <p className="text-[11px] text-gray-500 truncate">@{emp.usuario}</p>
@@ -226,9 +237,7 @@ export default function EmpleadosPage() {
                   <tr key={emp.id} className={`text-sm border-t border-gray-100 hover:bg-gray-50/50 transition-colors ${emp.estado_cuenta !== 'activo' ? 'opacity-50' : ''}`}>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 bg-[image:var(--gradient)] rounded-full flex items-center justify-center shrink-0 shadow-sm">
-                          <span className="text-[9px] font-bold text-white">{initials(emp.nombre)}</span>
-                        </div>
+                        <EmpAvatar emp={emp} size={32} />
                         <span className="font-medium">{emp.nombre}</span>
                       </div>
                     </td>

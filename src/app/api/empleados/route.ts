@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from('usuarios')
-    .select('id, usuario, reloj, nombre, email, estado_cuenta, telefono, dni, fecha_nacimiento, ultimo_login, fecha_creacion, equipo:equipos(id,nombre), rol:roles(id,nombre)')
+    .select('id, usuario, reloj, nombre, email, estado_cuenta, foto_perfil, telefono, dni, fecha_nacimiento, ultimo_login, fecha_creacion, equipo:equipos(id,nombre), rol:roles(id,nombre)')
     .order('nombre')
 
   if (estado === 'archivado') {

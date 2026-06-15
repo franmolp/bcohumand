@@ -169,7 +169,7 @@ function buildDayMap(
 
     const color = SOL_COLORS[s.tipo] ?? SOL_COLOR_DEFAULT
     const isPending = s.estado === 'pending'
-    const prefix = !canViewAll ? '' : `${s.empleado_nombre.split(' ')[0]} · `
+    const prefix = !canViewAll ? '' : `${s.empleado_nombre} · `
 
     if (s.tipo === 'Cambio de Horario') {
       const day = dateInMonth(s.fecha_inicio, anio, mes)
