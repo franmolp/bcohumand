@@ -148,13 +148,19 @@ export default async function AdminDashboard({ session }: { session: SessionUser
   }).slice(0, 10)
 
   const firstName = session.nombre.split(' ')[0]
+  const arHour = parseInt(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires', hour: 'numeric', hour12: false }))
+  const saludo = arHour >= 5 && arHour < 12
+    ? `Buen día ${firstName}, ¡que tengas un excelente día!`
+    : arHour >= 12 && arHour < 20
+    ? `Buenas tardes ${firstName}, ¡que tengas una linda tarde!`
+    : `Buenas noches ${firstName}`
 
   return (
     <div className="py-4 fade-in space-y-5">
       {/* Greeting */}
       <div>
         <h1 className="text-[18px] lg:text-[22px] font-bold text-[var(--text)]">
-          ¡Hola, {firstName}!
+          {saludo}
         </h1>
         <p className="text-[13px] text-gray-400 mt-0.5">
           {fmtDateLabel(today)}

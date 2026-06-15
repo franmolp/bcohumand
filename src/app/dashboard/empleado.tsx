@@ -194,6 +194,12 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   const notifs  = notifRes.data ?? []
   const misSOLS = solPendRes.data ?? []
   const firstName = session.nombre.split(' ')[0]
+  const arHour = parseInt(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires', hour: 'numeric', hour12: false }))
+  const saludo = arHour >= 5 && arHour < 12
+    ? `Buen día ${firstName}, ¡que tengas un excelente día!`
+    : arHour >= 12 && arHour < 20
+    ? `Buenas tardes ${firstName}, ¡que tengas una linda tarde!`
+    : `Buenas noches ${firstName}`
 
   const muroPost = (muroRes.data ?? [])[0] ?? null
   let muroAutor: { nombre: string; foto_perfil?: string | null } | null = null
@@ -207,7 +213,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
       {/* Greeting */}
       <div>
         <h1 className="text-[18px] lg:text-[22px] font-bold text-[var(--text)]">
-          ¡Hola, {firstName}!
+          {saludo}
         </h1>
         <p className="text-[13px] text-[var(--text-sub)] mt-0.5">
           {fmtDateLabel(today)}
