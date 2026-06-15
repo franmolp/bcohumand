@@ -1,7 +1,8 @@
+import React from 'react'
 import Link from 'next/link'
 import type { SessionUser } from '@/types'
-import { supabase } from '@/lib/supabase'
-import { IconUsers, IconFileText, IconCalendar, IconChevronRight, IconCheck, IconX, IconAlertCircle } from '@/components/ui/Icons'
+import { supabase, supabaseAdmin } from '@/lib/supabase'
+import { IconUsers, IconFileText, IconCalendar, IconChevronRight, IconCheck, IconX, IconAlertCircle, IconWall, IconShoppingBag, IconDollar, IconCamera } from '@/components/ui/Icons'
 
 
 function timeAgo(dateStr: string | null): string {
@@ -93,6 +94,8 @@ function fmtDateLabel(d: Date): string {
 export default async function AdminDashboard({ session }: { session: SessionUser }) {
   const today = new Date()
   const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`
+  const hace7 = new Date(today); hace7.setDate(today.getDate() - 7)
+  const hace7Str = hace7.toISOString()
 
   const [empData, ausentesData, pendData, actData, usersData] = await Promise.all([
     // Empleados activos
@@ -140,12 +143,87 @@ export default async function AdminDashboard({ session }: { session: SessionUser
     (usersData.data ?? []) as { nombre: string; fecha_nacimiento: string }[],
     today,
   )
-  // Ordenar actividad: approved/rejected primero (tienen hora_ultima_actividad), luego pending
-  const actividad = (actData.data ?? []).sort((a, b) => {
+  // Fuentes adicionales de actividad (últimos 7 días)
+  const [muroPostsRes, votosRes, fotosLogRes, comprasRes, monoRes] = await Promise.all([
+    supabaseAdmin.from('muro_posts')
+      .select('id, tipo, contenido, created_at, usuario_id')
+      .gte('created_at', hace7Str).order('created_at', { ascending: false }).limit(8),
+    supabaseAdmin.from('muro_encuesta_votos')
+      .select('id, created_at, usuario_id')
+      .gte('created_at', hace7Str).order('created_at', { ascending: false }).limit(8),
+    supabaseAdmin.from('log_seguridad')
+      .select('id, usuario_id, created_at')
+      .eq('accion', 'foto_perfil_actualizada')
+      .gte('created_at', hace7Str).order('created_at', { ascending: false }).limit(8),
+    supabaseAdmin.from('compras')
+      .select('id, created_at, usuario_id, monto, detalle, proveedor_nombre')
+      .gte('created_at', hace7Str).order('created_at', { ascending: false }).limit(8),
+    supabaseAdmin.from('monotributo')
+      .select('id, created_at, usuario_id, mes')
+      .gte('created_at', hace7Str).order('created_at', { ascending: false }).limit(8),
+  ])
+
+  // Batch fetch nombres para items extra
+  const extraIds = [...new Set([
+    ...(muroPostsRes.data ?? []).map((p: { usuario_id: string }) => p.usuario_id),
+    ...(votosRes.data ?? []).map((v: { usuario_id: string }) => v.usuario_id),
+    ...(fotosLogRes.data ?? []).map((f: { usuario_id: string | null }) => f.usuario_id).filter(Boolean) as string[],
+    ...(comprasRes.data ?? []).map((c: { usuario_id: string | null }) => c.usuario_id).filter(Boolean) as string[],
+    ...(monoRes.data ?? []).map((m: { usuario_id: string }) => m.usuario_id),
+  ])]
+  const extraNombres: Record<string, string> = {}
+  if (extraIds.length) {
+    const { data: nd } = await supabaseAdmin.from('usuarios').select('id, nombre').in('id', extraIds)
+    for (const u of nd ?? []) extraNombres[u.id] = u.nombre
+  }
+
+  // Construir feed unificado
+  type ActItem = { key: string; ts: string; nombre: string; sub: string; icon: string; href: string }
+  const actItems: ActItem[] = []
+
+  const solsOrdenadas = (actData.data ?? []).sort((a, b) => {
     const ta = a.hora_ultima_actividad ?? a.fecha_creacion ?? a.fecha_inicio ?? ''
     const tb = b.hora_ultima_actividad ?? b.fecha_creacion ?? b.fecha_inicio ?? ''
     return tb.localeCompare(ta)
-  }).slice(0, 10)
+  })
+  for (const a of solsOrdenadas) {
+    const ts = a.hora_ultima_actividad ?? a.fecha_creacion ?? a.fecha_inicio ?? ''
+    const sub = a.estado === 'pending' ? 'Pendiente de aprobación' : a.estado === 'approved' ? `Aprobada${a.moderador ? ` por ${a.moderador}` : ''}` : `Rechazada${a.moderador ? ` por ${a.moderador}` : ''}`
+    actItems.push({ key: `sol-${a.id}`, ts, nombre: a.empleado_nombre ?? '—', sub: `${a.tipo} · ${sub}`, icon: a.estado === 'approved' ? 'sol_ok' : a.estado === 'rejected' ? 'sol_no' : 'sol_pend', href: '/dashboard/solicitudes' })
+  }
+  for (const p of muroPostsRes.data ?? []) {
+    const tipoLabel = p.tipo === 'encuesta' ? 'publicó una encuesta' : p.tipo === 'pregunta' ? 'hizo una pregunta' : 'publicó en el muro'
+    const snippet = p.contenido ? ` · "${p.contenido.slice(0, 35)}${p.contenido.length > 35 ? '…' : ''}"` : ''
+    actItems.push({ key: `muro-${p.id}`, ts: p.created_at, nombre: extraNombres[p.usuario_id] ?? '—', sub: tipoLabel + snippet, icon: 'muro', href: '/dashboard/muro' })
+  }
+  for (const v of votosRes.data ?? []) {
+    actItems.push({ key: `voto-${v.id}`, ts: v.created_at, nombre: extraNombres[v.usuario_id] ?? '—', sub: 'votó en una encuesta', icon: 'voto', href: '/dashboard/muro' })
+  }
+  for (const f of fotosLogRes.data ?? []) {
+    if (!f.usuario_id) continue
+    actItems.push({ key: `foto-${f.id}`, ts: f.created_at, nombre: extraNombres[f.usuario_id] ?? '—', sub: 'actualizó su foto de perfil', icon: 'foto', href: '/dashboard/empleados' })
+  }
+  for (const c of comprasRes.data ?? []) {
+    if (!c.usuario_id) continue
+    const sub = `registró compra${c.proveedor_nombre ? ` · ${c.proveedor_nombre}` : ''}${c.monto ? ` · $${Number(c.monto).toLocaleString('es-AR')}` : ''}`
+    actItems.push({ key: `compra-${c.id}`, ts: c.created_at, nombre: extraNombres[c.usuario_id] ?? '—', sub, icon: 'compra', href: '/dashboard/compras' })
+  }
+  for (const m of monoRes.data ?? []) {
+    actItems.push({ key: `mono-${m.id}`, ts: m.created_at, nombre: extraNombres[m.usuario_id] ?? '—', sub: `subió comprobante monotributo ${m.mes}`, icon: 'mono', href: '/dashboard/monotributo' })
+  }
+  actItems.sort((a, b) => b.ts.localeCompare(a.ts))
+  const actividadFeed = actItems.slice(0, 15)
+
+  const ACT_CFG: Record<string, { bg: string; color: string; Icon: React.ComponentType<{ size?: number; className?: string }> }> = {
+    sol_pend: { bg: 'bg-amber-100',   color: 'text-amber-600',   Icon: IconFileText },
+    sol_ok:   { bg: 'bg-emerald-100', color: 'text-emerald-600', Icon: IconCheck },
+    sol_no:   { bg: 'bg-red-100',     color: 'text-red-500',     Icon: IconX },
+    muro:     { bg: 'bg-teal-100',    color: 'text-teal-600',    Icon: IconWall },
+    voto:     { bg: 'bg-teal-50',     color: 'text-teal-500',    Icon: IconCheck },
+    foto:     { bg: 'bg-violet-100',  color: 'text-violet-600',  Icon: IconCamera },
+    compra:   { bg: 'bg-pink-100',    color: 'text-pink-600',    Icon: IconShoppingBag },
+    mono:     { bg: 'bg-indigo-100',  color: 'text-indigo-600',  Icon: IconDollar },
+  }
 
   const firstName = session.nombre.split(' ')[0]
   const arHour = parseInt(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires', hour: 'numeric', hour12: false }))
@@ -159,7 +237,7 @@ export default async function AdminDashboard({ session }: { session: SessionUser
     <div className="py-4 fade-in space-y-5">
       {/* Greeting */}
       <div>
-        <h1 className="text-[18px] lg:text-[22px] font-bold text-[var(--text)]">
+        <h1 className="font-bold text-[var(--text)] whitespace-nowrap overflow-hidden" style={{ fontSize: 'clamp(13px, 4vw, 22px)' }}>
           {saludo}
         </h1>
         <p className="text-[13px] text-gray-400 mt-0.5">
@@ -336,39 +414,23 @@ export default async function AdminDashboard({ session }: { session: SessionUser
           <h2 className="text-[14px] font-bold text-[var(--text)]">Actividad Reciente</h2>
         </div>
         <div className="divide-y divide-gray-50">
-          {actividad.length === 0 && (
+          {actividadFeed.length === 0 && (
             <p className="text-center text-[13px] text-gray-400 py-10">Sin actividad reciente</p>
           )}
-          {actividad.map(a => {
-            const isPend = a.estado === 'pending'
-            const isAppr = a.estado === 'approved'
-            const Icon   = isPend ? IconFileText : isAppr ? IconCheck : IconX
-            const bg     = isPend ? 'bg-amber-100'   : isAppr ? 'bg-emerald-100' : 'bg-red-100'
-            const color  = isPend ? 'text-amber-600' : isAppr ? 'text-emerald-600' : 'text-red-500'
+          {actividadFeed.map(a => {
+            const cfg = ACT_CFG[a.icon] ?? ACT_CFG.sol_pend
+            const { Icon, bg, color } = cfg
             return (
-              <Link key={a.id} href="/dashboard/solicitudes"
+              <Link key={a.key} href={a.href}
                 className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50/60 transition-colors cursor-pointer">
                 <div className={`w-7 h-7 rounded-full ${bg} flex items-center justify-center flex-shrink-0`}>
                   <Icon size={13} className={color} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13px] leading-snug truncate">
-                    <span className="font-semibold">{a.empleado_nombre ?? '—'}</span>
-                    <span className="text-gray-400"> · {a.tipo}</span>
-                  </p>
-                  <p className="text-[11px] leading-snug truncate mt-0.5">
-                    {isPend
-                      ? <span className="text-amber-600">Pendiente de aprobación</span>
-                      : <span className={color}>
-                          {isAppr ? 'Aprobada' : 'Rechazada'}
-                          {a.moderador ? <span className="text-gray-400"> por {a.moderador}</span> : null}
-                        </span>
-                    }
-                  </p>
+                  <p className="text-[13px] font-semibold leading-snug truncate">{a.nombre}</p>
+                  <p className="text-[11px] text-gray-500 leading-snug truncate mt-0.5">{a.sub}</p>
                 </div>
-                <span className="text-[11px] text-gray-400 flex-shrink-0 ml-2">
-                  {timeAgo(a.hora_ultima_actividad ?? a.fecha_creacion ?? a.fecha_inicio)}
-                </span>
+                <span className="text-[11px] text-gray-400 flex-shrink-0 ml-2">{timeAgo(a.ts)}</span>
               </Link>
             )
           })}

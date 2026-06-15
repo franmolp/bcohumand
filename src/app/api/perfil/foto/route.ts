@@ -14,6 +14,16 @@ export async function GET() {
   return NextResponse.json({ url: data?.foto_perfil ?? null })
 }
 
+async function logFoto(req: NextRequest, userId: string) {
+  await supabaseAdmin.from('log_seguridad').insert({
+    accion: 'foto_perfil_actualizada',
+    detalle: 'Foto de perfil actualizada',
+    ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'desconocida',
+    user_agent: req.headers.get('user-agent') || '',
+    usuario_id: userId,
+  }).catch(() => {})
+}
+
 export async function POST(req: NextRequest) {
   const session = await requireAuth()
   const form = await req.formData()
@@ -34,6 +44,7 @@ export async function POST(req: NextRequest) {
   const url = `${publicUrl}?t=${Date.now()}`
 
   await supabaseAdmin.from('usuarios').update({ foto_perfil: url }).eq('id', session.id)
+  await logFoto(req, session.id)
 
   return NextResponse.json({ url })
 }

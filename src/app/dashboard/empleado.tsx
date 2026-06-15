@@ -212,7 +212,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
     <div className="py-4 fade-in space-y-5">
       {/* Greeting */}
       <div>
-        <h1 className="text-[18px] lg:text-[22px] font-bold text-[var(--text)]">
+        <h1 className="font-bold text-[var(--text)] whitespace-nowrap overflow-hidden" style={{ fontSize: 'clamp(13px, 4vw, 22px)' }}>
           {saludo}
         </h1>
         <p className="text-[13px] text-[var(--text-sub)] mt-0.5">
