@@ -57,6 +57,12 @@ function timeAgo(dateStr: string): string {
 
 const blankForm = { titulo: '', mensaje: '', destinatario: 'todos', equipo_id: '', usuario_id: '' }
 
+function urlBase64ToUint8Array(b64: string): Uint8Array {
+  const pad = '='.repeat((4 - (b64.length % 4)) % 4)
+  const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'))
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)))
+}
+
 export default function NotificacionesClient({ session }: { session: SessionUser }) {
   const [notifs, setNotifs]     = useState<Notif[]>([])
   const [loading, setLoading]   = useState(true)
@@ -69,6 +75,51 @@ export default function NotificacionesClient({ session }: { session: SessionUser
   const [equipos, setEquipos]   = useState<Equipo[]>([])
   const [empleados, setEmpleados] = useState<Empleado[]>([])
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+
+  // Push permission state
+  const [pushPerm, setPushPerm] = useState<NotificationPermission | 'unsupported' | null>(null)
+  const [pushLoading, setPushLoading] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      setPushPerm('unsupported')
+    } else {
+      setPushPerm(Notification.permission)
+    }
+  }, [])
+
+  async function activatePush() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+    setPushLoading(true)
+    try {
+      const perm = await Notification.requestPermission()
+      setPushPerm(perm)
+      if (perm !== 'granted') return
+
+      const res = await fetch('/api/push/vapid-public-key')
+      if (!res.ok) return
+      const { publicKey } = await res.json()
+
+      const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      await navigator.serviceWorker.ready
+
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey).buffer as ArrayBuffer,
+      })
+      await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sub),
+      })
+      await fetch('/api/push/test', { method: 'POST' })
+      setToast('Notificaciones activadas')
+    } catch (e) {
+      console.warn('[push]', e)
+    } finally {
+      setPushLoading(false)
+    }
+  }
 
   const fetchNotifs = useCallback(async () => {
     const res = await fetch('/api/notificaciones')
@@ -191,6 +242,56 @@ export default function NotificacionesClient({ session }: { session: SessionUser
           )}
         </div>
       </div>
+
+      {/* Push permission card */}
+      {pushPerm !== null && pushPerm !== 'unsupported' && (
+        <div className={`mb-4 flex items-center gap-3 px-4 py-3.5 rounded-2xl border ${
+          pushPerm === 'granted'
+            ? 'bg-emerald-50 border-emerald-100'
+            : pushPerm === 'denied'
+            ? 'bg-gray-50 border-gray-200'
+            : 'bg-[var(--primary-light)]/60 border-[var(--primary)]/20'
+        }`}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+            pushPerm === 'granted' ? 'bg-emerald-100' : pushPerm === 'denied' ? 'bg-gray-200' : 'bg-[var(--primary)]/10'
+          }`}>
+            <IconBell size={15} className={
+              pushPerm === 'granted' ? 'text-emerald-600' : pushPerm === 'denied' ? 'text-gray-400' : 'text-[var(--primary)]'
+            } />
+          </div>
+          <div className="flex-1 min-w-0">
+            {pushPerm === 'granted' && (
+              <>
+                <p className="text-[13px] font-semibold text-emerald-700">Notificaciones activadas</p>
+                <p className="text-[11px] text-emerald-600 mt-0.5">Vas a recibir notificaciones en este dispositivo</p>
+              </>
+            )}
+            {pushPerm === 'denied' && (
+              <>
+                <p className="text-[13px] font-semibold text-gray-600">Notificaciones bloqueadas</p>
+                <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">
+                  Desbloqueá desde Ajustes del navegador → Privacidad → Notificaciones
+                </p>
+              </>
+            )}
+            {pushPerm === 'default' && (
+              <>
+                <p className="text-[13px] font-semibold text-[var(--primary)]">Activá las notificaciones</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">Recibí alertas en tu dispositivo cuando haya novedades</p>
+              </>
+            )}
+          </div>
+          {pushPerm === 'default' && (
+            <button
+              onClick={activatePush}
+              disabled={pushLoading}
+              className="shrink-0 px-3 py-1.5 rounded-xl bg-[var(--primary)] text-white text-[12px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
+            >
+              {pushLoading ? '...' : 'Activar'}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* List */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
