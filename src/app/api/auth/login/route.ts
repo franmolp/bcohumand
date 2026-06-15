@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { supabase, supabaseAdmin } from '@/lib/supabase'
 import bcrypt from 'bcryptjs'
 import { SignJWT } from 'jose'
 import crypto from 'crypto'
@@ -45,8 +45,8 @@ export async function POST(request: NextRequest) {
 
     const usuarioTrimmed = usuarioInput.toLowerCase().trim()
 
-    // Buscar usuario con equipo y rol (supabaseAdmin bypasea RLS en el login)
-    const { data: usuario, error } = await supabaseAdmin
+    // Buscar usuario con equipo y rol
+    const { data: usuario, error } = await supabase
       .from('usuarios')
       .select('*, equipo:equipos(nombre), rol:roles(nombre)')
       .eq('usuario', usuarioTrimmed)
