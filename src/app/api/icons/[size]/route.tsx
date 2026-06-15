@@ -14,7 +14,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ size: s
           width: size,
           height: size,
           background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          borderRadius: '50%',
+          borderRadius: `${Math.round(size * 0.2)}px`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
