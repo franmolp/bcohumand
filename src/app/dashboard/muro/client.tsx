@@ -15,7 +15,7 @@ interface MuroPost {
   created_at: string
   cerrado: boolean
   resultados_publicados: boolean
-  autor: { id: string; nombre: string }
+  autor: { id: string; nombre: string; foto_perfil?: string | null }
   likes_count: number
   yo_like: boolean
   comentarios_count: number
@@ -33,9 +33,11 @@ interface Comentario {
   usuario_id: string
   contenido: string
   created_at: string
-  autor: { id: string; nombre: string }
+  autor: { id: string; nombre: string; foto_perfil?: string | null }
   respuestas: Comentario[]
 }
+
+interface LikeUser { nombre: string; foto_perfil?: string | null }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -55,7 +57,11 @@ function initials(n: string) {
   return n.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 }
 
-function Avatar({ nombre, size = 36 }: { nombre: string; size?: number }) {
+function Avatar({ nombre, fotoUrl, size = 36 }: { nombre: string; fotoUrl?: string | null; size?: number }) {
+  if (fotoUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={fotoUrl} alt={nombre} className="rounded-full object-cover shrink-0" style={{ width: size, height: size }} />
+  }
   return (
     <div
       className="bg-[image:var(--gradient)] rounded-full flex items-center justify-center shrink-0 shadow-sm"
@@ -69,7 +75,7 @@ function Avatar({ nombre, size = 36 }: { nombre: string; size?: number }) {
 // ─── Likes Popover ────────────────────────────────────────────────────────────
 
 function LikesPopover({ postId, anchor, onClose }: { postId: number; anchor: HTMLElement; onClose: () => void }) {
-  const [names, setNames] = useState<string[]>([])
+  const [names, setNames] = useState<LikeUser[]>([])
   const [loading, setLoading] = useState(true)
   const popRef = useRef<HTMLDivElement>(null)
 
@@ -108,10 +114,10 @@ function LikesPopover({ postId, anchor, onClose }: { postId: number; anchor: HTM
         <div className="space-y-2 max-h-48 overflow-y-auto">
           {names.length === 0
             ? <p className="text-[12px] text-gray-400 text-center py-2">Nadie por ahora</p>
-            : names.map((n, i) => (
+            : names.map((u, i) => (
               <div key={i} className="flex items-center gap-2">
-                <Avatar nombre={n} size={24} />
-                <span className="text-[12px] font-medium">{n}</span>
+                <Avatar nombre={u.nombre} fotoUrl={u.foto_perfil} size={24} />
+                <span className="text-[12px] font-medium">{u.nombre}</span>
               </div>
             ))
           }
@@ -131,8 +137,16 @@ export default function MuroClient({ session }: { session: SessionUser }) {
   const [hasMore, setHasMore] = useState(true)
   const [offset, setOffset] = useState(0)
   const [toast, setToast] = useState('')
+  const [myFoto, setMyFoto] = useState<string | null>(null)
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
   const LIMIT = 20
+
+  useEffect(() => {
+    setMyFoto(localStorage.getItem('bco_foto_perfil'))
+    const onFoto = (e: Event) => setMyFoto((e as CustomEvent<{ url: string | null }>).detail.url)
+    window.addEventListener('bco-foto-updated', onFoto)
+    return () => window.removeEventListener('bco-foto-updated', onFoto)
+  }, [])
 
   const fetchPosts = useCallback(async (off = 0, append = false) => {
     if (off === 0) setLoading(true); else setLoadingMore(true)
@@ -169,6 +183,7 @@ export default function MuroClient({ session }: { session: SessionUser }) {
 
         <PostComposer
           session={session}
+          myFoto={myFoto}
           isAdmin={isAdmin}
           onCreated={() => fetchPosts(0)}
           setToast={setToast}
@@ -185,6 +200,7 @@ export default function MuroClient({ session }: { session: SessionUser }) {
                 key={post.id}
                 post={post}
                 session={session}
+                myFoto={myFoto}
                 isAdmin={isAdmin}
                 updatePost={updatePost}
                 removePost={removePost}
@@ -213,9 +229,10 @@ export default function MuroClient({ session }: { session: SessionUser }) {
 // ─── Post Composer ────────────────────────────────────────────────────────────
 
 function PostComposer({
-  session, isAdmin, onCreated, setToast,
+  session, myFoto, isAdmin, onCreated, setToast,
 }: {
   session: SessionUser
+  myFoto: string | null
   isAdmin: boolean
   onCreated: () => void
   setToast: (m: string) => void
@@ -261,7 +278,7 @@ function PostComposer({
       )}
 
       <div className="flex gap-3">
-        <Avatar nombre={session.nombre} size={34} />
+        <Avatar nombre={session.nombre} fotoUrl={myFoto} size={34} />
         <div className="flex-1 min-w-0">
           <textarea
             value={texto}
@@ -310,10 +327,11 @@ function PostComposer({
 // ─── Post Card ────────────────────────────────────────────────────────────────
 
 function PostCard({
-  post, session, isAdmin, updatePost, removePost, setToast,
+  post, session, myFoto, isAdmin, updatePost, removePost, setToast,
 }: {
   post: MuroPost
   session: SessionUser
+  myFoto: string | null
   isAdmin: boolean
   updatePost: (id: number, patch: Partial<MuroPost>) => void
   removePost: (id: number) => void
@@ -395,7 +413,7 @@ function PostCard({
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         {/* Header */}
         <div className="flex items-start gap-3 px-4 pt-4 pb-3">
-          <Avatar nombre={post.autor.nombre} size={36} />
+          <Avatar nombre={post.autor.nombre} fotoUrl={post.autor.foto_perfil} size={36} />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[13px] font-semibold">{post.autor.nombre}</span>
@@ -494,7 +512,7 @@ function PostCard({
                   />
                 ))}
                 <div className="flex gap-2 items-start pt-1">
-                  <Avatar nombre={session.nombre} size={28} />
+                  <Avatar nombre={session.nombre} fotoUrl={myFoto} size={28} />
                   <div className="flex-1">
                     {replyTo && (
                       <div className="flex items-center gap-1 mb-1 text-[11px] text-[var(--primary)] bg-[var(--primary-light)] rounded-lg px-2 py-1">
@@ -547,7 +565,7 @@ function CommentItem({
   return (
     <div className="space-y-2">
       <div className="flex gap-2 items-start group">
-        <Avatar nombre={comment.autor.nombre} size={26} />
+        <Avatar nombre={comment.autor.nombre} fotoUrl={comment.autor.foto_perfil} size={26} />
         <div className="flex-1 bg-gray-50 rounded-xl px-3 py-2">
           <div className="flex items-baseline gap-2">
             <span className="text-[12px] font-semibold">{comment.autor.nombre}</span>
@@ -572,7 +590,7 @@ function CommentItem({
         <div className="ml-9 space-y-2">
           {comment.respuestas.map(r => (
             <div key={r.id} className="flex gap-2 items-start group">
-              <Avatar nombre={r.autor.nombre} size={22} />
+              <Avatar nombre={r.autor.nombre} fotoUrl={r.autor.foto_perfil} size={22} />
               <div className="flex-1 bg-gray-50 rounded-xl px-3 py-2">
                 <div className="flex items-baseline gap-2">
                   <span className="text-[12px] font-semibold">{r.autor.nombre}</span>

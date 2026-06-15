@@ -188,9 +188,6 @@ export default function PerfilClient({ user }: { user: SessionUser }) {
               <InfoRow label="Teléfono"            value={perfil?.telefono} />
               <InfoRow label="DNI"                 value={perfil?.dni} />
               <InfoRow label="Fecha de Nacimiento" value={fmtFecha(perfil?.fecha_nacimiento ?? null)} />
-              <InfoRow label="Equipo"              value={perfil?.equipo?.nombre} />
-              <InfoRow label="Rol"                 value={perfil?.rol?.nombre} />
-
               {vacRestantes !== null && (
                 <div className="py-2.5">
                   <p className="text-[11px] text-gray-400 mb-0.5">Vacaciones Disponibles</p>

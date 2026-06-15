@@ -48,9 +48,10 @@ export async function GET(request: NextRequest) {
     ...(likesRes.data ?? []).map((l: { usuario_id: string }) => l.usuario_id),
   ])]
 
-  const { data: usuarios } = await supabase.from('usuarios').select('id, nombre').in('id', allUserIds)
+  const { data: usuarios } = await supabase.from('usuarios').select('id, nombre, foto_perfil').in('id', allUserIds)
   const autorMap: Record<string, string> = {}
-  for (const u of usuarios ?? []) autorMap[u.id] = u.nombre
+  const fotoMap: Record<string, string | null> = {}
+  for (const u of usuarios ?? []) { autorMap[u.id] = u.nombre; fotoMap[u.id] = (u as { foto_perfil?: string | null }).foto_perfil ?? null }
 
   return NextResponse.json(posts.map(post => {
     const likes = (likesRes.data ?? []).filter((l: { post_id: number }) => l.post_id === post.id)
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
       created_at: post.created_at,
       cerrado: post.cerrado,
       resultados_publicados: post.resultados_publicados,
-      autor: { id: post.usuario_id, nombre: autorMap[post.usuario_id] ?? 'Usuario' },
+      autor: { id: post.usuario_id, nombre: autorMap[post.usuario_id] ?? 'Usuario', foto_perfil: fotoMap[post.usuario_id] ?? null },
       likes_count: likes.length,
       yo_like: (likes as { usuario_id: string }[]).some(l => l.usuario_id === session.id),
       comentarios_count: comentCount,

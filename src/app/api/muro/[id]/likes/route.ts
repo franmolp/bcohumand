@@ -17,7 +17,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!likes?.length) return NextResponse.json([])
 
   const ids = likes.map(l => l.usuario_id)
-  const { data: usuarios } = await supabase.from('usuarios').select('id, nombre').in('id', ids)
+  const { data: usuarios } = await supabase.from('usuarios').select('id, nombre, foto_perfil').in('id', ids)
 
-  return NextResponse.json((usuarios ?? []).map(u => u.nombre))
+  return NextResponse.json((usuarios ?? []).map(u => ({ nombre: u.nombre, foto_perfil: (u as { foto_perfil?: string | null }).foto_perfil ?? null })))
 }

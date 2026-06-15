@@ -20,12 +20,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!comentarios?.length) return NextResponse.json([])
 
   const autorIds = [...new Set(comentarios.map(c => c.usuario_id))]
-  const { data: autores } = await supabase.from('usuarios').select('id, nombre').in('id', autorIds)
+  const { data: autores } = await supabase.from('usuarios').select('id, nombre, foto_perfil').in('id', autorIds)
 
   const autorMap: Record<string, string> = {}
-  for (const a of autores ?? []) autorMap[a.id] = a.nombre
+  const fotoMap: Record<string, string | null> = {}
+  for (const a of autores ?? []) { autorMap[a.id] = a.nombre; fotoMap[a.id] = (a as { foto_perfil?: string | null }).foto_perfil ?? null }
 
-  const withAutor = comentarios.map(c => ({ ...c, autor: { id: c.usuario_id, nombre: autorMap[c.usuario_id] ?? 'Usuario' } }))
+  const withAutor = comentarios.map(c => ({ ...c, autor: { id: c.usuario_id, nombre: autorMap[c.usuario_id] ?? 'Usuario', foto_perfil: fotoMap[c.usuario_id] ?? null } }))
 
   // Build tree: top-level with nested replies
   const topLevel = withAutor.filter(c => !c.parent_id)
@@ -73,5 +74,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
   }
 
-  return NextResponse.json({ ...data, autor: { id: session.id, nombre: session.nombre }, respuestas: [] }, { status: 201 })
+  const { data: me } = await supabase.from('usuarios').select('foto_perfil').eq('id', session.id).single()
+  return NextResponse.json({ ...data, autor: { id: session.id, nombre: session.nombre, foto_perfil: (me as { foto_perfil?: string | null } | null)?.foto_perfil ?? null }, respuestas: [] }, { status: 201 })
 }
