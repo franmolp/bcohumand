@@ -10,7 +10,6 @@ import { Toast } from '@/components/ui'
 
 const allNav = [
   { href: '/dashboard',              label: 'Inicio',         icon: IconHome,        mobile: true },
-  { href: '/dashboard/notificaciones', label: 'Notificaciones', icon: IconBell,      mobile: true },
   { href: '/dashboard/asistencia',   label: 'Asistencia',     icon: IconClipboard,   roles: ['Admin', 'admin', 'HR', 'Encargada'], mobile: true },
   { href: '/dashboard/solicitudes',  label: 'Solicitudes',    labelEmp: 'Mis Solicitudes', icon: IconFileText, mobile: true },
   { href: '/dashboard/empleados',    label: 'Empleados',      icon: IconUsers,       roles: ['Admin', 'admin', 'HR'] },

@@ -26,7 +26,6 @@ const navSections = [
       { href: '/dashboard/liquidador', label: 'Liquidador', icon: IconDollar, admin: true },
       { href: '/dashboard/compras', label: 'Compras', icon: IconShoppingBag, admin: true },
       { href: '/dashboard/muro', label: 'Muro Social', icon: IconWall },
-      { href: '/dashboard/notificaciones', label: 'Notificaciones', icon: IconBell },
     ]
   },
 ]
@@ -36,7 +35,6 @@ const mobileNavItems = [
   { href: '/dashboard', label: 'Inicio', icon: IconHome },
   { href: '/dashboard/asistencia', label: 'Asistencia', icon: IconClipboard, admin: true },
   { href: '/dashboard/solicitudes', label: 'Solicitudes', icon: IconFileText },
-  { href: '/dashboard/notificaciones', label: 'Alertas', icon: IconBell },
 ]
 
 export default function Sidebar({ user }: { user: SessionUser }) {
