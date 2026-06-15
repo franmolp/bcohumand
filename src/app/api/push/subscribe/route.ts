@@ -11,6 +11,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Suscripción inválida' }, { status: 400 })
   }
 
+  // Si este endpoint ya pertenece a otro usuario (mismo dispositivo, distinto login), lo removemos
+  await supabaseAdmin
+    .from('push_subscriptions')
+    .delete()
+    .eq('endpoint', sub.endpoint)
+    .neq('usuario_id', session.id)
+
   const { error } = await supabaseAdmin
     .from('push_subscriptions')
     .upsert({
