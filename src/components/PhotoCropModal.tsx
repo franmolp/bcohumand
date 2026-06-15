@@ -190,18 +190,13 @@ export default function PhotoCropModal({ currentUrl, initials, onClose, onSaved,
   if (!mounted) return null
 
   const modal = (
-    <div className="fixed inset-0 z-[70] flex items-end lg:items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center px-5" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="relative bg-white rounded-t-2xl lg:rounded-2xl shadow-2xl w-full max-w-sm"
+        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm"
         onClick={e => e.stopPropagation()}
       >
-        {/* Handle mobile */}
-        <div className="flex justify-center pt-3 pb-1 lg:hidden">
-          <div className="w-10 h-1 bg-gray-300 rounded-full" />
-        </div>
-
-        <div className="px-6 pt-4 pb-6">
+        <div className="px-6 pt-5 pb-6">
           <div className="flex items-center justify-between mb-5">
             <h2 className="text-[16px] font-bold text-[var(--text)]">Foto de Perfil</h2>
             <button onClick={onClose} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full cursor-pointer">
@@ -317,7 +312,6 @@ export default function PhotoCropModal({ currentUrl, initials, onClose, onSaved,
           ref={fileRef}
           type="file"
           accept="image/*"
-          capture="environment"
           className="hidden"
           onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = '' }}
         />
