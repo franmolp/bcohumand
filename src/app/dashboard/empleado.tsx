@@ -1,9 +1,23 @@
 import Link from 'next/link'
 import type { SessionUser } from '@/types'
 import { supabase } from '@/lib/supabase'
-import { IconCalendar, IconBell, IconFileText, IconAlertCircle, IconChevronRight } from '@/components/ui/Icons'
+import { IconCalendar, IconBell, IconAlertCircle, IconChevronRight } from '@/components/ui/Icons'
 
 const VACACIONES_DEFAULT = 14
+
+function timeAgo(dateStr: string | null): string {
+  if (!dateStr) return ''
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'ahora'
+  if (mins < 60) return `hace ${mins}m`
+  const hs = Math.floor(mins / 60)
+  if (hs < 24) return `hace ${hs}h`
+  const days = Math.floor(hs / 24)
+  if (days === 1) return 'ayer'
+  if (days < 7) return `hace ${days}d`
+  return new Date(dateStr).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+}
 
 function getUpcomingBirthdays(
   users: { id: string; nombre: string; fecha_nacimiento: string }[],
@@ -79,6 +93,8 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`
   const in30 = new Date(today); in30.setDate(today.getDate() + 30)
   const in30Str = `${in30.getFullYear()}-${String(in30.getMonth()+1).padStart(2,'0')}-${String(in30.getDate()).padStart(2,'0')}`
+  const hace7 = new Date(today); hace7.setDate(today.getDate() - 7)
+  const hace7Str = hace7.toISOString()
 
   const showAusentes = session.rol === 'HR' || session.rol === 'Encargada'
 
@@ -87,7 +103,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   const periodStart = `${periodYear}-04-01`
   const periodLabel = `${periodYear}/${String(periodYear + 1).slice(2)}`
 
-  const [vacRes, notifRes, usersRes, evRes, configRes, solPendRes, ausentesRes] = await Promise.all([
+  const [vacRes, notifRes, usersRes, evRes, configRes, solPendRes, ausentesRes, muroRes] = await Promise.all([
     supabase
       .from('solicitudes')
       .select('dias')
@@ -124,10 +140,9 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
 
     supabase
       .from('solicitudes')
-      .select('id, tipo, fecha_inicio, fecha_fin, estado')
+      .select('id, tipo, fecha_inicio, fecha_fin')
       .eq('usuario_id', session.id)
-      .in('estado', ['pending', 'approved', 'rejected'])
-      .gte('fecha_inicio', todayStr)
+      .eq('estado', 'pending')
       .order('fecha_inicio', { ascending: true }),
 
     showAusentes
@@ -137,6 +152,13 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
           .eq('estado', 'approved')
           .lte('fecha_inicio', todayStr)
       : Promise.resolve({ data: [], error: null }),
+
+    supabase
+      .from('muro_posts')
+      .select('id, contenido, tipo, created_at, usuario_id')
+      .gte('created_at', hace7Str)
+      .order('created_at', { ascending: false })
+      .limit(1),
   ])
 
   // Vacaciones
@@ -169,9 +191,16 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
     return fin >= todayStr
   })
 
-  const notifs = notifRes.data ?? []
+  const notifs  = notifRes.data ?? []
   const misSOLS = solPendRes.data ?? []
   const firstName = session.nombre.split(' ')[0]
+
+  const muroPost = (muroRes.data ?? [])[0] ?? null
+  let muroAutor: { nombre: string; foto_perfil?: string | null } | null = null
+  if (muroPost) {
+    const { data: u } = await supabase.from('usuarios').select('nombre, foto_perfil').eq('id', muroPost.usuario_id).single()
+    muroAutor = u
+  }
 
   return (
     <div className="py-4 fade-in space-y-5">
@@ -183,57 +212,6 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
         <p className="text-[13px] text-[var(--text-sub)] mt-0.5">
           {fmtDateLabel(today)}
         </p>
-      </div>
-
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Link href="/dashboard/solicitudes"
-          className="bg-[image:var(--gradient)] rounded-2xl p-4 text-white shadow-sm hover:opacity-90 transition-opacity">
-          <div className="flex items-start justify-between mb-3">
-            <div className="w-8 h-8 bg-white/15 rounded-xl flex items-center justify-center">
-              <IconCalendar size={16} className="text-white" />
-            </div>
-            <IconChevronRight size={14} className="text-white/50 mt-1" />
-          </div>
-          <p className="text-[32px] font-bold leading-none mb-1">{vacRest}</p>
-          <p className="text-[11px] text-white/70">Días de vacaciones</p>
-        </Link>
-
-        <Link href="/dashboard/solicitudes"
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-shadow">
-          <div className="flex items-start justify-between mb-3">
-            <div className="w-8 h-8 bg-amber-50 rounded-xl flex items-center justify-center">
-              <IconFileText size={16} className="text-amber-500" />
-            </div>
-            <IconChevronRight size={14} className="text-gray-300 mt-1" />
-          </div>
-          <p className="text-[32px] font-bold leading-none text-amber-600 mb-1">{misSOLS.length}</p>
-          <p className="text-[11px] text-gray-400">Mis solicitudes</p>
-        </Link>
-
-        <Link href="/dashboard/notificaciones"
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-shadow">
-          <div className="flex items-start justify-between mb-3">
-            <div className="w-8 h-8 bg-red-50 rounded-xl flex items-center justify-center">
-              <IconBell size={16} className="text-red-400" />
-            </div>
-            <IconChevronRight size={14} className="text-gray-300 mt-1" />
-          </div>
-          <p className="text-[32px] font-bold leading-none text-red-500 mb-1">{notifs.filter(n => !n.leida).length}</p>
-          <p className="text-[11px] text-gray-400">Notificaciones nuevas</p>
-        </Link>
-
-        <Link href="/dashboard/calendario"
-          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-shadow">
-          <div className="flex items-start justify-between mb-3">
-            <div className="w-8 h-8 bg-pink-50 rounded-xl flex items-center justify-center">
-              <IconCalendar size={16} className="text-pink-400" />
-            </div>
-            <IconChevronRight size={14} className="text-gray-300 mt-1" />
-          </div>
-          <p className="text-[32px] font-bold leading-none text-pink-500 mb-1">{proxCumple.length}</p>
-          <p className="text-[11px] text-gray-400">Próximos cumpleaños</p>
-        </Link>
       </div>
 
       {/* Ausentes hoy — visible para HR y Encargada */}
@@ -305,7 +283,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
             <div className="flex items-center justify-between gap-2 mb-4">
               <div className="flex items-center gap-2">
                 <IconCalendar size={16} className="text-[var(--primary)]" />
-                <h2 className="text-[14px] font-bold text-[var(--text)]">Vacaciones {periodLabel}</h2>
+                <h2 className="text-[14px] font-bold text-[var(--primary)]">Vacaciones {periodLabel}</h2>
               </div>
               <IconChevronRight size={14} className="text-gray-300" />
             </div>
@@ -330,10 +308,10 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
             </div>
           </Link>
 
-          {/* Mis solicitudes recientes */}
+          {/* Mis solicitudes pendientes */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <Link href="/dashboard/solicitudes" className="flex items-center justify-between px-5 py-4 border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
-              <h2 className="text-[14px] font-bold text-[var(--text)]">Mis Solicitudes</h2>
+              <h2 className="text-[14px] font-bold text-amber-600">Mis solicitudes pendientes</h2>
               <div className="flex items-center gap-2">
                 {misSOLS.length > 0 && <span className="text-[12px] font-bold text-amber-600">{misSOLS.length}</span>}
                 <IconChevronRight size={14} className="text-gray-300" />
@@ -341,27 +319,20 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
             </Link>
             <div className="divide-y divide-gray-50">
               {misSOLS.length === 0 && (
-                <p className="text-center text-[13px] text-gray-400 py-8">Sin solicitudes</p>
+                <p className="text-center text-[13px] text-gray-400 py-8">Sin solicitudes pendientes</p>
               )}
-              {misSOLS.map(s => {
-                const estadoLabel = s.estado === 'pending' ? 'Pendiente' : s.estado === 'approved' ? 'Aprobada' : 'Rechazada'
-                const estadoColor = s.estado === 'pending' ? 'text-amber-600 bg-amber-50' : s.estado === 'approved' ? 'text-emerald-600 bg-emerald-50' : 'text-red-500 bg-red-50'
-                return (
-                  <div key={s.id} className="flex items-center gap-3 px-5 py-3.5">
-                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: tipoColor(s.tipo) }} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-medium">{s.tipo}</p>
-                      <p className="text-[11px] text-gray-400">
-                        {s.fecha_inicio ? fmtFecha(s.fecha_inicio) : '—'}
-                        {s.fecha_fin && s.fecha_fin !== s.fecha_inicio ? ` → ${fmtFecha(s.fecha_fin)}` : ''}
-                      </p>
-                    </div>
-                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${estadoColor}`}>
-                      {estadoLabel}
-                    </span>
+              {misSOLS.map(s => (
+                <div key={s.id} className="flex items-center gap-3 px-5 py-3.5">
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: tipoColor(s.tipo) }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium">{s.tipo}</p>
+                    <p className="text-[11px] text-gray-400">
+                      {s.fecha_inicio ? fmtFecha(s.fecha_inicio) : '—'}
+                      {s.fecha_fin && s.fecha_fin !== s.fecha_inicio ? ` → ${fmtFecha(s.fecha_fin)}` : ''}
+                    </p>
                   </div>
-                )
-              })}
+                </div>
+              ))}
             </div>
           </div>
 
@@ -400,7 +371,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
           {/* Próximos eventos */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <Link href="/dashboard/calendario" className="flex items-center justify-between px-5 py-4 border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
-              <h2 className="text-[14px] font-bold text-[var(--text)]">Próximos Eventos</h2>
+              <h2 className="text-[14px] font-bold text-violet-600">Próximos Eventos</h2>
               <div className="flex items-center gap-2">
                 {eventos.length > 0 && <span className="text-[12px] font-bold text-violet-500">{eventos.length}</span>}
                 <IconChevronRight size={14} className="text-gray-300" />
@@ -435,7 +406,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
           {/* Próximos cumpleaños */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <Link href="/dashboard/calendario" className="flex items-center justify-between px-5 py-4 border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
-              <h2 className="text-[14px] font-bold text-[var(--text)]">Próximos Cumpleaños</h2>
+              <h2 className="text-[14px] font-bold text-pink-600">Próximos Cumpleaños</h2>
               <div className="flex items-center gap-2">
                 {proxCumple.length > 0 && <span className="text-[12px] font-bold text-pink-500">{proxCumple.length}</span>}
                 <IconChevronRight size={14} className="text-gray-300" />
@@ -466,6 +437,33 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
 
         </div>
       </div>
+
+      {/* Última publicación del muro */}
+      <Link href="/dashboard/muro" className="block bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="text-[14px] font-bold text-indigo-600">Últimas novedades</h2>
+          <IconChevronRight size={14} className="text-gray-300" />
+        </div>
+        {muroPost && muroAutor ? (
+          <div className="p-4 flex items-start gap-3">
+            {muroAutor.foto_perfil
+              ? <img src={muroAutor.foto_perfil} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" />
+              : <div className="w-9 h-9 rounded-full bg-[image:var(--gradient)] flex items-center justify-center shrink-0">
+                  <span className="text-[11px] font-bold text-white">
+                    {muroAutor.nombre.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                  </span>
+                </div>
+            }
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-semibold text-gray-700 mb-0.5">{muroAutor.nombre}</p>
+              <p className="text-[13px] text-gray-600 line-clamp-3 leading-snug">{muroPost.contenido}</p>
+              <p className="text-[11px] text-gray-400 mt-1">{timeAgo(muroPost.created_at)}</p>
+            </div>
+          </div>
+        ) : (
+          <p className="px-5 py-6 text-[13px] text-gray-400 italic">Sin novedades.</p>
+        )}
+      </Link>
     </div>
   )
 }
