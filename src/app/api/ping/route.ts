@@ -40,8 +40,8 @@ export async function POST(request: NextRequest) {
   // Insert activity log
   await supabaseAdmin.from('log_seguridad').insert({
     usuario_id: session.id,
-    accion: 'app_activa',
-    detalle: `Abrió la app desde ${dispositivo}`,
+    accion: 'Ingresó a la app',
+    detalle: dispositivo,
     ip,
   })
 

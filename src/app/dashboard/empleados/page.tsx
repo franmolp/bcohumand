@@ -204,7 +204,12 @@ export default function EmpleadosPage() {
                     <p className="text-sm font-semibold truncate">{emp.nombre}</p>
                     {pushSet.has(emp.id) && <IconBell size={11} className="text-gray-400 shrink-0" />}
                   </div>
-                  <p className="text-[11px] text-[var(--primary)] mt-0.5">{emp.equipo?.nombre || '—'} · {(() => { const v = vacMap[emp.id] ?? { total: 14, restantes: 14 }; return `${v.restantes}/${v.total} vac.` })()}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className="text-[11px] text-[var(--primary)]">{emp.equipo?.nombre || '—'}</span>
+                    <span className="text-gray-300 text-[10px]">·</span>
+                    {(() => { const v = vacMap[emp.id] ?? { total: 14, restantes: 14 }; const color = v.restantes <= 0 ? 'text-red-500' : v.restantes < v.total ? 'text-amber-500' : 'text-emerald-600'; return <span className={`text-[11px] font-medium ${color}`}>{v.restantes}/{v.total} vac.</span> })()}
+                  </div>
+                  {emp.ultimo_acceso && <p className="text-[10px] text-gray-400 mt-0.5 truncate">{fmtDate(emp.ultimo_acceso)}{emp.ultimo_dispositivo ? ` · ${emp.ultimo_dispositivo}` : ''}</p>}
                 </div>
                 <div className="flex gap-1 shrink-0">
                   <button onClick={() => openEdit(emp)} className="p-2 text-gray-400 active:bg-gray-100 rounded-lg cursor-pointer"><IconEdit size={16}/></button>
@@ -252,8 +257,9 @@ export default function EmpleadosPage() {
                     <td className="py-3 px-4 text-[13px]">
                       {(() => {
                         const v = vacMap[emp.id] ?? { total: 14, usadas: 0, restantes: 14 }
+                        const color = v.restantes <= 0 ? 'text-red-500' : v.restantes < v.total ? 'text-amber-500' : 'text-emerald-600'
                         return (
-                          <span className={v.restantes > 7 ? 'text-emerald-600' : v.restantes > 3 ? 'text-amber-600' : 'text-red-500'}>
+                          <span className={color}>
                             {v.restantes} <span className="text-gray-400 font-normal">/ {v.total}</span>
                           </span>
                         )
