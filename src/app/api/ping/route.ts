@@ -37,13 +37,24 @@ export async function POST(request: NextRequest) {
     .update({ ultimo_acceso: now, ultimo_dispositivo: dispositivo })
     .eq('id', session.id)
 
-  // Insert activity log
-  await supabaseAdmin.from('log_seguridad').insert({
-    usuario_id: session.id,
-    accion: 'Ingresó a la app',
-    detalle: dispositivo,
-    ip,
-  })
+  // Insert activity log — deduplicate within 5 minutes
+  const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+  const { data: recent } = await supabaseAdmin
+    .from('log_seguridad')
+    .select('id')
+    .eq('usuario_id', session.id)
+    .eq('accion', 'Ingresó a la app')
+    .gte('created_at', fiveMinAgo)
+    .limit(1)
+
+  if (!recent?.length) {
+    await supabaseAdmin.from('log_seguridad').insert({
+      usuario_id: session.id,
+      accion: 'Ingresó a la app',
+      detalle: dispositivo,
+      ip,
+    })
+  }
 
   // Cleanup: keep only latest 10000 rows
   const { count } = await supabaseAdmin

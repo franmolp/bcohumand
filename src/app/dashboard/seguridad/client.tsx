@@ -17,6 +17,7 @@ interface LogEntry {
 
 const ACCIONES: Record<string, { label: string; cls: string }> = {
   login_exitoso:        { label: 'Ingreso exitoso',      cls: 'bg-green-50 text-green-700 border-green-100' },
+  'Ingresó a la app':   { label: 'Ingresó a la app',     cls: 'bg-blue-50 text-blue-700 border-blue-100' },
   contrasena_incorrecta:{ label: 'Contraseña incorrecta', cls: 'bg-amber-50 text-amber-700 border-amber-100' },
   cuenta_bloqueada:     { label: 'Cuenta bloqueada',      cls: 'bg-red-50 text-red-700 border-red-100' },
   cuenta_inactiva:      { label: 'Cuenta inactiva',       cls: 'bg-gray-100 text-gray-600 border-gray-200' },
@@ -26,6 +27,7 @@ const ACCIONES: Record<string, { label: string; cls: string }> = {
 const FILTROS = [
   { value: '', label: 'Todos' },
   { value: 'login_exitoso', label: 'Exitosos' },
+  { value: 'Ingresó a la app', label: 'Ingresó a la app' },
   { value: 'contrasena_incorrecta', label: 'Contraseña incorrecta' },
   { value: 'cuenta_bloqueada', label: 'Bloqueados' },
   { value: 'usuario_no_encontrado', label: 'Usuario inexistente' },
@@ -220,9 +222,9 @@ export default function SeguridadClient() {
                 <td className="px-4 py-3 text-[var(--text-muted)] whitespace-nowrap">{fmtDateTime(l.created_at)}</td>
                 <td className="px-4 py-3 font-medium text-[var(--text)]">{nombreUsuario(l)}</td>
                 <td className="px-4 py-3"><AcBadge accion={l.accion} /></td>
-                <td className="px-4 py-3 text-[var(--text-muted)]">{l.detalle || '—'}</td>
+                <td className="px-4 py-3 text-[var(--text-muted)]">{l.accion === 'Ingresó a la app' ? '—' : (l.detalle || '—')}</td>
                 <td className="px-4 py-3 font-mono text-[12px] text-[var(--text-muted)]">{l.ip || '—'}</td>
-                <td className="px-4 py-3 text-[var(--text-muted)]">{parseUA(l.user_agent)}</td>
+                <td className="px-4 py-3 text-[var(--text-muted)]">{l.accion === 'Ingresó a la app' ? (l.detalle || '—') : parseUA(l.user_agent)}</td>
               </tr>
             ))}
           </tbody>
@@ -242,11 +244,11 @@ export default function SeguridadClient() {
               <span className="text-[11px] text-[var(--text-muted)]">{fmtDateTime(l.created_at)}</span>
             </div>
             <p className="text-[14px] font-semibold text-[var(--text)]">{nombreUsuario(l)}</p>
-            {l.detalle && <p className="text-[12px] text-[var(--text-muted)] mt-0.5">{l.detalle}</p>}
+            {l.accion !== 'Ingresó a la app' && l.detalle && <p className="text-[12px] text-[var(--text-muted)] mt-0.5">{l.detalle}</p>}
             <div className="flex gap-3 mt-2 text-[11px] text-gray-400">
               <span className="font-mono">{l.ip || '—'}</span>
               <span>·</span>
-              <span>{parseUA(l.user_agent)}</span>
+              <span>{l.accion === 'Ingresó a la app' ? (l.detalle || '—') : parseUA(l.user_agent)}</span>
             </div>
           </div>
         ))}
