@@ -148,11 +148,12 @@ function AdminResumen() {
     const json = await res.json()
     setSyncing(false)
     if (json.error) { showToast(json.error, 'error'); return }
-    const { imported = 0, skipped = 0, noMatch = [] } = json
+    const { imported = 0, skipped = 0, noMatch = [], errors = [] } = json
     const parts: string[] = []
     if (imported > 0) parts.push(`${imported} importado${imported !== 1 ? 's' : ''}`)
     if (skipped > 0) parts.push(`${skipped} ya existían`)
     if (noMatch.length > 0) parts.push(`sin match: ${noMatch.join(', ')}`)
+    if (errors.length > 0) parts.push(`${errors.length} error${errors.length !== 1 ? 'es' : ''}: ${errors[0]}`)
     showToast(parts.length ? parts.join(' · ') : 'Sin cambios', imported > 0 ? 'success' : 'error')
     if (imported > 0) load()
   }

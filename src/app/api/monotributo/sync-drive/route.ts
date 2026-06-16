@@ -54,6 +54,7 @@ export async function POST() {
 
   let imported = 0, skipped = 0
   const noMatch: string[] = []
+  const errors: string[] = []
 
   for (const [path, files] of groups) {
     const parts = path.split('/')
@@ -84,19 +85,20 @@ export async function POST() {
 
     // First file → comprobante, second → factura
     const [comp, fact] = files.sort((a, b) => a.date.localeCompare(b.date))
-    await supabaseAdmin.from('monotributo').insert({
+    const { error: insertError } = await supabaseAdmin.from('monotributo').insert({
       usuario_id:         user.id,
       mes,
       comprobante_url:    comp.url,
       comprobante_nombre: comp.name,
       factura_url:        fact?.url ?? null,
       factura_nombre:     fact?.name ?? null,
-      fecha_carga:        comp.date,
+      fecha_carga:        comp.date.slice(0, 10),
     })
-    imported++
+    if (!insertError) imported++
+    else errors.push(`${empleadaNombre} ${mes}: ${insertError.message}`)
   }
 
-  return NextResponse.json({ imported, skipped, noMatch })
+  return NextResponse.json({ imported, skipped, noMatch, errors })
 }
 
 interface DriveFile { id: string; name: string; url: string; path: string; date: string }
