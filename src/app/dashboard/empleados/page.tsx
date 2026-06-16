@@ -10,6 +10,7 @@ interface Empleado {
   id: string; usuario: string; reloj: string | null; nombre: string; email: string
   estado_cuenta: string; foto_perfil?: string | null; telefono: string | null; dni: string | null
   fecha_nacimiento: string | null; ultimo_login: string | null
+  ultimo_acceso: string | null; ultimo_dispositivo: string | null
   equipo: Equipo | null; rol: Rol | null
 }
 
@@ -232,7 +233,7 @@ export default function EmpleadosPage() {
                   <th className="text-left py-3 px-4 font-semibold">Equipo</th>
                   <th className="text-left py-3 px-4 font-semibold">Vacaciones</th>
                   <th className="text-left py-3 px-4 font-semibold">Estado</th>
-                  <th className="text-left py-3 px-4 font-semibold">Último login</th>
+                  <th className="text-left py-3 px-4 font-semibold">Último acceso</th>
                   <th className="w-24"></th>
                 </tr>
               </thead>
@@ -259,7 +260,12 @@ export default function EmpleadosPage() {
                       })()}
                     </td>
                     <td className="py-3 px-4">{estadoLabel(emp.estado_cuenta)}</td>
-                    <td className="py-3 px-4 text-gray-500 text-[13px]">{fmtDate(emp.ultimo_login)}</td>
+                    <td className="py-3 px-4 text-[13px]">
+                      {emp.ultimo_acceso
+                        ? <><span className="text-gray-700">{fmtDate(emp.ultimo_acceso)}</span>{emp.ultimo_dispositivo && <span className="block text-[11px] text-gray-400">{emp.ultimo_dispositivo}</span>}</>
+                        : <span className="text-gray-400">{fmtDate(emp.ultimo_login)}</span>
+                      }
+                    </td>
                     <td className="py-3 px-4">
                       <div className="flex gap-0.5 justify-end">
                         <button onClick={() => openEdit(emp)} className="p-1.5 text-gray-400 hover:text-[var(--primary)] hover:bg-[var(--primary-light)] rounded-lg cursor-pointer" title="Editar"><IconEdit size={15}/></button>
