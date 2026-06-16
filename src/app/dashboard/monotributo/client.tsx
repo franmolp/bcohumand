@@ -55,9 +55,9 @@ function FileLink({ url, nombre, label, onView }: {
     <button
       onClick={() => onView ? onView(url, display) : window.open(url, '_blank')}
       title={display}
-      className="inline-flex items-center gap-1 text-xs text-[var(--primary)] hover:underline cursor-pointer max-w-[160px]">
+      className="inline-flex items-center gap-1 text-xs text-[var(--primary)] hover:underline cursor-pointer">
       <IconEye size={12} className="shrink-0" />
-      <span className="truncate">{display}</span>
+      <span>Ver</span>
     </button>
   )
 }
@@ -234,7 +234,7 @@ function AdminResumen() {
           <div className="lg:hidden space-y-2">
             {data.map(emp => (
               <div key={emp.id} className="bg-white rounded-xl border border-[var(--border)] p-3">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2">
                   {fotosMap[emp.id]
                     // eslint-disable-next-line @next/next/no-img-element
                     ? <img src={fotosMap[emp.id]!} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0 shadow-sm" />
@@ -242,16 +242,17 @@ function AdminResumen() {
                         <span className="text-[9px] font-bold text-white">{emp.nombre.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase()}</span>
                       </div>
                   }
-                  <span className="text-sm font-medium text-[var(--text)] flex-1">{emp.nombre}</span>
+                  <span className="text-sm font-medium text-[var(--text)] flex-1 truncate">{emp.nombre}</span>
                   <EstadoBadge record={emp.record} />
-                  {emp.record && (
-                    <button onClick={() => setDeleteId(emp.record!.id)} className="p-1 text-gray-300 hover:text-red-500">
-                      <IconTrash size={14} />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => emp.record && setDeleteId(emp.record.id)}
+                    disabled={!emp.record}
+                    className={`p-1 rounded transition-colors ${emp.record ? 'text-gray-300 hover:text-red-500 cursor-pointer' : 'invisible'}`}>
+                    <IconTrash size={14} />
+                  </button>
                 </div>
                 {emp.record && (
-                  <div className="flex flex-wrap gap-3 text-xs mt-1">
+                  <div className="flex flex-wrap gap-3 text-xs mt-2 pl-9">
                     <FileLink url={emp.record.comprobante_url} nombre={emp.record.comprobante_nombre} label="Comprobante" onView={(url, name) => setViewer({ url, name })} />
                     <FileLink url={emp.record.factura_url} nombre={emp.record.factura_nombre} label="Factura" onView={(url, name) => setViewer({ url, name })} />
                     <span className="text-[var(--text-muted)] ml-auto">{fmtFecha(emp.record.fecha_carga)}</span>
