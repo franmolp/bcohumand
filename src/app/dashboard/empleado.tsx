@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { SessionUser } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { IconCalendar, IconBell, IconAlertCircle, IconChevronRight } from '@/components/ui/Icons'
+import GoogleReviewsCarousel from '@/components/GoogleReviewsCarousel'
 
 const VACACIONES_DEFAULT = 14
 
@@ -451,6 +452,9 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
             </div>
           </div>
 
+
+          {/* Reseñas de Google */}
+          <GoogleReviewsCarousel />
 
         </div>
       </div>
