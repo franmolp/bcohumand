@@ -42,6 +42,25 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url)
   const countOnly = searchParams.get('count') === 'true'
+  const isAdmin = session.rol === 'Admin' || session.rol === 'admin'
+
+  // Admin: view=enviadas → list all sent notifications with optional filters
+  if (isAdmin && searchParams.get('view') === 'enviadas') {
+    const targetUid  = searchParams.get('usuario_id') || null
+    const fechaDesde = searchParams.get('fecha_desde') || null
+    const fechaHasta = searchParams.get('fecha_hasta') || null
+    let q = supabaseAdmin
+      .from('notificaciones')
+      .select('id, titulo, mensaje, tipo, leida, created_at, usuario_id, usuario:usuarios(nombre)')
+      .order('created_at', { ascending: false })
+      .limit(300)
+    if (targetUid)   q = q.eq('usuario_id', targetUid)
+    if (fechaDesde)  q = q.gte('created_at', fechaDesde)
+    if (fechaHasta)  q = q.lte('created_at', `${fechaHasta}T23:59:59`)
+    const { data, error } = await q
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(data ?? [])
+  }
 
   if (countOnly) {
     const { data: unread } = await supabaseAdmin
@@ -104,10 +123,18 @@ export async function DELETE(request: NextRequest) {
   if (!session || (session.rol !== 'admin' && session.rol !== 'Admin'))
     return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
 
-  const { id } = await request.json().catch(() => ({}))
+  const body = await request.json().catch(() => ({}))
+  const { id, single } = body
   if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
 
-  // Obtener el título de esta notificación para borrar el batch completo
+  // single=true → delete just this one row (used from "Enviadas" view)
+  if (single) {
+    const { error } = await supabaseAdmin.from('notificaciones').delete().eq('id', id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true, eliminadas: 1 })
+  }
+
+  // Default: delete the whole batch by título
   const { data: notif } = await supabaseAdmin
     .from('notificaciones')
     .select('titulo, tipo')
