@@ -15,29 +15,30 @@ export async function GET(req: NextRequest) {
     const currentMes = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).slice(0, 7)
     const isPast = mes < currentMes
 
-    const [empRes, recRes] = await Promise.all([
-      supabase.from('usuarios').select('id, nombre').eq('monotributo_habilitado', true).eq('estado_cuenta', 'activo').order('nombre'),
-      supabaseAdmin.from('monotributo').select('*, usuario:usuarios(nombre)').eq('mes', mes),
+    const [empRes, allUsersRes, recRes] = await Promise.all([
+      supabaseAdmin.from('usuarios').select('id, nombre').eq('monotributo_habilitado', true).eq('estado_cuenta', 'activo').order('nombre'),
+      supabaseAdmin.from('usuarios').select('id, nombre'),
+      supabaseAdmin.from('monotributo').select('*').eq('mes', mes),
     ])
 
-    const enabledIds = new Set((empRes.data ?? []).map(e => e.id))
+    const enabledEmps = empRes.data ?? []
+    const enabledIds = new Set(enabledEmps.map(e => e.id))
     const records = recRes.data ?? []
     const recMap = new Map(records.map(r => [r.usuario_id, r]))
+    const nameMap = new Map((allUsersRes.data ?? []).map(u => [u.id, u.nombre]))
 
     if (isPast) {
-      // Meses pasados: enabled activos + cualquiera que haya subido (aunque esté desactivado)
       const extraUploaders = records
         .filter(r => !enabledIds.has(r.usuario_id))
-        .map(r => ({ id: r.usuario_id, nombre: (r.usuario as { nombre: string } | null)?.nombre ?? '—' }))
+        .map(r => ({ id: r.usuario_id, nombre: nameMap.get(r.usuario_id) ?? '—' }))
       const all = [
-        ...(empRes.data ?? []).map(e => ({ id: e.id, nombre: e.nombre, record: recMap.get(e.id) ?? null })),
+        ...enabledEmps.map(e => ({ id: e.id, nombre: e.nombre, record: recMap.get(e.id) ?? null })),
         ...extraUploaders.map(e => ({ id: e.id, nombre: e.nombre, record: recMap.get(e.id) ?? null })),
       ].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
       return NextResponse.json(all)
     }
 
-    // Mes en curso: solo empleados activos habilitados
-    return NextResponse.json((empRes.data ?? []).map(emp => ({ ...emp, record: recMap.get(emp.id) ?? null })))
+    return NextResponse.json(enabledEmps.map(emp => ({ ...emp, record: recMap.get(emp.id) ?? null })))
   }
 
   const { data, error } = await supabase.from('monotributo').select('*').eq('usuario_id', session.id).order('mes', { ascending: false })
