@@ -2,9 +2,24 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Button, Spinner, Modal, Toast, Confirm } from '@/components/ui'
-import { IconPlus, IconCheck, IconX, IconTrash, IconCalendar, IconEdit, IconAlertCircle, IconPaperclip, IconFileText, IconUpload, IconClock } from '@/components/ui/Icons'
+import { IconPlus, IconCheck, IconX, IconTrash, IconCalendar, IconEdit, IconAlertCircle, IconPaperclip, IconFileText, IconUpload, IconClock, IconSettings } from '@/components/ui/Icons'
 import type { SessionUser, Solicitud } from '@/types'
 import { compressImage } from '@/lib/compress-image'
+
+// ─── Config ───────────────────────────────────────────────────────────────────
+
+interface SolicitudesConfig { vacaciones_min_dias: number; otros_min_dias: number }
+const DEFAULT_CONFIG: SolicitudesConfig = { vacaciones_min_dias: 15, otros_min_dias: 10 }
+
+function addDaysStr(dateStr: string, n: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const dt = new Date(y, m - 1, d + n)
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`
+}
+
+function todayAR(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+}
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -128,31 +143,47 @@ function DetallePeriodo({ sol }: { sol: Solicitud }) {
 // ─── FormFields ───────────────────────────────────────────────────────────────
 
 function FormFields({
-  form, setForm, isAdmin, editMode, empleados = [], certFile, setCertFile,
+  form, setForm, isAdmin, isAdminOrHR, editMode, empleados = [], certFile, setCertFile, config,
 }: {
   form: Form
   setForm: (f: Form) => void
   isAdmin: boolean
+  isAdminOrHR: boolean
   editMode: boolean
   empleados?: { id: string; nombre: string }[]
   certFile: File | null
   setCertFile: (f: File | null) => void
+  config: SolicitudesConfig
 }) {
-  const tipos    = isAdmin ? TIPOS_ADMIN : TIPOS_EMPLEADO
+  const tipos     = isAdmin ? TIPOS_ADMIN : TIPOS_EMPLEADO
   const isHorario = form.tipo === 'Cambio de Horario' || form.tipo === 'Cambio de horario/día'
   const isFeriado = form.tipo === 'Feriado/Local cerrado'
   const isSalud   = form.tipo === 'Ausencia por Salud'
   const dias      = isHorario ? 1 : calcDias(form.fecha_inicio, form.fecha_fin)
 
-  const inp = (label: string, k: keyof Form, type = 'text', placeholder = '') => (
-    <div>
-      <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">{label}</label>
-      <input type={type} value={form[k] as string}
-        onChange={e => setForm({ ...form, [k]: e.target.value })}
-        placeholder={placeholder} style={{ fontSize: 16 }}
-        className="w-full h-11 px-4 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] placeholder:text-[var(--text-muted)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] lg:text-sm" />
-    </div>
-  )
+  const needsAdvance = !isAdminOrHR && !editMode
+  const today = todayAR()
+  const dateMin = (() => {
+    if (!needsAdvance) return ''
+    if (form.tipo === 'Vacaciones')        return addDaysStr(today, config.vacaciones_min_dias)
+    if (form.tipo === 'Solicitud de Días' || isHorario) return addDaysStr(today, config.otros_min_dias)
+    return today
+  })()
+  const motivoRequired = !isAdminOrHR && !editMode && (form.tipo === 'Solicitud de Días' || isHorario)
+
+  const inp = (label: string, k: keyof Form, type = 'text', placeholder = '') => {
+    const isDateField = type === 'date' && (k === 'fecha_inicio' || k === 'fecha_compensacion')
+    return (
+      <div>
+        <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">{label}</label>
+        <input type={type} value={form[k] as string}
+          onChange={e => setForm({ ...form, [k]: e.target.value })}
+          placeholder={placeholder} style={{ fontSize: 16 }}
+          min={isDateField && dateMin ? dateMin : undefined}
+          className="w-full h-11 px-4 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] placeholder:text-[var(--text-muted)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] lg:text-sm" />
+      </div>
+    )
+  }
 
   const area = (label: string, k: keyof Form, placeholder = '', rows = 3) => (
     <div>
@@ -222,6 +253,18 @@ function FormFields({
         </div>
       )}
 
+      {/* Aviso de anticipación mínima */}
+      {needsAdvance && !isFeriado && !isSalud && (
+        <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-100 rounded-xl">
+          <IconClock size={14} className="text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-[12px] text-amber-700">
+            {form.tipo === 'Vacaciones'
+              ? `Anticipación mínima: ${config.vacaciones_min_dias} días`
+              : `Anticipación mínima: ${config.otros_min_dias} días · Motivo obligatorio`}
+          </p>
+        </div>
+      )}
+
       {/* Fechas estándar (no Horario) */}
       {!isHorario && (
         <>
@@ -277,7 +320,7 @@ function FormFields({
 
       {/* Motivo (todos menos Feriado) */}
       {!isFeriado && area(
-        `Motivo${isSalud || form.tipo === 'Ausencia Injustificada' ? '' : ' (opcional)'}`,
+        `Motivo${(isSalud || form.tipo === 'Ausencia Injustificada' || motivoRequired) ? '' : ' (opcional)'}`,
         'motivo',
         'Describí brevemente el motivo...'
       )}
@@ -590,6 +633,12 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
 
   const [toast, setToast] = useState('')
 
+  // Config de plazos
+  const [config, setConfig]         = useState<SolicitudesConfig>(DEFAULT_CONFIG)
+  const [configModal, setConfigModal] = useState(false)
+  const [configForm, setConfigForm] = useState(DEFAULT_CONFIG)
+  const [configSaving, setConfigSaving] = useState(false)
+
   // ─── Carga ───
   const load = useCallback(async () => {
     setLoading(true)
@@ -609,6 +658,12 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
   }, [estadoFilter, tipoFilter, empleadoFilter])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    fetch('/api/solicitudes/config').then(r => r.json()).then(d => {
+      setConfig(d); setConfigForm(d)
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!isAdminOrHR) return
@@ -632,6 +687,19 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
   function openNew()              { setForm(blankForm);       setEditId(null);  setFormError(''); setModalCertFile(null); setModal(true) }
   function openEdit(s: Solicitud) { setForm(solToForm(s)); setEditId(s.id);  setFormError(''); setModalCertFile(null); setModal(true) }
 
+  // ─── Guardar config de plazos ───
+  async function saveConfig() {
+    setConfigSaving(true)
+    const res = await fetch('/api/solicitudes/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(configForm),
+    })
+    const d = await res.json()
+    setConfigSaving(false)
+    if (res.ok) { setConfig(d); setConfigModal(false); setToast('Ajustes guardados') }
+  }
+
   // ─── Guardar nueva / edición ───
   async function save() {
     setFormError(''); setSaving(true)
@@ -645,6 +713,30 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
     if (!form.fecha_inicio) { setFormError('La fecha inicio es requerida'); setSaving(false); return }
     if (!isFeriado && !isHorario && !form.fecha_fin) { setFormError('La fecha fin es requerida'); setSaving(false); return }
     if (isFeriado && !form.fecha_fin) { setFormError('Las fechas son requeridas'); setSaving(false); return }
+
+    // ─── Validación de plazos (solo empleados en nueva solicitud) ───
+    if (!isAdminOrHR && !editId && !isFeriado) {
+      const today = todayAR()
+      if (form.fecha_inicio < today) {
+        setFormError('No podés crear solicitudes con fechas anteriores a hoy'); setSaving(false); return
+      }
+      if (form.tipo === 'Vacaciones') {
+        const minFecha = addDaysStr(today, config.vacaciones_min_dias)
+        if (form.fecha_inicio < minFecha) {
+          setFormError(`Las vacaciones deben pedirse con al menos ${config.vacaciones_min_dias} días de anticipación`)
+          setSaving(false); return
+        }
+      } else if (form.tipo === 'Solicitud de Días' || isHorario) {
+        const minFecha = addDaysStr(today, config.otros_min_dias)
+        if (form.fecha_inicio < minFecha) {
+          setFormError(`Esta solicitud debe pedirse con al menos ${config.otros_min_dias} días de anticipación`)
+          setSaving(false); return
+        }
+        if (!form.motivo.trim()) {
+          setFormError('El motivo es obligatorio para este tipo de solicitud'); setSaving(false); return
+        }
+      }
+    }
 
     const dias = isHorario ? 1 : calcDias(form.fecha_inicio, form.fecha_fin)
 
@@ -848,7 +940,18 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
             </p>
           </div>
         </div>
-        <Button icon={<IconPlus size={16} />} size="sm" onClick={openNew}>Nueva</Button>
+        <div className="flex items-center gap-2">
+          {isAdminOrHR && (
+            <button
+              onClick={() => { setConfigForm(config); setConfigModal(true) }}
+              className="p-2 text-gray-400 hover:text-[var(--primary)] hover:bg-[var(--primary-light)] rounded-xl transition-colors cursor-pointer"
+              title="Ajustes de solicitudes"
+            >
+              <IconSettings size={17} />
+            </button>
+          )}
+          <Button icon={<IconPlus size={16} />} size="sm" onClick={openNew}>Nueva</Button>
+        </div>
       </div>
 
       {/* ─── Filtros ─── */}
@@ -1123,6 +1226,43 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
         </>
       )}
 
+      {/* ─── Modal: Ajustes de plazos ─── */}
+      <Modal open={configModal} onClose={() => setConfigModal(false)} title="Ajustes de solicitudes"
+        footer={<>
+          <Button variant="secondary" onClick={() => setConfigModal(false)} className="flex-1 lg:flex-none">Cancelar</Button>
+          <Button onClick={saveConfig} loading={configSaving} className="flex-1 lg:flex-none">Guardar</Button>
+        </>}>
+        <div className="space-y-5">
+          <p className="text-[13px] text-gray-500">Los empleados no pueden crear solicitudes con menos días de anticipación que los configurados acá. Admin y HR están exentos de estos plazos.</p>
+          <div>
+            <label className="block text-[13px] font-semibold text-[var(--text)] mb-1">Vacaciones — anticipación mínima</label>
+            <p className="text-[12px] text-gray-400 mb-2">Días que el empleado debe pedir antes de la fecha de inicio</p>
+            <div className="flex items-center gap-3">
+              <input type="number" min={1} max={90} value={configForm.vacaciones_min_dias}
+                onChange={e => setConfigForm({ ...configForm, vacaciones_min_dias: Math.max(1, +e.target.value) })}
+                style={{ fontSize: 16 }}
+                className="w-24 h-11 px-4 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+              <span className="text-[13px] text-gray-500">días</span>
+            </div>
+          </div>
+          <div>
+            <label className="block text-[13px] font-semibold text-[var(--text)] mb-1">Solicitud de Días / Cambio de horario — anticipación mínima</label>
+            <p className="text-[12px] text-gray-400 mb-2">También requieren motivo obligatorio</p>
+            <div className="flex items-center gap-3">
+              <input type="number" min={1} max={90} value={configForm.otros_min_dias}
+                onChange={e => setConfigForm({ ...configForm, otros_min_dias: Math.max(1, +e.target.value) })}
+                style={{ fontSize: 16 }}
+                className="w-24 h-11 px-4 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+              <span className="text-[13px] text-gray-500">días</span>
+            </div>
+          </div>
+          <div className="p-3 bg-gray-50 rounded-xl text-[12px] text-gray-500 space-y-1">
+            <p><span className="font-medium text-gray-700">Ausencia por Salud:</span> se puede pedir a partir de hoy</p>
+            <p><span className="font-medium text-gray-700">Admin y HR:</span> pueden crear cualquier solicitud sin restricciones de plazo</p>
+          </div>
+        </div>
+      </Modal>
+
       {/* ─── Modal: Nueva / Editar ─── */}
       <Modal open={modal} onClose={() => setModal(false)}
         title={editId ? 'Editar solicitud' : 'Nueva solicitud'}
@@ -1132,7 +1272,7 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
             {editId ? 'Guardar' : form.tipo === 'Feriado/Local cerrado' ? 'Crear feriado' : 'Enviar'}
           </Button>
         </>}>
-        <FormFields form={form} setForm={setForm} isAdmin={isAdminOrHR} editMode={!!editId} empleados={empleados} certFile={modalCertFile} setCertFile={setModalCertFile} />
+        <FormFields form={form} setForm={setForm} isAdmin={isAdminOrHR} isAdminOrHR={isAdminOrHR} editMode={!!editId} empleados={empleados} certFile={modalCertFile} setCertFile={setModalCertFile} config={config} />
         {formError && (
           <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl mt-4">
             <IconAlertCircle size={16} className="text-red-500 shrink-0" />

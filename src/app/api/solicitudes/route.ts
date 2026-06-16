@@ -1,7 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/auth'
 import { crearNotificacion, crearNotificaciones, getAdminAndHRIds } from '@/lib/notificaciones'
+
+const DEFAULT_CONFIG = { vacaciones_min_dias: 15, otros_min_dias: 10 }
+
+async function getSolicitudesConfig() {
+  const { data } = await supabaseAdmin
+    .from('configuracion').select('valor').eq('clave', 'solicitudes_config').single()
+  const v = data?.valor as { vacaciones_min_dias?: number; otros_min_dias?: number } | null
+  return {
+    vacaciones_min_dias: v?.vacaciones_min_dias ?? DEFAULT_CONFIG.vacaciones_min_dias,
+    otros_min_dias:      v?.otros_min_dias      ?? DEFAULT_CONFIG.otros_min_dias,
+  }
+}
+
+function addDays(dateStr: string, n: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const dt = new Date(y, m - 1, d + n)
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`
+}
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -59,6 +78,36 @@ export async function POST(request: NextRequest) {
 
     if (tipo === 'Feriado/Local cerrado' && !isAdmin) {
       return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
+    }
+
+    // ─── Validación de plazos (solo empleados, no admin/HR) ───
+    if (!canManage) {
+      const todayAR = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+
+      if (fecha_inicio < todayAR) {
+        return NextResponse.json({ error: 'No podés crear solicitudes con fechas anteriores a hoy' }, { status: 400 })
+      }
+
+      const cfg = await getSolicitudesConfig()
+
+      if (tipo === 'Vacaciones') {
+        const minFecha = addDays(todayAR, cfg.vacaciones_min_dias)
+        if (fecha_inicio < minFecha) {
+          return NextResponse.json({
+            error: `Las vacaciones deben pedirse con al menos ${cfg.vacaciones_min_dias} días de anticipación`,
+          }, { status: 400 })
+        }
+      } else if (tipo === 'Solicitud de Días' || tipo === 'Cambio de horario/día') {
+        const minFecha = addDays(todayAR, cfg.otros_min_dias)
+        if (fecha_inicio < minFecha) {
+          return NextResponse.json({
+            error: `Esta solicitud debe pedirse con al menos ${cfg.otros_min_dias} días de anticipación`,
+          }, { status: 400 })
+        }
+        if (!body.motivo?.trim()) {
+          return NextResponse.json({ error: 'El motivo es obligatorio para este tipo de solicitud' }, { status: 400 })
+        }
+      }
     }
 
     // Admin/HR puede crear en nombre de otro empleado (bodyUserId = UUID del empleado)
