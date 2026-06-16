@@ -11,7 +11,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from('usuarios')
     .select('id, nombre, monotributo_habilitado')
-    .neq('estado_cuenta', 'inactiva')
+    .eq('estado_cuenta', 'activo')
     .order('nombre')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

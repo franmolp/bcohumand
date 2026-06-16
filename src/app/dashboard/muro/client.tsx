@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { SessionUser } from '@/types'
 import { Spinner, Toast } from '@/components/ui'
-import { IconPlus, IconX, IconCheck, IconAlertCircle, IconHeart, IconHeartFilled, IconMessageCircle, IconWall } from '@/components/ui/Icons'
+import { IconPlus, IconX, IconCheck, IconAlertCircle, IconHeart, IconHeartFilled, IconMessageCircle, IconWall, IconEdit } from '@/components/ui/Icons'
 import { createPortal } from 'react-dom'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -346,6 +346,9 @@ function PostCard({
   const [likesAnchor, setLikesAnchor] = useState<HTMLElement | null>(null)
   const commentInputRef = useRef<HTMLTextAreaElement>(null)
   const likesCountRef = useRef<HTMLButtonElement>(null)
+  const [editing, setEditing] = useState(false)
+  const [editText, setEditText] = useState(post.contenido ?? '')
+  const [savingEdit, setSavingEdit] = useState(false)
 
   async function toggleComments() {
     if (!showComments && comentarios.length === 0) {
@@ -389,6 +392,20 @@ function PostCard({
     const res = await fetch(`/api/muro/${post.id}`, { method: 'DELETE' })
     if (res.ok) { removePost(post.id); setToast('Publicación eliminada') }
   }
+
+  async function saveEdit() {
+    if (!editText.trim()) return
+    setSavingEdit(true)
+    const res = await fetch(`/api/muro/${post.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contenido: editText }),
+    })
+    if (res.ok) { updatePost(post.id, { contenido: editText }); setEditing(false); setToast('Publicación editada') }
+    setSavingEdit(false)
+  }
+
+  const canEdit = isAdmin || post.autor.id === session.id
 
   async function toggleCerrado() {
     const cerrado = !post.cerrado
@@ -438,6 +455,11 @@ function PostCard({
                 )}
               </>
             )}
+            {canEdit && (
+              <button onClick={() => { setEditText(post.contenido ?? ''); setEditing(true) }} className="text-gray-300 hover:text-blue-400 cursor-pointer p-1 rounded-lg hover:bg-blue-50 transition-colors" title="Editar">
+                <IconEdit size={14} />
+              </button>
+            )}
             {canDelete && (
               <button onClick={deletePost} className="text-gray-300 hover:text-red-400 cursor-pointer p-1 rounded-lg hover:bg-red-50 transition-colors" title="Eliminar">
                 <IconX size={14} />
@@ -448,7 +470,26 @@ function PostCard({
 
         {/* Content */}
         <div className="px-4 pb-3">
-          <p className="text-[14px] text-[var(--text)] leading-relaxed whitespace-pre-wrap">{post.contenido}</p>
+          {editing ? (
+            <div className="space-y-2">
+              <textarea
+                className="w-full border border-[var(--primary)] rounded-xl px-3 py-2 text-[14px] outline-none resize-none leading-relaxed"
+                style={{ fontSize: 16 }}
+                rows={4}
+                value={editText}
+                onChange={e => setEditText(e.target.value)}
+                autoFocus
+              />
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setEditing(false)} className="px-3 py-1.5 rounded-lg border border-gray-200 text-[13px] text-gray-600 cursor-pointer">Cancelar</button>
+                <button onClick={saveEdit} disabled={savingEdit || !editText.trim()} className="px-3 py-1.5 rounded-lg bg-[var(--primary)] text-white text-[13px] font-medium disabled:opacity-50 cursor-pointer">
+                  {savingEdit ? <Spinner size={14} inline /> : 'Guardar'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-[14px] text-[var(--text)] leading-relaxed whitespace-pre-wrap">{post.contenido}</p>
+          )}
         </div>
 
         {/* Poll */}

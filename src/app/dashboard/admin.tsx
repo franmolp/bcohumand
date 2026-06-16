@@ -92,8 +92,10 @@ function fmtDateLabel(d: Date): string {
 }
 
 export default async function AdminDashboard({ session }: { session: SessionUser }) {
-  const today = new Date()
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`
+  // Fecha en timezone Argentina para evitar desfase UTC
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+  const [yr, mo, dy] = todayStr.split('-').map(Number)
+  const today = new Date(yr, mo - 1, dy)
   const hace7 = new Date(today); hace7.setDate(today.getDate() - 7)
   const hace7Str = hace7.toISOString()
 

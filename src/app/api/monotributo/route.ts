@@ -12,11 +12,31 @@ export async function GET(req: NextRequest) {
   const mes = new URL(req.url).searchParams.get('mes') ?? new Date().toISOString().slice(0, 7)
 
   if (isAdmin) {
+    const currentMes = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).slice(0, 7)
+    const isPast = mes < currentMes
+
     const [empRes, recRes] = await Promise.all([
-      supabase.from('usuarios').select('id, nombre').eq('monotributo_habilitado', true).neq('estado_cuenta', 'inactiva').order('nombre'),
-      supabase.from('monotributo').select('*').eq('mes', mes),
+      supabase.from('usuarios').select('id, nombre').eq('monotributo_habilitado', true).eq('estado_cuenta', 'activo').order('nombre'),
+      supabaseAdmin.from('monotributo').select('*, usuario:usuarios(nombre)').eq('mes', mes),
     ])
-    const recMap = new Map((recRes.data ?? []).map(r => [r.usuario_id, r]))
+
+    const enabledIds = new Set((empRes.data ?? []).map(e => e.id))
+    const records = recRes.data ?? []
+    const recMap = new Map(records.map(r => [r.usuario_id, r]))
+
+    if (isPast) {
+      // Meses pasados: enabled activos + cualquiera que haya subido (aunque esté desactivado)
+      const extraUploaders = records
+        .filter(r => !enabledIds.has(r.usuario_id))
+        .map(r => ({ id: r.usuario_id, nombre: (r.usuario as { nombre: string } | null)?.nombre ?? '—' }))
+      const all = [
+        ...(empRes.data ?? []).map(e => ({ id: e.id, nombre: e.nombre, record: recMap.get(e.id) ?? null })),
+        ...extraUploaders.map(e => ({ id: e.id, nombre: e.nombre, record: recMap.get(e.id) ?? null })),
+      ].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+      return NextResponse.json(all)
+    }
+
+    // Mes en curso: solo empleados activos habilitados
     return NextResponse.json((empRes.data ?? []).map(emp => ({ ...emp, record: recMap.get(emp.id) ?? null })))
   }
 

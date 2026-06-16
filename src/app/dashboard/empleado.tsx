@@ -20,12 +20,12 @@ function timeAgo(dateStr: string | null): string {
 }
 
 function getUpcomingBirthdays(
-  users: { id: string; nombre: string; fecha_nacimiento: string }[],
+  users: { id: string; nombre: string; fecha_nacimiento: string; foto_perfil?: string | null }[],
   today: Date,
   days: number,
   excludeId: string,
 ) {
-  const result: { nombre: string; fecha: string; dias: number; isThisWeek: boolean }[] = []
+  const result: { nombre: string; fecha: string; dias: number; isThisWeek: boolean; foto_perfil?: string | null }[] = []
   const yr = today.getFullYear()
   const todayStr = `${yr}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`
 
@@ -44,7 +44,7 @@ function getUpcomingBirthdays(
         / 86400000
       )
       if (diff >= 0 && diff <= days) {
-        result.push({ nombre: u.nombre, fecha: bdStr, dias: diff, isThisWeek: bdStr <= wEndStr })
+        result.push({ nombre: u.nombre, fecha: bdStr, dias: diff, isThisWeek: bdStr <= wEndStr, foto_perfil: u.foto_perfil ?? null })
         break
       }
     }
@@ -89,8 +89,10 @@ function tipoColor(tipo: string): string {
 }
 
 export default async function EmpleadoDashboard({ session }: { session: SessionUser }) {
-  const today = new Date()
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`
+  // Fecha en timezone Argentina para evitar desfase UTC
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+  const [yr, mo, dy] = todayStr.split('-').map(Number)
+  const today = new Date(yr, mo - 1, dy)
   const in30 = new Date(today); in30.setDate(today.getDate() + 30)
   const in30Str = `${in30.getFullYear()}-${String(in30.getMonth()+1).padStart(2,'0')}-${String(in30.getDate()).padStart(2,'0')}`
   const hace7 = new Date(today); hace7.setDate(today.getDate() - 7)
@@ -121,7 +123,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
 
     supabase
       .from('usuarios')
-      .select('id, nombre, fecha_nacimiento')
+      .select('id, nombre, fecha_nacimiento, foto_perfil')
       .eq('estado_cuenta', 'activo')
       .not('fecha_nacimiento', 'is', null),
 
@@ -178,7 +180,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   })
 
   const proxCumple = getUpcomingBirthdays(
-    (usersRes.data ?? []) as { id: string; nombre: string; fecha_nacimiento: string }[],
+    (usersRes.data ?? []) as { id: string; nombre: string; fecha_nacimiento: string; foto_perfil?: string | null }[],
     today,
     30,
     session.id,
@@ -430,11 +432,14 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
               )}
               {proxCumple.map((b, i) => (
                 <div key={i} className={`flex items-center gap-2.5 p-2.5 rounded-xl ${b.isThisWeek ? 'bg-pink-50' : 'bg-gray-50/60'}`}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-[image:var(--gradient)] shadow-sm ${b.isThisWeek ? 'ring-2 ring-pink-300' : ''}`}>
-                    <span className="text-[10px] font-bold text-white">
-                      {b.nombre.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
-                    </span>
-                  </div>
+                  {b.foto_perfil
+                    ? <img src={b.foto_perfil} alt={b.nombre} className={`w-8 h-8 rounded-full object-cover flex-shrink-0 ${b.isThisWeek ? 'ring-2 ring-pink-300' : ''}`} />
+                    : <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-[image:var(--gradient)] shadow-sm ${b.isThisWeek ? 'ring-2 ring-pink-300' : ''}`}>
+                        <span className="text-[10px] font-bold text-white">
+                          {b.nombre.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
+                        </span>
+                      </div>
+                  }
                   <div className="flex-1 min-w-0">
                     <p className={`text-[13px] truncate ${b.isThisWeek ? 'font-bold text-gray-900' : 'font-semibold text-gray-700'}`}>{b.nombre}</p>
                     <p className={`text-[11px] ${b.isThisWeek ? 'text-pink-500 font-medium' : 'text-gray-400'}`}>

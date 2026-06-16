@@ -12,7 +12,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params
   const body = await request.json().catch(() => ({}))
 
+  // Allow author to edit their own contenido
+  const { data: post } = await supabaseAdmin.from('muro_posts').select('usuario_id').eq('id', id).single()
+  if (!post) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+  if (body.contenido !== undefined && post.usuario_id !== session.id && !isAdmin)
+    return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
+
   const updates: Record<string, unknown> = {}
+  if (body.contenido !== undefined) updates.contenido = body.contenido.trim()
   if (body.cerrado !== undefined) updates.cerrado = body.cerrado
   if (body.resultados_publicados !== undefined) updates.resultados_publicados = body.resultados_publicados
 
