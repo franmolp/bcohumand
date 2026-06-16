@@ -136,6 +136,14 @@ export default function EmpleadosPage() {
       hour: '2-digit', minute: '2-digit',
     })
   }
+  const fmtAcceso = (d: string | null, disp: string | null, prefix = false) => {
+    if (!d) return null
+    const date = new Date(d)
+    const fecha = date.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: '2-digit' })
+    const hora  = date.toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', hour12: false })
+    const device = disp?.split(' · ')[0] ?? ''
+    return `${prefix ? 'Últ. conexión ' : ''}${fecha} - ${hora}${device ? ` - ${device}` : ''}`
+  }
   const initials = (n: string) => n.split(' ').map(w => w[0]).join('').slice(0, 2)
   const f = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value })
 
@@ -209,7 +217,7 @@ export default function EmpleadosPage() {
                     <span className="text-gray-300 text-[10px]">·</span>
                     {(() => { const v = vacMap[emp.id] ?? { total: 14, restantes: 14 }; const color = v.restantes <= 0 ? 'text-red-500' : v.restantes < v.total ? 'text-amber-500' : 'text-emerald-600'; return <span className={`text-[11px] font-medium ${color}`}>{v.restantes}/{v.total} vac.</span> })()}
                   </div>
-                  {emp.ultimo_acceso && <p className="text-[10px] text-gray-400 mt-0.5 truncate">{fmtDate(emp.ultimo_acceso)}{emp.ultimo_dispositivo ? ` · ${emp.ultimo_dispositivo}` : ''}</p>}
+                  {emp.ultimo_acceso && <p className="text-[10px] text-gray-400 mt-0.5 truncate">{fmtAcceso(emp.ultimo_acceso, emp.ultimo_dispositivo, true)}</p>}
                 </div>
                 <div className="flex gap-1 shrink-0">
                   <button onClick={() => openEdit(emp)} className="p-2 text-gray-400 active:bg-gray-100 rounded-lg cursor-pointer"><IconEdit size={16}/></button>
@@ -268,7 +276,7 @@ export default function EmpleadosPage() {
                     <td className="py-3 px-4">{estadoLabel(emp.estado_cuenta)}</td>
                     <td className="py-3 px-4 text-[13px]">
                       {emp.ultimo_acceso
-                        ? <><span className="text-gray-700">{fmtDate(emp.ultimo_acceso)}</span>{emp.ultimo_dispositivo && <span className="block text-[11px] text-gray-400">{emp.ultimo_dispositivo}</span>}</>
+                        ? <span className="text-gray-700">{fmtAcceso(emp.ultimo_acceso, emp.ultimo_dispositivo)}</span>
                         : <span className="text-gray-400">{fmtDate(emp.ultimo_login)}</span>
                       }
                     </td>
