@@ -50,11 +50,14 @@ function FileLink({ url, nombre, label, onView }: {
   onView?: (url: string, nombre: string | null) => void
 }) {
   if (!url) return <span className="text-gray-300 text-xs">—</span>
+  const display = nombre ?? label
   return (
     <button
-      onClick={() => onView ? onView(url, nombre ?? label) : window.open(url, '_blank')}
-      className="inline-flex items-center gap-1 text-xs text-[var(--primary)] hover:underline cursor-pointer">
-      <IconEye size={12} /> {nombre ?? label}
+      onClick={() => onView ? onView(url, display) : window.open(url, '_blank')}
+      title={display}
+      className="inline-flex items-center gap-1 text-xs text-[var(--primary)] hover:underline cursor-pointer max-w-[160px]">
+      <IconEye size={12} className="shrink-0" />
+      <span className="truncate">{display}</span>
     </button>
   )
 }
