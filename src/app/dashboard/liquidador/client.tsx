@@ -6,6 +6,7 @@ import { Spinner } from '@/components/ui'
 import { IconDollar, IconFileText } from '@/components/ui/Icons'
 import type { SessionUser } from '@/types'
 import { MESES } from '@/lib/liquidador'
+import FileViewer from '@/components/FileViewer'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,7 @@ function LiquidacionesTab() {
   const [mes,  setMes]  = useState(now.getMonth() + 1)
   const [rows, setRows] = useState<ReciboDB[]>([])
   const [loading, setLoading] = useState(false)
+  const [viewer, setViewer] = useState<{ url: string; name: string } | null>(null)
 
   useEffect(() => {
     setLoading(true)
@@ -94,18 +96,21 @@ function LiquidacionesTab() {
       ) : (
         <div className="bg-white rounded-xl border border-gray-200/60 divide-y divide-gray-100">
           {rows.map(r => (
-            <a key={r.id} href={r.storage_url} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
+            <button key={r.id}
+              onClick={() => setViewer({ url: r.storage_url, name: r.nombre_archivo })}
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left cursor-pointer">
               <IconFileText size={18} className="text-gray-400 shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-medium truncate">{r.nombre_empleada}</p>
                 <p className="text-[11px] text-[var(--text-sub)] truncate">{r.nombre_archivo}</p>
               </div>
               <span className="text-[11px] text-[var(--text-sub)] shrink-0">{fmtDate(r.subido_el)}</span>
-            </a>
+            </button>
           ))}
         </div>
       )}
+
+      {viewer && <FileViewer url={viewer.url} name={viewer.name} onClose={() => setViewer(null)} />}
     </div>
   )
 }

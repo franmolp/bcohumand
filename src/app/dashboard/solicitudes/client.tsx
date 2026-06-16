@@ -5,6 +5,7 @@ import { Button, Spinner, Modal, Toast, Confirm } from '@/components/ui'
 import { IconPlus, IconCheck, IconX, IconTrash, IconCalendar, IconEdit, IconAlertCircle, IconPaperclip, IconFileText, IconUpload, IconClock, IconSettings } from '@/components/ui/Icons'
 import type { SessionUser, Solicitud } from '@/types'
 import { compressImage } from '@/lib/compress-image'
+import FileViewer from '@/components/FileViewer'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -1376,37 +1377,14 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
       {/* ─── Modal: Historial ─── */}
       {historialItem && <HistorialModal sol={historialItem} onClose={() => setHistorialItem(null)} />}
 
-      {/* ─── Modal: Ver certificado ─── */}
-      <Modal open={!!viewCertItem} onClose={() => setViewCertItem(null)} title="Certificado médico">
-        {viewCertItem?.certificado_adjunto && (() => {
-          const url = viewCertItem.certificado_adjunto
-          const isImg = /\.(jpg|jpeg|png|webp)(\?|$)/i.test(url)
-          const isPdf = /\.pdf(\?|$)/i.test(url)
-          return (
-            <div className="space-y-3">
-              {isImg && (
-                <img src={url} alt="Certificado médico"
-                  className="w-full rounded-xl border border-gray-100 object-contain max-h-[60vh]" />
-              )}
-              {isPdf && (
-                <iframe src={url} title="Certificado PDF"
-                  className="w-full rounded-xl border border-gray-100"
-                  style={{ height: '60vh' }} />
-              )}
-              {!isImg && !isPdf && (
-                <div className="flex flex-col items-center gap-3 py-8">
-                  <IconFileText size={40} className="text-gray-300" />
-                  <p className="text-[13px] text-[var(--text-sub)]">Vista previa no disponible</p>
-                </div>
-              )}
-              <a href={url} target="_blank" rel="noopener noreferrer"
-                className="flex items-center justify-center gap-1.5 text-[13px] text-[var(--primary)] hover:underline">
-                <IconPaperclip size={14} /> Abrir en nueva pestaña
-              </a>
-            </div>
-          )
-        })()}
-      </Modal>
+      {/* ─── FileViewer: Ver certificado ─── */}
+      {viewCertItem?.certificado_adjunto && (
+        <FileViewer
+          url={viewCertItem.certificado_adjunto}
+          name="Certificado médico"
+          onClose={() => setViewCertItem(null)}
+        />
+      )}
 
       {/* ─── Modal: Aprobar ─── */}
       <Modal open={!!approveItem} onClose={() => { setApproveItem(null); setComentario('') }}

@@ -5,9 +5,10 @@ import type { SessionUser, MonotributoRecord } from '@/types'
 import { Modal, Toast, Spinner } from '@/components/ui'
 import {
   IconReceipt, IconCheck, IconX, IconPlus, IconAlertCircle,
-  IconEye, IconSettings, IconUsers, IconTrash, IconUpload, IconBell,
+  IconEye, IconSettings, IconUsers, IconTrash, IconUpload, IconBell, IconRefresh,
 } from '@/components/ui/Icons'
 import { compressImage } from '@/lib/compress-image'
+import FileViewer from '@/components/FileViewer'
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
@@ -44,13 +45,17 @@ function EstadoBadge({ record }: { record: MonotributoRecord | null }) {
 }
 
 // ─── File link ───────────────────────────────────────────────────────────────
-function FileLink({ url, nombre, label }: { url: string | null; nombre: string | null; label: string }) {
+function FileLink({ url, nombre, label, onView }: {
+  url: string | null; nombre: string | null; label: string
+  onView?: (url: string, nombre: string | null) => void
+}) {
   if (!url) return <span className="text-gray-300 text-xs">—</span>
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-xs text-[var(--primary)] hover:underline">
+    <button
+      onClick={() => onView ? onView(url, nombre ?? label) : window.open(url, '_blank')}
+      className="inline-flex items-center gap-1 text-xs text-[var(--primary)] hover:underline cursor-pointer">
       <IconEye size={12} /> {nombre ?? label}
-    </a>
+    </button>
   )
 }
 
@@ -94,9 +99,11 @@ function AdminResumen() {
   const [data, setData] = useState<EmpResumen[]>([])
   const [loading, setLoading] = useState(true)
   const [notifying, setNotifying] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [toast, setToast] = useState({ visible: false, msg: '', type: 'success' as 'success' | 'error' })
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [fotosMap, setFotosMap] = useState<Record<string, string | null>>({})
+  const [viewer, setViewer] = useState<{ url: string; name: string | null } | null>(null)
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ visible: true, msg, type })
@@ -135,6 +142,21 @@ function AdminResumen() {
     else showToast(`${json.notified} notificacion${json.notified === 1 ? '' : 'es'} enviada${json.notified === 1 ? '' : 's'}`)
   }
 
+  async function syncDrive() {
+    setSyncing(true)
+    const res = await fetch('/api/monotributo/sync-drive', { method: 'POST' })
+    const json = await res.json()
+    setSyncing(false)
+    if (json.error) { showToast(json.error, 'error'); return }
+    const { imported = 0, skipped = 0, noMatch = [] } = json
+    const parts: string[] = []
+    if (imported > 0) parts.push(`${imported} importado${imported !== 1 ? 's' : ''}`)
+    if (skipped > 0) parts.push(`${skipped} ya existían`)
+    if (noMatch.length > 0) parts.push(`sin match: ${noMatch.join(', ')}`)
+    showToast(parts.length ? parts.join(' · ') : 'Sin cambios', imported > 0 ? 'success' : 'error')
+    if (imported > 0) load()
+  }
+
   const presentados = data.filter(d => d.record).length
   const pendientes = data.filter(d => !d.record).length
 
@@ -150,6 +172,10 @@ function AdminResumen() {
         <button onClick={notificar} disabled={notifying}
           className="h-10 px-4 rounded-xl text-sm font-medium border border-[var(--border)] bg-white text-[var(--text-sub)] flex items-center gap-1.5 hover:bg-gray-50 disabled:opacity-50 transition-colors">
           <IconBell size={15} /> {notifying ? 'Enviando…' : 'Notificar pendientes'}
+        </button>
+        <button onClick={syncDrive} disabled={syncing}
+          className="h-10 px-4 rounded-xl text-sm font-medium border border-[var(--border)] bg-white text-[var(--text-sub)] flex items-center gap-1.5 hover:bg-gray-50 disabled:opacity-50 transition-colors">
+          <IconRefresh size={15} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'Sincronizando…' : 'Sincronizar Drive'}
         </button>
         {data.length > 0 && (
           <div className="ml-auto flex gap-3 text-sm">
@@ -183,8 +209,8 @@ function AdminResumen() {
                   <tr key={emp.id} className="border-t border-gray-100 hover:bg-gray-50/50">
                     <td className="px-4 py-3 text-sm font-medium text-[var(--text)]">{emp.nombre}</td>
                     <td className="px-4 py-3"><EstadoBadge record={emp.record} /></td>
-                    <td className="px-4 py-3"><FileLink url={emp.record?.comprobante_url ?? null} nombre={emp.record?.comprobante_nombre ?? null} label="Ver" /></td>
-                    <td className="px-4 py-3"><FileLink url={emp.record?.factura_url ?? null} nombre={emp.record?.factura_nombre ?? null} label="Ver" /></td>
+                    <td className="px-4 py-3"><FileLink url={emp.record?.comprobante_url ?? null} nombre={emp.record?.comprobante_nombre ?? null} label="Ver" onView={(url, name) => setViewer({ url, name })} /></td>
+                    <td className="px-4 py-3"><FileLink url={emp.record?.factura_url ?? null} nombre={emp.record?.factura_nombre ?? null} label="Ver" onView={(url, name) => setViewer({ url, name })} /></td>
                     <td className="px-4 py-3 text-xs text-[var(--text-muted)]">{emp.record ? fmtFecha(emp.record.fecha_carga) : '—'}</td>
                     <td className="px-4 py-3 text-right">
                       {emp.record && (
@@ -222,8 +248,8 @@ function AdminResumen() {
                 </div>
                 {emp.record && (
                   <div className="flex flex-wrap gap-3 text-xs mt-1">
-                    <FileLink url={emp.record.comprobante_url} nombre={emp.record.comprobante_nombre} label="Comprobante" />
-                    <FileLink url={emp.record.factura_url} nombre={emp.record.factura_nombre} label="Factura" />
+                    <FileLink url={emp.record.comprobante_url} nombre={emp.record.comprobante_nombre} label="Comprobante" onView={(url, name) => setViewer({ url, name })} />
+                    <FileLink url={emp.record.factura_url} nombre={emp.record.factura_nombre} label="Factura" onView={(url, name) => setViewer({ url, name })} />
                     <span className="text-[var(--text-muted)] ml-auto">{fmtFecha(emp.record.fecha_carga)}</span>
                   </div>
                 )}
@@ -243,6 +269,8 @@ function AdminResumen() {
         }>
         <p className="text-sm text-[var(--text-sub)]">¿Eliminás el monotributo presentado? La empleada deberá volver a cargarlo.</p>
       </Modal>
+
+      {viewer && <FileViewer url={viewer.url} name={viewer.name} onClose={() => setViewer(null)} />}
     </div>
   )
 }
@@ -340,6 +368,7 @@ function EmployeeView({ userId }: { userId: string }) {
   const [factura, setFactura] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [toast, setToast] = useState({ visible: false, msg: '', type: 'success' as 'success' | 'error' })
+  const [viewer, setViewer] = useState<{ url: string; name: string | null } | null>(null)
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ visible: true, msg, type })
@@ -422,8 +451,8 @@ function EmployeeView({ userId }: { userId: string }) {
               <span className="text-[var(--text-muted)]">Presentado el {fmtFecha(currentRecord.fecha_carga)}</span>
             </div>
             <div className="flex flex-wrap gap-3 mt-3">
-              <FileLink url={currentRecord.comprobante_url} nombre={currentRecord.comprobante_nombre} label="Comprobante" />
-              {currentRecord.factura_url && <FileLink url={currentRecord.factura_url} nombre={currentRecord.factura_nombre} label="Factura" />}
+              <FileLink url={currentRecord.comprobante_url} nombre={currentRecord.comprobante_nombre} label="Comprobante" onView={(url, name) => setViewer({ url, name })} />
+              {currentRecord.factura_url && <FileLink url={currentRecord.factura_url} nombre={currentRecord.factura_nombre} label="Factura" onView={(url, name) => setViewer({ url, name })} />}
             </div>
             <button onClick={() => setShowModal(true)} className="mt-3 text-xs text-[var(--primary)] hover:underline">
               Reemplazar archivos
@@ -450,8 +479,8 @@ function EmployeeView({ userId }: { userId: string }) {
                 <p className="text-[11px] text-[var(--text-muted)]">{fmtFecha(rec.fecha_carga)}</p>
               </div>
               <div className="flex gap-3">
-                <FileLink url={rec.comprobante_url} nombre={null} label="Comprobante" />
-                {rec.factura_url && <FileLink url={rec.factura_url} nombre={null} label="Factura" />}
+                <FileLink url={rec.comprobante_url} nombre={null} label="Comprobante" onView={(url, name) => setViewer({ url, name })} />
+                {rec.factura_url && <FileLink url={rec.factura_url} nombre={null} label="Factura" onView={(url, name) => setViewer({ url, name })} />}
               </div>
             </div>
           ))}
@@ -486,6 +515,8 @@ function EmployeeView({ userId }: { userId: string }) {
           )}
         </div>
       </Modal>
+
+      {viewer && <FileViewer url={viewer.url} name={viewer.name} onClose={() => setViewer(null)} />}
     </div>
   )
 }
