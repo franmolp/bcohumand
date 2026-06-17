@@ -3,9 +3,13 @@
 // Deploy: Extensiones → Apps Script → Deploy → New deployment
 //   Tipo: Web app | Execute as: Me | Access: Anyone
 // Script Properties requeridas:
-//   BCOHUMAND_SECRET   (token que compartís con Next.js)
+//   BCOHUMAND_SECRET   (token que compartís con Next.js para Drive)
 //   SUPABASE_URL       (https://xxx.supabase.co)
 //   SUPABASE_SERVICE_KEY
+//   APP_URL            (https://tu-app.vercel.app  — sin barra final)
+//   APP_SECRET         (mismo valor que CRON_SECRET en Vercel)
+//   HIK_EMAIL_QUERY    (query Gmail para encontrar mails de HIKVISION,
+//                       ej: "subject:Daily Report from:hikvision")
 // ============================================
 
 const FOLDERS = {
@@ -79,6 +83,7 @@ function doPost(e) {
 
     if (payload.action === 'upload_file')  return handleUploadFile(payload)
     if (payload.action === 'sync_drive')   return handleSyncDrive(payload)
+    if (payload.action === 'sync_hik')     return jsonResponse(hikDailySync())
 
     return jsonResponse({ error: 'Acción desconocida' })
   } catch (err) {
@@ -347,33 +352,163 @@ function listLiquidaciones(p) {
   return { files: results.sort((a,b) => b.date.localeCompare(a.date)) }
 }
 
-// ─── HikVision → Supabase ────────────────────────────────────────
+// ─── HikVision — lector de emails y push a Next.js ───────────────
 
-function syncFichadasSupabase(body) {
-  const { filas } = body
-  if (!filas || !filas.length) return { ok: true, inserted: 0 }
+// Parsea fecha DD/MM/YYYY → YYYY-MM-DD
+function hikDate(s) {
+  const parts = (s || '').trim().split('/')
+  if (parts.length !== 3) return ''
+  return parts[2] + '-' + parts[1] + '-' + parts[0]
+}
 
-  const SUPA_URL = PropertiesService.getScriptProperties().getProperty('SUPABASE_URL')
-  const SUPA_KEY = PropertiesService.getScriptProperties().getProperty('SUPABASE_SERVICE_KEY')
+// Parsea hora "09:30 AM" o "09:30:00" → "09:30"
+function hikTime(s) {
+  const m = (s || '').trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+  if (!m) return (s || '').trim().substring(0, 5)
+  let h = parseInt(m[1])
+  if (m[3].toUpperCase() === 'AM') { if (h === 12) h = 0 }
+  else { if (h !== 12) h += 12 }
+  return (h < 10 ? '0' + h : '' + h) + ':' + m[2]
+}
 
-  const res = UrlFetchApp.fetch(SUPA_URL + '/rest/v1/asistencia_raw', {
-    method: 'post',
-    headers: {
-      'Content-Type':  'application/json',
-      'apikey':        SUPA_KEY,
-      'Authorization': 'Bearer ' + SUPA_KEY,
-      'Prefer':        'resolution=ignore-duplicates,return=minimal'
-    },
-    payload: JSON.stringify(filas.map(f => ({
-      reloj: String(f.reloj),
-      fecha: f.fecha,
-      hora:  f.hora,
-      uid:   f.uid
-    }))),
-    muteHttpExceptions: true
-  })
+// Parsea el CSV de HIKVISION (separador auto-detectado ; o ,)
+function parseHikCsv(text) {
+  const preview = text.substring(0, 2000)
+  const sep = (preview.match(/;/g) || []).length > (preview.match(/,/g) || []).length ? ';' : ','
+  const lines = text.split(/\r?\n/)
+
+  let hdrIdx = -1, hdr = []
+  for (let i = 0; i < Math.min(10, lines.length); i++) {
+    const cols = lines[i].split(sep).map(function(c) {
+      return c.trim().toLowerCase().replace(/^["']|["']$/g, '')
+    })
+    if (cols.indexOf('id') >= 0) { hdrIdx = i; hdr = cols; break }
+  }
+  if (hdrIdx < 0) return []
+
+  const iId = hdr.indexOf('id')
+  const iF  = hdr.indexOf('fecha') >= 0 ? hdr.indexOf('fecha') : hdr.indexOf('date')
+  const iT  = hdr.indexOf('tiempo') >= 0 ? hdr.indexOf('tiempo') : hdr.indexOf('time')
+  if (iId < 0 || iF < 0 || iT < 0) return []
+
+  const out = []
+  for (let i = hdrIdx + 1; i < lines.length; i++) {
+    const r = lines[i].split(sep).map(function(c) { return c.trim().replace(/^["']|["']$/g, '') })
+    const reloj = r[iId] || ''
+    const fecha = hikDate(r[iF] || '')
+    const hora  = hikTime(r[iT] || '')
+    if (!reloj || !fecha || !hora) continue
+    out.push({ reloj: reloj, fecha: fecha, hora: hora })
+  }
+  return out
+}
+
+// Lee los emails de HIKVISION de los últimos N días y pushea al Next.js API
+function hikDailySync(daysBack) {
+  daysBack = daysBack || 2
+  const props      = PropertiesService.getScriptProperties()
+  const APP_URL    = props.getProperty('APP_URL')
+  const APP_SECRET = props.getProperty('APP_SECRET')
+  const HIK_QUERY  = props.getProperty('HIK_EMAIL_QUERY') || 'subject:Daily Report'
+
+  if (!APP_URL || !APP_SECRET) {
+    Logger.log('[HIK] Faltan APP_URL o APP_SECRET en Script Properties')
+    return { ok: false, error: 'APP_URL o APP_SECRET no configurados' }
+  }
+
+  // Fecha límite para buscar emails (format yyyy/MM/dd)
+  const since = new Date(Date.now() - daysBack * 24 * 3600 * 1000)
+  const sinceStr = Utilities.formatDate(since, 'America/Argentina/Buenos_Aires', 'yyyy/MM/dd')
+  const query = HIK_QUERY + ' after:' + sinceStr
+
+  Logger.log('[HIK] Buscando emails: ' + query)
+  const threads = GmailApp.search(query, 0, 50)
+  Logger.log('[HIK] Threads encontrados: ' + threads.length)
+
+  let allRows = []
+
+  for (let t = 0; t < threads.length; t++) {
+    const messages = threads[t].getMessages()
+    for (let m = 0; m < messages.length; m++) {
+      const msg = messages[m]
+      const atts = msg.getAttachments()
+
+      // Primero buscar adjuntos CSV
+      let found = false
+      for (let a = 0; a < atts.length; a++) {
+        const att = atts[a]
+        const name = att.getName().toLowerCase()
+        if (name.indexOf('.csv') < 0 && name.indexOf('.txt') < 0) continue
+        const csv = att.getDataAsString('ISO-8859-1')
+        const rows = parseHikCsv(csv)
+        if (rows.length) {
+          Logger.log('[HIK] ' + rows.length + ' fichadas del adjunto: ' + att.getName())
+          allRows = allRows.concat(rows)
+          found = true
+        }
+      }
+
+      // Si no hay adjunto, intentar parsear el cuerpo del email
+      if (!found) {
+        const body = msg.getPlainBody()
+        if (body && body.indexOf('id') >= 0) {
+          const rows = parseHikCsv(body)
+          if (rows.length) {
+            Logger.log('[HIK] ' + rows.length + ' fichadas del cuerpo del email')
+            allRows = allRows.concat(rows)
+          }
+        }
+      }
+    }
+  }
+
+  if (!allRows.length) {
+    Logger.log('[HIK] No se encontraron fichadas en los emails')
+    return { ok: true, rows: 0, message: 'Sin fichadas nuevas' }
+  }
+
+  // Deduplicar por reloj|fecha|hora
+  const seen = {}
+  const unique = []
+  for (let i = 0; i < allRows.length; i++) {
+    const r = allRows[i]
+    const key = r.reloj + '|' + r.fecha + '|' + r.hora
+    if (!seen[key]) { seen[key] = true; unique.push(r) }
+  }
+  Logger.log('[HIK] Total únicas: ' + unique.length + ' (de ' + allRows.length + ')')
+
+  // Llamar al Next.js API
+  const res = UrlFetchApp.fetch(
+    APP_URL + '/api/importar/fichadas-hik/push?secret=' + encodeURIComponent(APP_SECRET),
+    {
+      method: 'post',
+      headers: { 'Content-Type': 'application/json' },
+      payload: JSON.stringify({ rows: unique }),
+      muteHttpExceptions: true
+    }
+  )
 
   const status = res.getResponseCode()
-  Logger.log('Supabase sync: ' + status + ' — ' + filas.length + ' fichadas')
-  return { ok: status < 300, status, inserted: filas.length }
+  const data   = JSON.parse(res.getContentText())
+  Logger.log('[HIK] API response ' + status + ': ' + JSON.stringify(data))
+  return { ok: status < 300, status: status, result: data }
+}
+
+// Ejecutar manualmente una vez para instalar el trigger diario
+function installHikDailyTrigger() {
+  // Eliminar triggers existentes de hikDailySync para no duplicar
+  const triggers = ScriptApp.getProjectTriggers()
+  for (let i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'hikDailySync') {
+      ScriptApp.deleteTrigger(triggers[i])
+    }
+  }
+  // Crear trigger diario a las 9:00 AM (hora Argentina)
+  ScriptApp.newTrigger('hikDailySync')
+    .timeBased()
+    .everyDays(1)
+    .atHour(9)
+    .inTimezone('America/Argentina/Buenos_Aires')
+    .create()
+  Logger.log('[HIK] Trigger diario instalado (9 AM Argentina)')
 }
