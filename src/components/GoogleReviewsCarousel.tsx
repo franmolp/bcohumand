@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import type { GoogleReview } from '@/app/api/google-reviews/route'
+import type { GoogleReview } from '@/types/google-reviews'
 
 const GOOGLE_MAPS_URL = 'https://share.google/kcJbqR4Zw9vxXObJW'
 const INTERVAL = 3000

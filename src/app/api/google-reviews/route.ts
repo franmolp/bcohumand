@@ -9,13 +9,7 @@ type SerpReview = {
   snippet?: string
 }
 
-export type GoogleReview = {
-  author: string
-  avatar: string | null
-  rating: number
-  text: string
-  date: string
-}
+export type { GoogleReview } from '@/types/google-reviews'
 
 async function fetchDataId(key: string): Promise<string | null> {
   const dataId = process.env.GOOGLE_PLACE_DATA_ID
