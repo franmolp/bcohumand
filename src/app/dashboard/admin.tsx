@@ -3,6 +3,7 @@ import Link from 'next/link'
 import type { SessionUser } from '@/types'
 import { supabase, supabaseAdmin } from '@/lib/supabase'
 import { IconUsers, IconFileText, IconCalendar, IconChevronRight, IconCheck, IconX, IconAlertCircle, IconWall, IconShoppingBag, IconDollar, IconCamera } from '@/components/ui/Icons'
+import GoogleReviewsCarousel from '@/components/GoogleReviewsCarousel'
 
 
 function timeAgo(dateStr: string | null): string {
@@ -417,6 +418,9 @@ export default async function AdminDashboard({ session }: { session: SessionUser
         </div>
 
       </div>
+
+      {/* Reseñas de Google */}
+      <GoogleReviewsCarousel />
 
       {/* Actividad reciente */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
