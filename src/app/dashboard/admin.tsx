@@ -47,11 +47,11 @@ function fmtRango(inicio: string, fin: string | null): string {
   return `${fmtCorta(inicio)} → ${fmtCorta(fin)}`
 }
 
-type AusRow = { tipo: string; subtipo_horario?: string | null; horario_anterior?: string | null; horario_nuevo?: string | null; fecha_compensacion?: string | null }
-function ausTipoLabel(r: AusRow): string {
+type AusRow = { tipo: string; fecha_inicio: string; subtipo_horario?: string | null; horario_anterior?: string | null; horario_nuevo?: string | null; fecha_compensacion?: string | null }
+function ausTipoLabel(r: AusRow) {
   if (r.tipo !== 'Cambio de horario/día') return r.tipo
-  if (r.subtipo_horario === 'mismo_dia') return `${r.horario_anterior ?? '?'} → ${r.horario_nuevo ?? '?'}`
-  return `Comp. ${r.fecha_compensacion ? fmtCorta(r.fecha_compensacion) : ''}`
+  if (r.subtipo_horario === 'mismo_dia') return <><s className="text-gray-300">{r.horario_anterior ?? '?'}</s> → {r.horario_nuevo ?? '?'}</>
+  return <><s className="text-gray-300">{fmtCorta(r.fecha_inicio)}</s> → {r.fecha_compensacion ? fmtCorta(r.fecha_compensacion) : ''}</>
 }
 
 function getUpcomingBirthdays(
