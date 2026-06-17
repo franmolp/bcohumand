@@ -23,7 +23,7 @@ async function fetchDataId(key: string): Promise<string | null> {
 }
 
 async function fetchReviews(key: string, dataId: string): Promise<GoogleReview[]> {
-  const url = `https://serpapi.com/search.json?engine=google_maps_reviews&data_id=${dataId}&hl=es&api_key=${key}`
+  const url = `https://serpapi.com/search.json?engine=google_maps_reviews&data_id=${dataId}&hl=es&sort_by=newestFirst&api_key=${key}`
   const res = await fetch(url, { next: { revalidate: 3600 } })
   if (!res.ok) return []
   const data = await res.json()
