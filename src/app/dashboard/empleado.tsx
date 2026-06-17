@@ -187,7 +187,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
     session.id,
   )
 
-  const TIPOS_AUSENCIA = ['Ausencia por Salud', 'Ausencia Injustificada', 'Vacaciones', 'Solicitud de Días']
+  const TIPOS_AUSENCIA = ['Ausencia por Salud', 'Ausencia Injustificada', 'Vacaciones', 'Solicitud de Días', 'Cambio de Horario', 'Compensación']
   const ausentesHoyList = (ausentesRes.data ?? []).filter(r => {
     if (!TIPOS_AUSENCIA.includes(r.tipo)) return false
     const fin = r.fecha_fin || r.fecha_inicio
@@ -235,7 +235,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
                 <IconAlertCircle size={16} className="text-red-400" />
               </div>
               <p className="text-[28px] font-bold leading-none text-red-500 mt-2">{ausentesHoyList.length}</p>
-              <p className="text-[10px] text-gray-400 mt-0.5 text-center leading-tight">Ausentes hoy</p>
+              <p className="text-[10px] text-gray-400 mt-0.5 text-center leading-tight">Ausencias y cambios hoy</p>
             </div>
             <div className="w-px bg-gray-100 self-stretch mx-1" />
             <div className="flex-1 min-w-0 flex flex-col justify-center gap-2">
@@ -260,7 +260,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
                 <div className="w-7 h-7 bg-red-50 rounded-lg flex items-center justify-center">
                   <IconAlertCircle size={14} className="text-red-400" />
                 </div>
-                <span className="text-[13px] font-semibold text-gray-600">Ausentes hoy</span>
+                <span className="text-[13px] font-semibold text-gray-600">Ausencias y cambios hoy</span>
               </div>
               <span className="text-[26px] font-bold text-red-500 leading-none">{ausentesHoyList.length}</span>
             </div>
