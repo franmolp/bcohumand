@@ -5,6 +5,7 @@ import { Button, Spinner, Toast } from '@/components/ui'
 import { IconPlus, IconFileText, IconCheck, IconAlertCircle, IconX } from '@/components/ui/Icons'
 import { MESES } from '@/lib/liquidador'
 import type { SessionUser } from '@/types'
+import FileViewer from '@/components/FileViewer'
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -109,6 +110,7 @@ function StatusBadge({ status, errorMsg }: { status: ReciboProcesado['status']; 
 export function EmployeeRecibosView({ user }: { user: SessionUser }) {
   const [recibos, setRecibos] = useState<ReciboDB[]>([])
   const [loading, setLoading] = useState(true)
+  const [viewer, setViewer] = useState<{ url: string; name: string } | null>(null)
 
   useEffect(() => {
     fetch('/api/liquidador/recibos')
@@ -125,7 +127,9 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
       {recibos.length === 0 ? (
         <p className="text-[13px] text-[var(--text-sub)] text-center py-8">Sin recibos disponibles</p>
       ) : recibos.map(r => (
-        <div key={r.id} className="bg-white rounded-xl border border-gray-200/60 p-3.5 flex items-center gap-3">
+        <button key={r.id}
+          onClick={() => setViewer({ url: r.storage_url, name: r.nombre_archivo })}
+          className="w-full bg-white rounded-xl border border-gray-200/60 p-3.5 flex items-center gap-3 hover:bg-gray-50 transition-colors cursor-pointer text-left">
           <div className="w-9 h-9 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
             <IconFileText size={18} className="text-[var(--primary)]" />
           </div>
@@ -133,12 +137,10 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
             <p className="text-[13px] font-semibold">{MESES[r.mes - 1]} {r.anio}</p>
             <p className="text-[11px] text-gray-400 truncate">{r.nombre_archivo}</p>
           </div>
-          <a href={r.storage_url} target="_blank" rel="noopener noreferrer"
-            className="text-[12px] font-semibold text-[var(--primary)] hover:underline shrink-0">
-            Descargar
-          </a>
-        </div>
+          <span className="text-[12px] font-semibold text-[var(--primary)] shrink-0">Ver</span>
+        </button>
       ))}
+      {viewer && <FileViewer url={viewer.url} name={viewer.name} onClose={() => setViewer(null)} />}
     </div>
   )
 }

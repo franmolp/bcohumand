@@ -10,6 +10,7 @@ interface Empleado {
   id: string; usuario: string; reloj: string | null; nombre: string; email: string
   estado_cuenta: string; foto_perfil?: string | null; telefono: string | null; dni: string | null
   fecha_nacimiento: string | null; ultimo_login: string | null
+  ultimo_acceso: string | null; ultimo_dispositivo: string | null
   equipo: Equipo | null; rol: Rol | null
 }
 
@@ -135,6 +136,14 @@ export default function EmpleadosPage() {
       hour: '2-digit', minute: '2-digit',
     })
   }
+  const fmtAcceso = (d: string | null, disp: string | null, prefix = false) => {
+    if (!d) return null
+    const date = new Date(d)
+    const fecha = date.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: '2-digit' })
+    const hora  = date.toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', hour12: false })
+    const device = disp?.split(' · ')[0] ?? ''
+    return `${prefix ? 'Últ. conexión ' : ''}${fecha} - ${hora}${device ? ` - ${device}` : ''}`
+  }
   const initials = (n: string) => n.split(' ').map(w => w[0]).join('').slice(0, 2)
   const f = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value })
 
@@ -203,7 +212,12 @@ export default function EmpleadosPage() {
                     <p className="text-sm font-semibold truncate">{emp.nombre}</p>
                     {pushSet.has(emp.id) && <IconBell size={11} className="text-gray-400 shrink-0" />}
                   </div>
-                  <p className="text-[11px] text-[var(--primary)] mt-0.5">{emp.equipo?.nombre || '—'} · {(() => { const v = vacMap[emp.id] ?? { total: 14, restantes: 14 }; return `${v.restantes}/${v.total} vac.` })()}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className="text-[11px] text-[var(--primary)]">{emp.equipo?.nombre || '—'}</span>
+                    <span className="text-gray-300 text-[10px]">·</span>
+                    {(() => { const v = vacMap[emp.id] ?? { total: 14, restantes: 14 }; const color = v.restantes <= 0 ? 'text-red-500' : v.restantes < v.total ? 'text-amber-500' : 'text-emerald-600'; return <span className={`text-[11px] font-medium ${color}`}>{v.restantes}/{v.total} vac.</span> })()}
+                  </div>
+                  {emp.ultimo_acceso && <p className="text-[10px] text-gray-400 mt-0.5 truncate">{fmtAcceso(emp.ultimo_acceso, emp.ultimo_dispositivo, true)}</p>}
                 </div>
                 <div className="flex gap-1 shrink-0">
                   <button onClick={() => openEdit(emp)} className="p-2 text-gray-400 active:bg-gray-100 rounded-lg cursor-pointer"><IconEdit size={16}/></button>
@@ -232,7 +246,7 @@ export default function EmpleadosPage() {
                   <th className="text-left py-3 px-4 font-semibold">Equipo</th>
                   <th className="text-left py-3 px-4 font-semibold">Vacaciones</th>
                   <th className="text-left py-3 px-4 font-semibold">Estado</th>
-                  <th className="text-left py-3 px-4 font-semibold">Último login</th>
+                  <th className="text-left py-3 px-4 font-semibold">Último acceso</th>
                   <th className="w-24"></th>
                 </tr>
               </thead>
@@ -251,15 +265,21 @@ export default function EmpleadosPage() {
                     <td className="py-3 px-4 text-[13px]">
                       {(() => {
                         const v = vacMap[emp.id] ?? { total: 14, usadas: 0, restantes: 14 }
+                        const color = v.restantes <= 0 ? 'text-red-500' : v.restantes < v.total ? 'text-amber-500' : 'text-emerald-600'
                         return (
-                          <span className={v.restantes > 7 ? 'text-emerald-600' : v.restantes > 3 ? 'text-amber-600' : 'text-red-500'}>
+                          <span className={color}>
                             {v.restantes} <span className="text-gray-400 font-normal">/ {v.total}</span>
                           </span>
                         )
                       })()}
                     </td>
                     <td className="py-3 px-4">{estadoLabel(emp.estado_cuenta)}</td>
-                    <td className="py-3 px-4 text-gray-500 text-[13px]">{fmtDate(emp.ultimo_login)}</td>
+                    <td className="py-3 px-4 text-[13px]">
+                      {emp.ultimo_acceso
+                        ? <span className="text-gray-700">{fmtAcceso(emp.ultimo_acceso, emp.ultimo_dispositivo)}</span>
+                        : <span className="text-gray-400">{fmtDate(emp.ultimo_login)}</span>
+                      }
+                    </td>
                     <td className="py-3 px-4">
                       <div className="flex gap-0.5 justify-end">
                         <button onClick={() => openEdit(emp)} className="p-1.5 text-gray-400 hover:text-[var(--primary)] hover:bg-[var(--primary-light)] rounded-lg cursor-pointer" title="Editar"><IconEdit size={15}/></button>

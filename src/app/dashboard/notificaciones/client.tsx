@@ -5,7 +5,7 @@ import Link from 'next/link'
 import type { SessionUser } from '@/types'
 import {
   IconBell, IconCheck, IconX, IconFileText, IconCalendar,
-  IconShoppingBag, IconDollar, IconWall, IconAlertCircle, IconPlus, IconTrash,
+  IconShoppingBag, IconDollar, IconWall, IconAlertCircle, IconPlus, IconTrash, IconFilter,
 } from '@/components/ui/Icons'
 import { Spinner, Modal, Button, Input, Select, Toast } from '@/components/ui'
 
@@ -19,6 +19,17 @@ interface Notif {
   tipo: string
   leida: boolean
   created_at: string
+}
+
+interface EnviadaNotif {
+  id: string | number
+  titulo: string
+  mensaje: string
+  tipo: string
+  leida: boolean
+  created_at: string
+  usuario_id: string
+  usuario: { nombre: string } | null
 }
 
 function tipoConfig(tipo: string) {
@@ -64,9 +75,25 @@ function urlBase64ToUint8Array(b64: string): Uint8Array {
 }
 
 export default function NotificacionesClient({ session }: { session: SessionUser }) {
+  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+
+  // Tab (admin only)
+  const [tab, setTab] = useState<'recibidas' | 'enviadas'>('recibidas')
+
+  // Recibidas
   const [notifs, setNotifs]     = useState<Notif[]>([])
   const [loading, setLoading]   = useState(true)
   const [marking, setMarking]   = useState(false)
+
+  // Enviadas
+  const [enviadas, setEnviadas]           = useState<EnviadaNotif[]>([])
+  const [loadingEnv, setLoadingEnv]       = useState(false)
+  const [envEmpleado, setEnvEmpleado]     = useState('')
+  const [envDesde, setEnvDesde]           = useState('')
+  const [envHasta, setEnvHasta]           = useState('')
+  const [envLoaded, setEnvLoaded]         = useState(false)
+
+  // Create modal
   const [createModal, setCreateModal] = useState(false)
   const [form, setForm]         = useState(blankForm)
   const [saving, setSaving]     = useState(false)
@@ -74,7 +101,6 @@ export default function NotificacionesClient({ session }: { session: SessionUser
   const [toast, setToast]       = useState('')
   const [equipos, setEquipos]   = useState<Equipo[]>([])
   const [empleados, setEmpleados] = useState<Empleado[]>([])
-  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
 
   // Push permission state
   const [pushPerm, setPushPerm] = useState<NotificationPermission | 'unsupported' | null>(null)
@@ -95,14 +121,11 @@ export default function NotificacionesClient({ session }: { session: SessionUser
       const perm = await Notification.requestPermission()
       setPushPerm(perm)
       if (perm !== 'granted') return
-
       const res = await fetch('/api/push/vapid-public-key')
       if (!res.ok) return
       const { publicKey } = await res.json()
-
       const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' })
       await navigator.serviceWorker.ready
-
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(publicKey).buffer as ArrayBuffer,
@@ -127,13 +150,31 @@ export default function NotificacionesClient({ session }: { session: SessionUser
     setLoading(false)
   }, [])
 
+  async function fetchEnviadas() {
+    setLoadingEnv(true)
+    const params = new URLSearchParams({ view: 'enviadas' })
+    if (envEmpleado) params.set('usuario_id', envEmpleado)
+    if (envDesde)    params.set('fecha_desde', envDesde)
+    if (envHasta)    params.set('fecha_hasta', envHasta)
+    const res = await fetch(`/api/notificaciones?${params}`)
+    if (res.ok) setEnviadas(await res.json())
+    setLoadingEnv(false)
+    setEnvLoaded(true)
+  }
+
   useEffect(() => { fetchNotifs() }, [fetchNotifs])
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(''), 3000); return () => clearTimeout(t) } }, [toast])
   useEffect(() => {
     if (!isAdmin) return
     fetch('/api/equipos').then(r => r.json()).then(d => setEquipos(Array.isArray(d) ? d : []))
-    fetch('/api/empleados?estado=activo').then(r => r.json()).then(d => setEmpleados(Array.isArray(d) ? d : []))
+    fetch('/api/empleados?estado=activo').then(r => r.json()).then(d => setEmpleados(Array.isArray(d) ? d.sort((a: Empleado, b: Empleado) => a.nombre.localeCompare(b.nombre, 'es')) : []))
   }, [isAdmin])
+
+  // Auto-load enviadas when switching to that tab
+  useEffect(() => {
+    if (tab === 'enviadas' && isAdmin && !envLoaded) fetchEnviadas()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab])
 
   async function sendNotif() {
     if (!form.titulo.trim()) { setFormError('El título es requerido'); return }
@@ -157,6 +198,7 @@ export default function NotificacionesClient({ session }: { session: SessionUser
       setCreateModal(false)
       setForm(blankForm)
       setToast(d.enviadas > 0 ? `Notificación enviada a ${d.enviadas} empleado${d.enviadas !== 1 ? 's' : ''}` : 'Sin destinatarios activos')
+      setEnvLoaded(false)
     } else {
       setFormError(d.error || 'Error al enviar')
     }
@@ -189,6 +231,15 @@ export default function NotificacionesClient({ session }: { session: SessionUser
     }
   }
 
+  async function deleteSingleEnviada(id: string | number) {
+    setEnviadas(prev => prev.filter(n => n.id !== id))
+    await fetch('/api/notificaciones', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, single: true }),
+    })
+  }
+
   async function markAll() {
     setMarking(true)
     setNotifs(prev => prev.map(n => ({ ...n, leida: true })))
@@ -217,142 +268,256 @@ export default function NotificacionesClient({ session }: { session: SessionUser
           </div>
           <div className="flex items-center gap-2">
             <h1 className="text-[17px] font-bold text-[var(--text)]">Notificaciones</h1>
-            {unread > 0 && (
+            {tab === 'recibidas' && unread > 0 && (
               <span className="text-[11px] font-bold bg-[var(--primary)] text-white rounded-full px-2 py-0.5">
                 {unread}
               </span>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {unread > 0 && (
-            <button
-              onClick={markAll}
-              disabled={marking}
-              className="text-[12px] text-[var(--primary)] font-medium hover:opacity-70 transition-opacity cursor-pointer flex items-center gap-1"
-            >
-              <IconCheck size={13} />
-              Marcar todas como leídas
-            </button>
-          )}
-          {isAdmin && (
-            <Button size="sm" icon={<IconPlus size={15}/>} onClick={() => { setForm(blankForm); setFormError(''); setCreateModal(true) }}>
-              Crear notificación
-            </Button>
-          )}
-        </div>
+        {isAdmin && (
+          <Button size="sm" icon={<IconPlus size={15}/>} onClick={() => { setForm(blankForm); setFormError(''); setCreateModal(true) }}>
+            Crear notificación
+          </Button>
+        )}
       </div>
 
-      {/* Push permission card */}
-      {pushPerm !== null && pushPerm !== 'unsupported' && (
-        <div className={`mb-4 flex items-center gap-3 px-4 py-3.5 rounded-2xl border ${
-          pushPerm === 'granted'
-            ? 'bg-emerald-50 border-emerald-100'
-            : pushPerm === 'denied'
-            ? 'bg-gray-50 border-gray-200'
-            : 'bg-[var(--primary-light)]/60 border-[var(--primary)]/20'
-        }`}>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-            pushPerm === 'granted' ? 'bg-emerald-100' : pushPerm === 'denied' ? 'bg-gray-200' : 'bg-[var(--primary)]/10'
-          }`}>
-            <IconBell size={15} className={
-              pushPerm === 'granted' ? 'text-emerald-600' : pushPerm === 'denied' ? 'text-gray-400' : 'text-[var(--primary)]'
-            } />
-          </div>
-          <div className="flex-1 min-w-0">
-            {pushPerm === 'granted' && (
-              <>
-                <p className="text-[13px] font-semibold text-emerald-700">Notificaciones activadas</p>
-                <p className="text-[11px] text-emerald-600 mt-0.5">Vas a recibir notificaciones en este dispositivo</p>
-              </>
-            )}
-            {pushPerm === 'denied' && (
-              <>
-                <p className="text-[13px] font-semibold text-gray-600">Notificaciones bloqueadas</p>
-                <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">
-                  Desbloqueá desde Ajustes del navegador → Privacidad → Notificaciones
-                </p>
-              </>
-            )}
-            {pushPerm === 'default' && (
-              <>
-                <p className="text-[13px] font-semibold text-[var(--primary)]">Activá las notificaciones</p>
-                <p className="text-[11px] text-gray-500 mt-0.5">Recibí alertas en tu dispositivo cuando haya novedades</p>
-              </>
-            )}
-          </div>
-          {pushPerm === 'default' && (
-            <button
-              onClick={activatePush}
-              disabled={pushLoading}
-              className="shrink-0 px-3 py-1.5 rounded-xl bg-[var(--primary)] text-white text-[12px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
-            >
-              {pushLoading ? '...' : 'Activar'}
-            </button>
-          )}
+      {/* Tab switcher (admin only) */}
+      {isAdmin && (
+        <div className="flex bg-gray-100 rounded-xl p-0.5 gap-0.5 mb-4">
+          <button
+            onClick={() => setTab('recibidas')}
+            className={`flex-1 py-2 text-[13px] font-medium rounded-[10px] transition-all cursor-pointer ${tab === 'recibidas' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+          >
+            Recibidas
+          </button>
+          <button
+            onClick={() => setTab('enviadas')}
+            className={`flex-1 py-2 text-[13px] font-medium rounded-[10px] transition-all cursor-pointer ${tab === 'enviadas' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+          >
+            Enviadas
+          </button>
         </div>
       )}
 
-      {/* List */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        {notifs.length === 0 && (
-          <div className="flex flex-col items-center py-16 text-center">
-            <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mb-3">
-              <IconBell size={24} className="text-gray-300" />
-            </div>
-            <p className="text-[14px] font-medium text-gray-400">Sin notificaciones</p>
-            <p className="text-[12px] text-gray-300 mt-1">Acá aparecerán tus notificaciones</p>
-          </div>
-        )}
-
-        <div className="divide-y divide-gray-50">
-          {notifs.map(n => {
-            const cfg = tipoConfig(n.tipo)
-            return (
-              <div key={n.id} className={`flex items-start gap-3 px-4 py-3.5 ${!n.leida ? 'bg-[var(--primary-light)]/40' : ''}`}>
-                {/* Icon */}
-                <div className={`w-8 h-8 rounded-full ${cfg.bg} flex items-center justify-center flex-shrink-0 mt-0.5`}>
-                  <span className={cfg.color}>{cfg.icon}</span>
-                </div>
-
-                {/* Content — clickable → navigate */}
-                <Link href={cfg.href} className="flex-1 min-w-0 hover:opacity-80 transition-opacity">
-                  <p className={`text-[13px] leading-snug ${!n.leida ? 'font-semibold text-[var(--text)]' : 'font-medium text-gray-700'}`}>
-                    {n.titulo}
-                  </p>
-                  {n.mensaje && (
-                    <p className="text-[12px] text-gray-400 mt-0.5 line-clamp-2">{n.mensaje}</p>
-                  )}
-                  <p className="text-[11px] text-gray-400 mt-1">{timeAgo(n.created_at)}</p>
-                </Link>
-
-                {/* Actions */}
-                <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
-                  {!n.leida && (
-                    <button
-                      onClick={() => markOne(n.id)}
-                      title="Marcar como leída"
-                      className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-[var(--primary)] hover:text-white text-[var(--primary)] transition-colors cursor-pointer"
-                    >
-                      <IconCheck size={12} />
-                    </button>
-                  )}
-                  {isAdmin && n.tipo === 'aviso' && (
-                    <button
-                      onClick={() => deleteAviso(n)}
-                      title="Eliminar para todos"
-                      className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-red-100 hover:text-red-500 text-gray-300 transition-colors cursor-pointer"
-                    >
-                      <IconTrash size={12} />
-                    </button>
-                  )}
-                  {n.leida && !(isAdmin && n.tipo === 'aviso') && <div className="w-6" />}
-                </div>
+      {/* ─── RECIBIDAS TAB ─── */}
+      {tab === 'recibidas' && (
+        <>
+          {/* Push permission card */}
+          {pushPerm !== null && pushPerm !== 'unsupported' && (
+            <div className={`mb-4 flex items-center gap-3 px-4 py-3.5 rounded-2xl border ${
+              pushPerm === 'granted'
+                ? 'bg-emerald-50 border-emerald-100'
+                : pushPerm === 'denied'
+                ? 'bg-gray-50 border-gray-200'
+                : 'bg-[var(--primary-light)]/60 border-[var(--primary)]/20'
+            }`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                pushPerm === 'granted' ? 'bg-emerald-100' : pushPerm === 'denied' ? 'bg-gray-200' : 'bg-[var(--primary)]/10'
+              }`}>
+                <IconBell size={15} className={
+                  pushPerm === 'granted' ? 'text-emerald-600' : pushPerm === 'denied' ? 'text-gray-400' : 'text-[var(--primary)]'
+                } />
               </div>
-            )
-          })}
-        </div>
-      </div>
+              <div className="flex-1 min-w-0">
+                {pushPerm === 'granted' && (
+                  <>
+                    <p className="text-[13px] font-semibold text-emerald-700">Notificaciones activadas</p>
+                    <p className="text-[11px] text-emerald-600 mt-0.5">Vas a recibir notificaciones en este dispositivo</p>
+                  </>
+                )}
+                {pushPerm === 'denied' && (
+                  <>
+                    <p className="text-[13px] font-semibold text-gray-600">Notificaciones bloqueadas</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">
+                      Desbloqueá desde Ajustes del navegador → Privacidad → Notificaciones
+                    </p>
+                  </>
+                )}
+                {pushPerm === 'default' && (
+                  <>
+                    <p className="text-[13px] font-semibold text-[var(--primary)]">Activá las notificaciones</p>
+                    <p className="text-[11px] text-gray-500 mt-0.5">Recibí alertas en tu dispositivo cuando haya novedades</p>
+                  </>
+                )}
+              </div>
+              {pushPerm === 'default' && (
+                <button
+                  onClick={activatePush}
+                  disabled={pushLoading}
+                  className="shrink-0 px-3 py-1.5 rounded-xl bg-[var(--primary)] text-white text-[12px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
+                >
+                  {pushLoading ? '...' : 'Activar'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* List */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            {/* Mark all header (inside the card) */}
+            {unread > 0 && (
+              <div className="flex items-center justify-end px-4 py-2.5 border-b border-gray-50">
+                <button
+                  onClick={markAll}
+                  disabled={marking}
+                  className="text-[12px] text-[var(--primary)] font-medium hover:opacity-70 transition-opacity cursor-pointer flex items-center gap-1"
+                >
+                  <IconCheck size={13} />
+                  Marcar todas como leídas
+                </button>
+              </div>
+            )}
+
+            {notifs.length === 0 && (
+              <div className="flex flex-col items-center py-16 text-center">
+                <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                  <IconBell size={24} className="text-gray-300" />
+                </div>
+                <p className="text-[14px] font-medium text-gray-400">Sin notificaciones</p>
+                <p className="text-[12px] text-gray-300 mt-1">Acá aparecerán tus notificaciones</p>
+              </div>
+            )}
+
+            <div className="divide-y divide-gray-50">
+              {notifs.map(n => {
+                const cfg = tipoConfig(n.tipo)
+                return (
+                  <div key={n.id} className={`flex items-start gap-3 px-4 py-3.5 ${!n.leida ? 'bg-[var(--primary-light)]/40' : ''}`}>
+                    <div className={`w-8 h-8 rounded-full ${cfg.bg} flex items-center justify-center flex-shrink-0 mt-0.5`}>
+                      <span className={cfg.color}>{cfg.icon}</span>
+                    </div>
+                    <Link href={cfg.href} className="flex-1 min-w-0 hover:opacity-80 transition-opacity">
+                      <p className={`text-[13px] leading-snug ${!n.leida ? 'font-semibold text-[var(--text)]' : 'font-medium text-gray-700'}`}>
+                        {n.titulo}
+                      </p>
+                      {n.mensaje && (
+                        <p className="text-[12px] text-gray-400 mt-0.5 line-clamp-2">{n.mensaje}</p>
+                      )}
+                      <p className="text-[11px] text-gray-400 mt-1">{timeAgo(n.created_at)}</p>
+                    </Link>
+                    <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+                      {!n.leida && (
+                        <button
+                          onClick={() => markOne(n.id)}
+                          title="Marcar como leída"
+                          className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-[var(--primary)] hover:text-white text-[var(--primary)] transition-colors cursor-pointer"
+                        >
+                          <IconCheck size={12} />
+                        </button>
+                      )}
+                      {isAdmin && n.tipo === 'aviso' && (
+                        <button
+                          onClick={() => deleteAviso(n)}
+                          title="Eliminar para todos"
+                          className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-red-100 hover:text-red-500 text-gray-300 transition-colors cursor-pointer"
+                        >
+                          <IconTrash size={12} />
+                        </button>
+                      )}
+                      {n.leida && !(isAdmin && n.tipo === 'aviso') && <div className="w-6" />}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ─── ENVIADAS TAB ─── */}
+      {tab === 'enviadas' && isAdmin && (
+        <>
+          {/* Filters */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <IconFilter size={15} className="text-gray-400 shrink-0" />
+              <span className="text-[13px] font-medium text-[var(--text-sub)]">Filtros</span>
+            </div>
+            <Select
+              label=""
+              value={envEmpleado}
+              onChange={v => setEnvEmpleado(v)}
+            >
+              <option value="">Todos los empleados</option>
+              {empleados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+            </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Desde"
+                type="date"
+                value={envDesde}
+                onChange={e => setEnvDesde(e.target.value)}
+              />
+              <Input
+                label="Hasta"
+                type="date"
+                value={envHasta}
+                onChange={e => setEnvHasta(e.target.value)}
+              />
+            </div>
+            <Button
+              size="sm"
+              className="w-full"
+              onClick={() => { setEnvLoaded(false); fetchEnviadas() }}
+              loading={loadingEnv}
+            >
+              Buscar
+            </Button>
+          </div>
+
+          {/* Enviadas list */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            {loadingEnv && (
+              <div className="flex justify-center py-10"><Spinner size={28} /></div>
+            )}
+            {!loadingEnv && enviadas.length === 0 && (
+              <div className="flex flex-col items-center py-16 text-center">
+                <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                  <IconBell size={24} className="text-gray-300" />
+                </div>
+                <p className="text-[14px] font-medium text-gray-400">Sin notificaciones enviadas</p>
+                <p className="text-[12px] text-gray-300 mt-1">{envLoaded ? 'No hay resultados con esos filtros' : 'Usá los filtros para buscar'}</p>
+              </div>
+            )}
+            <div className="divide-y divide-gray-50">
+              {enviadas.map(n => {
+                const cfg = tipoConfig(n.tipo)
+                return (
+                  <div key={n.id} className="flex items-start gap-3 px-4 py-3.5">
+                    <div className={`w-8 h-8 rounded-full ${cfg.bg} flex items-center justify-center flex-shrink-0 mt-0.5`}>
+                      <span className={cfg.color}>{cfg.icon}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-[13px] font-semibold text-[var(--text)] leading-snug">{n.titulo}</p>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${n.leida ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
+                          {n.leida ? 'Leída' : 'No leída'}
+                        </span>
+                      </div>
+                      {n.mensaje && (
+                        <p className="text-[12px] text-gray-400 mt-0.5 line-clamp-2">{n.mensaje}</p>
+                      )}
+                      <p className="text-[11px] text-gray-400 mt-1">
+                        <span className="font-medium">{n.usuario?.nombre ?? 'Empleado'}</span>
+                        {' · '}{timeAgo(n.created_at)}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => deleteSingleEnviada(n.id)}
+                      title="Eliminar esta notificación"
+                      className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-red-100 hover:text-red-500 text-gray-300 transition-colors cursor-pointer flex-shrink-0 mt-0.5"
+                    >
+                      <IconTrash size={13} />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Create notification modal (admin only) */}
       <Modal
         open={createModal}

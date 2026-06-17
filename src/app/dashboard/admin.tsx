@@ -236,16 +236,12 @@ export default async function AdminDashboard({ session }: { session: SessionUser
 
   const firstName = session.nombre.split(' ')[0]
   const arHour = parseInt(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires', hour: 'numeric', hour12: false }))
-  const saludoBase = arHour >= 5 && arHour < 12
-    ? `Buen día ${firstName},`
-    : arHour >= 12 && arHour < 20
-    ? `Buenas tardes ${firstName},`
-    : `Buenas noches ${firstName},`
+  const saludoBase = `Hola ${firstName},`
   const saludoDeseo = arHour >= 5 && arHour < 12
-    ? '¡Que tengas un excelente día!'
+    ? '¡Que tengas un muy buen día!'
     : arHour >= 12 && arHour < 20
     ? '¡Que tengas una linda tarde!'
-    : '¡Que tengas una linda noche!'
+    : '¡Buenas noches y buen descanso!'
 
   return (
     <div className="py-4 fade-in space-y-5">
