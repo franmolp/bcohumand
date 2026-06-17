@@ -134,7 +134,7 @@ export default async function AdminDashboard({ session }: { session: SessionUser
   ])
 
   const totalEmpleados = empData.data?.length ?? 0
-  const TIPOS_AUSENCIA = ['Ausencia por Salud', 'Ausencia Injustificada', 'Vacaciones', 'Solicitud de Días', 'Cambio de Horario', 'Compensación']
+  const TIPOS_AUSENCIA = ['Ausencia por Salud', 'Ausencia Injustificada', 'Vacaciones', 'Solicitud de Días', 'Cambio de horario/día']
   const ausentesHoyList = (ausentesData.data ?? []).filter(r => {
     if (!TIPOS_AUSENCIA.includes(r.tipo)) return false
     const fin = r.fecha_fin || r.fecha_inicio

@@ -187,7 +187,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
     session.id,
   )
 
-  const TIPOS_AUSENCIA = ['Ausencia por Salud', 'Ausencia Injustificada', 'Vacaciones', 'Solicitud de Días', 'Cambio de Horario', 'Compensación']
+  const TIPOS_AUSENCIA = ['Ausencia por Salud', 'Ausencia Injustificada', 'Vacaciones', 'Solicitud de Días', 'Cambio de horario/día']
   const ausentesHoyList = (ausentesRes.data ?? []).filter(r => {
     if (!TIPOS_AUSENCIA.includes(r.tipo)) return false
     const fin = r.fecha_fin || r.fecha_inicio
