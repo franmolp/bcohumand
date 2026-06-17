@@ -105,13 +105,9 @@ export async function POST(req: NextRequest) {
   if (monto < config.monto_minimo) {
     return NextResponse.json({ error: `El monto mínimo es $${config.monto_minimo.toLocaleString('es-AR')}` }, { status: 400 })
   }
-  if (monto > config.monto_maximo) {
-    return NextResponse.json({ error: `El monto máximo es $${config.monto_maximo.toLocaleString('es-AR')}` }, { status: 400 })
-  }
-
   const { data: existing } = await supabaseAdmin
     .from('adelantos')
-    .select('id')
+    .select('id, monto')
     .eq('usuario_id', session.id)
     .neq('estado', 'rejected')
     .gte('created_at', `${mesStr}-01T00:00:00`)
@@ -120,6 +116,14 @@ export async function POST(req: NextRequest) {
   if ((existing?.length ?? 0) >= config.max_por_mes) {
     return NextResponse.json(
       { error: `Ya alcanzaste el límite de ${config.max_por_mes} adelanto${config.max_por_mes !== 1 ? 's' : ''} por mes` },
+      { status: 400 }
+    )
+  }
+
+  const totalExistente = (existing ?? []).reduce((s, a) => s + Number(a.monto), 0)
+  if (totalExistente + monto > config.monto_maximo) {
+    return NextResponse.json(
+      { error: `El límite mensual es $${config.monto_maximo.toLocaleString('es-AR')}. Ya tenés $${totalExistente.toLocaleString('es-AR')} solicitados este mes` },
       { status: 400 }
     )
   }
@@ -193,5 +197,34 @@ export async function PATCH(req: NextRequest) {
     tipo: estado === 'approved' ? 'adelanto_aprobado' : 'adelanto_rechazado',
   })
 
+  return NextResponse.json({ ok: true })
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+  const { searchParams } = new URL(req.url)
+  const id = searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'Falta id' }, { status: 400 })
+
+  const { data: adelanto } = await supabaseAdmin
+    .from('adelantos')
+    .select('usuario_id, estado')
+    .eq('id', id)
+    .single()
+
+  if (!adelanto) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
+
+  if (!isAdmin) {
+    if (adelanto.usuario_id !== session.id)
+      return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
+    if (adelanto.estado !== 'pending')
+      return NextResponse.json({ error: 'Solo podés cancelar adelantos pendientes' }, { status: 400 })
+  }
+
+  const { error } = await supabaseAdmin.from('adelantos').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
