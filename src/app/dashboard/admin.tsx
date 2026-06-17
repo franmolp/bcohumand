@@ -47,6 +47,13 @@ function fmtRango(inicio: string, fin: string | null): string {
   return `${fmtCorta(inicio)} → ${fmtCorta(fin)}`
 }
 
+type AusRow = { tipo: string; subtipo_horario?: string | null; horario_anterior?: string | null; horario_nuevo?: string | null; fecha_compensacion?: string | null }
+function ausTipoLabel(r: AusRow): string {
+  if (r.tipo !== 'Cambio de horario/día') return r.tipo
+  if (r.subtipo_horario === 'mismo_dia') return `${r.horario_anterior ?? '?'} → ${r.horario_nuevo ?? '?'}`
+  return `Comp. ${r.fecha_compensacion ? fmtCorta(r.fecha_compensacion) : ''}`
+}
+
 function getUpcomingBirthdays(
   users: { nombre: string; fecha_nacimiento: string }[],
   today: Date,
@@ -107,7 +114,7 @@ export default async function AdminDashboard({ session }: { session: SessionUser
     // Ausencias y cambios hoy: solicitudes aprobadas que cubren hoy
     supabase
       .from('solicitudes')
-      .select('id, usuario_id, empleado_nombre, tipo, fecha_inicio, fecha_fin')
+      .select('id, usuario_id, empleado_nombre, tipo, fecha_inicio, fecha_fin, subtipo_horario, horario_anterior, horario_nuevo, fecha_compensacion')
       .eq('estado', 'approved')
       .lte('fecha_inicio', todayStr),
 
@@ -291,7 +298,7 @@ export default async function AdminDashboard({ session }: { session: SessionUser
                   <Link key={r.id} href="/dashboard/solicitudes" className="flex items-center justify-between gap-1 min-w-0 hover:opacity-70 transition-opacity">
                     <div className="flex items-baseline gap-1 min-w-0 flex-1">
                       <span className="text-[12px] font-semibold text-gray-800 flex-shrink-0">{r.empleado_nombre}</span>
-                      <span className="text-[11px] text-gray-400 truncate">· {r.tipo}</span>
+                      <span className="text-[11px] text-gray-400 truncate">· {ausTipoLabel(r)}</span>
                     </div>
                     <span className="text-[10px] text-gray-400 flex-shrink-0 font-medium">{fmtRango(r.fecha_inicio, r.fecha_fin)}</span>
                   </Link>
@@ -319,7 +326,7 @@ export default async function AdminDashboard({ session }: { session: SessionUser
                     className="flex items-center justify-between gap-2 min-w-0 hover:opacity-70 transition-opacity">
                     <div className="flex items-baseline gap-1 min-w-0 flex-1">
                       <span className="text-[12px] font-semibold text-gray-800 flex-shrink-0">{r.empleado_nombre}</span>
-                      <span className="text-[11px] text-gray-400 truncate">· {r.tipo}</span>
+                      <span className="text-[11px] text-gray-400 truncate">· {ausTipoLabel(r)}</span>
                     </div>
                     <span className="text-[10px] text-gray-400 flex-shrink-0 font-medium">{fmtRango(r.fecha_inicio, r.fecha_fin)}</span>
                   </Link>
