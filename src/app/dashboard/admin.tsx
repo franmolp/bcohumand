@@ -420,7 +420,7 @@ export default async function AdminDashboard({ session }: { session: SessionUser
       </div>
 
       {/* Reseñas de Google */}
-      <GoogleReviewsCarousel />
+      <GoogleReviewsCarousel verticalOffset={-110} />
 
       {/* Actividad reciente */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

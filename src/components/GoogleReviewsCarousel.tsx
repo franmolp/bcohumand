@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { GoogleReview } from '@/types/google-reviews'
 
 const GOOGLE_MAPS_URL = 'https://share.google/kcJbqR4Zw9vxXObJW'
 const INTERVAL = 3000
 const PREVIEW_CHARS = 120
+const SWIPE_THRESHOLD = 50
 
 function Stars({ n }: { n: number }) {
   const full = Math.round(n)
@@ -17,7 +18,7 @@ function Stars({ n }: { n: number }) {
   )
 }
 
-function ReviewModal({ review, onClose }: { review: GoogleReview; onClose: () => void }) {
+function ReviewModal({ review, onClose, verticalOffset = 0 }: { review: GoogleReview; onClose: () => void; verticalOffset?: number }) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', handler)
@@ -32,6 +33,7 @@ function ReviewModal({ review, onClose }: { review: GoogleReview; onClose: () =>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
       <div
         className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-5 space-y-3"
+        style={{ transform: `translateY(${verticalOffset}px)` }}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-start gap-3">
@@ -82,12 +84,13 @@ function ReviewModal({ review, onClose }: { review: GoogleReview; onClose: () =>
   )
 }
 
-export default function GoogleReviewsCarousel() {
+export default function GoogleReviewsCarousel({ verticalOffset = 0 }: { verticalOffset?: number }) {
   const [reviews, setReviews] = useState<GoogleReview[]>([])
   const [idx, setIdx] = useState(0)
   const [visible, setVisible] = useState(true)
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<GoogleReview | null>(null)
+  const touchStartX = useRef(0)
 
   useEffect(() => {
     fetch('/api/google-reviews')
@@ -114,6 +117,20 @@ export default function GoogleReviewsCarousel() {
     setTimeout(() => { setIdx(i); setVisible(true) }, 150)
   }, [idx])
 
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX
+  }
+
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const diff = touchStartX.current - e.changedTouches[0].clientX
+    if (Math.abs(diff) < SWIPE_THRESHOLD) return
+    if (diff > 0) {
+      goTo((idx + 1) % reviews.length)
+    } else {
+      goTo((idx - 1 + reviews.length) % reviews.length)
+    }
+  }
+
   if (loading) {
     return (
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 animate-pulse">
@@ -133,30 +150,7 @@ export default function GoogleReviewsCarousel() {
     )
   }
 
-  if (!reviews.length) return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-100">
-        <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-        </svg>
-        <h2 className="text-[14px] font-bold text-[var(--text)]">Lo que dicen de nosotras</h2>
-      </div>
-      <div className="px-5 py-5 flex flex-col items-center gap-3">
-        <p className="text-[13px] text-gray-400 text-center">Cargando reseñas…</p>
-        <a
-          href={GOOGLE_MAPS_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[12px] text-[var(--primary)] font-medium hover:underline"
-        >
-          Ver en Google
-        </a>
-      </div>
-    </div>
-  )
+  if (!reviews.length) return null
 
   const r = reviews[idx]
   const isLong = r.text.length > PREVIEW_CHARS
@@ -176,8 +170,10 @@ export default function GoogleReviewsCarousel() {
         </div>
 
         <div
-          className="px-5 py-4 transition-opacity duration-200"
+          className="px-5 py-4 transition-opacity duration-200 cursor-grab active:cursor-grabbing select-none"
           style={{ opacity: visible ? 1 : 0, minHeight: 110 }}
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
         >
           <div className="flex items-start gap-2.5 mb-2.5">
             {r.avatar
@@ -243,7 +239,7 @@ export default function GoogleReviewsCarousel() {
         </div>
       </div>
 
-      {modal && <ReviewModal review={modal} onClose={() => setModal(null)} />}
+      {modal && <ReviewModal review={modal} onClose={() => setModal(null)} verticalOffset={verticalOffset} />}
     </>
   )
 }

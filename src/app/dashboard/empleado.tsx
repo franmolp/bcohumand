@@ -450,7 +450,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
 
 
           {/* Reseñas de Google */}
-          <GoogleReviewsCarousel />
+          <GoogleReviewsCarousel verticalOffset={90} />
 
         </div>
       </div>
