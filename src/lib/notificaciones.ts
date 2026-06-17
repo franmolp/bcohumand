@@ -16,6 +16,9 @@ export type TipoNotif =
   | 'recibo'
   | 'aviso'
   | 'warning'
+  | 'adelanto_solicitado'
+  | 'adelanto_aprobado'
+  | 'adelanto_rechazado'
 
 export async function sendPushToUsers(usuarioIds: string[], titulo: string, mensaje: string) {
   const publicKey  = process.env.VAPID_PUBLIC_KEY

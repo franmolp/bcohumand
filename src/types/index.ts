@@ -129,3 +129,18 @@ export interface Solicitud {
   horario_nuevo: string | null
   fecha_compensacion: string | null
 }
+
+export interface Adelanto {
+  id: string
+  usuario_id: string
+  empleado_nombre: string
+  monto: number
+  monto_aprobado: number | null
+  estado: 'pending' | 'approved' | 'rejected'
+  comentario_empleado: string | null
+  comentario_admin: string | null
+  aprobado_por: string | null
+  creado_por_admin: boolean
+  created_at: string
+  fecha_respuesta: string | null
+}

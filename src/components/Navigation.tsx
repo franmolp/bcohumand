@@ -19,6 +19,7 @@ const allNav = [
   { href: '/dashboard/compras',      label: 'Compras',        icon: IconShoppingBag, roles: ['Admin', 'admin', 'Compras', 'Encargada'] },
   { href: '/dashboard/monotributo',  label: 'Monotributo',    icon: IconReceipt },
   { href: '/dashboard/calendario',   label: 'Calendario',     icon: IconCalendar,    mobile: true },
+  { href: '/dashboard/adelantos',     label: 'Adelantos',      labelEmp: 'Mis Adelantos', icon: IconDollar },
   { href: '/dashboard/muro',         label: 'Muro Social',    icon: IconWall },
   { href: '/dashboard/equipos',      label: 'Equipos y Roles', icon: IconSettings,   admin: true },
   { href: '/dashboard/seguridad',    label: 'Seguridad',      icon: IconShield,      admin: true },

@@ -85,6 +85,9 @@ export async function GET(request: NextRequest) {
       mural_post: '/dashboard/muro',
       mural_respuesta: '/dashboard/muro',
       recibo: '/dashboard/liquidador',
+      adelanto_solicitado: '/dashboard/adelantos',
+      adelanto_aprobado: '/dashboard/adelantos',
+      adelanto_rechazado: '/dashboard/adelantos',
     }
     const modulos: Record<string, number> = {}
     for (const n of (unread ?? [])) {
