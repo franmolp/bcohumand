@@ -219,71 +219,72 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
 
   // ── Action modal ──
   const ActionModal = actionAdelanto && actionType ? (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" onClick={closeAction}>
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closeAction}>
+      <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <h3 className="text-[16px] font-bold">
             {actionType === 'approve' ? 'Aprobar adelanto'
               : actionType === 'reject' ? 'Rechazar adelanto'
               : actionType === 'delete' ? 'Eliminar adelanto'
               : 'Cancelar solicitud'}
           </h3>
-          <button onClick={closeAction} className="p-1 text-gray-400 cursor-pointer hover:text-gray-600"><IconX size={18} /></button>
+          <button onClick={closeAction} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 cursor-pointer text-gray-400"><IconX size={16} /></button>
         </div>
 
-        <div className="bg-gray-50 rounded-xl px-4 py-3">
-          <p className="text-[14px] font-semibold text-[var(--text)]">{actionAdelanto.empleado_nombre}</p>
-          <p className="text-[18px] font-bold text-[var(--primary)]">{fmtMonto(actionAdelanto.monto)}</p>
-          {actionAdelanto.comentario_empleado && (
-            <p className="text-[12px] text-gray-500 mt-1">"{actionAdelanto.comentario_empleado}"</p>
+        <div className="p-5 space-y-4">
+          <div className="bg-gray-50 rounded-xl px-4 py-3">
+            <p className="text-[14px] font-semibold text-[var(--text)]">{actionAdelanto.empleado_nombre}</p>
+            <p className="text-[18px] font-bold text-[var(--primary)]">{fmtMonto(actionAdelanto.monto)}</p>
+            {actionAdelanto.comentario_empleado && (
+              <p className="text-[12px] text-gray-500 mt-1">"{actionAdelanto.comentario_empleado}"</p>
+            )}
+          </div>
+
+          {(actionType === 'delete' || actionType === 'cancel') && (
+            <p className="text-[13px] text-gray-500">
+              {actionType === 'delete'
+                ? 'Se eliminará permanentemente este adelanto.'
+                : 'Se cancelará esta solicitud y podrás pedir otra.'}
+            </p>
+          )}
+
+          {actionType === 'approve' && (
+            <div>
+              <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Monto a aprobar</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-gray-400 font-medium">$</span>
+                <input
+                  type="number"
+                  value={actionMonto}
+                  onChange={e => setActionMonto(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl pl-7 pr-3 py-2.5 text-[15px] font-semibold outline-none focus:border-[var(--primary)]"
+                  autoFocus
+                />
+              </div>
+            </div>
+          )}
+
+          {(actionType === 'approve' || actionType === 'reject') && (
+            <div>
+              <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">
+                {actionType === 'approve' ? 'Comentario (opcional)' : 'Motivo del rechazo (opcional)'}
+              </label>
+              <input
+                type="text"
+                value={actionComment}
+                onChange={e => setActionComment(e.target.value)}
+                placeholder={actionType === 'approve' ? 'Ej: Aprobado por excepción' : 'Ej: Superaste el límite mensual'}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]"
+              />
+            </div>
+          )}
+
+          {actionError && (
+            <p className="text-[12px] text-red-500">{actionError}</p>
           )}
         </div>
 
-        {(actionType === 'delete' || actionType === 'cancel') && (
-          <p className="text-[13px] text-gray-500">
-            {actionType === 'delete'
-              ? 'Se eliminará permanentemente este adelanto.'
-              : 'Se cancelará esta solicitud y podrás pedir otra.'}
-          </p>
-        )}
-
-        {actionType === 'approve' && (
-          <div>
-            <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Monto a aprobar</label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-gray-400 font-medium">$</span>
-              <input
-                type="number"
-                value={actionMonto}
-                onChange={e => setActionMonto(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl pl-7 pr-3 py-2.5 text-[15px] font-semibold outline-none focus:border-[var(--primary)]"
-                autoFocus
-              />
-            </div>
-          </div>
-        )}
-
-        {(actionType === 'approve' || actionType === 'reject') && (
-          <div>
-            <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">
-              {actionType === 'approve' ? 'Comentario (opcional)' : 'Motivo del rechazo (opcional)'}
-            </label>
-            <input
-              type="text"
-              value={actionComment}
-              onChange={e => setActionComment(e.target.value)}
-              placeholder={actionType === 'approve' ? 'Ej: Aprobado por excepción' : 'Ej: Superaste el límite mensual'}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]"
-            />
-          </div>
-        )}
-
-        {actionError && (
-          <p className="text-[12px] text-red-500">{actionError}</p>
-        )}
-
-        <div className="flex gap-2">
+        <div className="flex gap-2 px-5 pb-5 pt-1">
           <button onClick={closeAction} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-[14px] text-gray-500 cursor-pointer hover:bg-gray-50">
             Volver
           </button>
@@ -292,7 +293,6 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
             disabled={actionSubmitting}
             className={`flex-1 py-2.5 rounded-xl text-[14px] font-semibold text-white cursor-pointer disabled:opacity-60 ${
               actionType === 'approve' ? 'bg-green-500 hover:bg-green-600'
-              : actionType === 'reject' ? 'bg-red-500 hover:bg-red-600'
               : 'bg-red-500 hover:bg-red-600'
             }`}
           >
@@ -503,43 +503,44 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
 
         {/* Create modal */}
         {showCreate && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" onClick={() => setShowCreate(false)}>
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-            <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowCreate(false)}>
+            <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
                 <h3 className="text-[16px] font-bold">Registrar adelanto</h3>
-                <button onClick={() => setShowCreate(false)} className="p-1 text-gray-400 cursor-pointer hover:text-gray-600"><IconX size={18} /></button>
+                <button onClick={() => setShowCreate(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 cursor-pointer text-gray-400"><IconX size={16} /></button>
               </div>
-              <form onSubmit={handleCreate} className="space-y-3">
-                <div>
-                  <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Empleada</label>
-                  {usuarios.length > 0 ? (
-                    <select value={createUserId}
-                      onChange={e => { const u = usuarios.find(u => u.id === e.target.value); setCreateUserId(e.target.value); setCreateNombre(u?.nombre ?? '') }}
-                      required className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] bg-white cursor-pointer">
-                      <option value="">Seleccionar empleada</option>
-                      {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                    </select>
-                  ) : (
-                    <input type="text" value={createNombre} onChange={e => setCreateNombre(e.target.value)} placeholder="Nombre de la empleada" required
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
-                  )}
-                </div>
-                <div>
-                  <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Monto</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-gray-400 font-medium">$</span>
-                    <input type="number" value={createMonto} onChange={e => setCreateMonto(e.target.value)} placeholder="0" required min={1}
-                      className="w-full border border-gray-200 rounded-xl pl-7 pr-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
+              <form onSubmit={handleCreate}>
+                <div className="p-5 space-y-3">
+                  <div>
+                    <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Empleada</label>
+                    {usuarios.length > 0 ? (
+                      <select value={createUserId}
+                        onChange={e => { const u = usuarios.find(u => u.id === e.target.value); setCreateUserId(e.target.value); setCreateNombre(u?.nombre ?? '') }}
+                        required className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] bg-white cursor-pointer">
+                        <option value="">Seleccionar empleada</option>
+                        {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                      </select>
+                    ) : (
+                      <input type="text" value={createNombre} onChange={e => setCreateNombre(e.target.value)} placeholder="Nombre de la empleada" required
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
+                    )}
                   </div>
+                  <div>
+                    <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Monto</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-gray-400 font-medium">$</span>
+                      <input type="number" value={createMonto} onChange={e => setCreateMonto(e.target.value)} placeholder="0" required min={1}
+                        className="w-full border border-gray-200 rounded-xl pl-7 pr-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Nota (opcional)</label>
+                    <input type="text" value={createComment} onChange={e => setCreateComment(e.target.value)} placeholder="Ej: Adelanto quincena"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
+                  </div>
+                  {createError && <p className="text-[12px] text-red-500">{createError}</p>}
                 </div>
-                <div>
-                  <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Nota (opcional)</label>
-                  <input type="text" value={createComment} onChange={e => setCreateComment(e.target.value)} placeholder="Ej: Adelanto quincena"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
-                </div>
-                {createError && <p className="text-[12px] text-red-500">{createError}</p>}
-                <div className="flex gap-2 pt-1">
+                <div className="flex gap-2 px-5 pb-5 pt-1">
                   <button type="button" onClick={() => setShowCreate(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-[14px] text-gray-500 cursor-pointer hover:bg-gray-50">Cancelar</button>
                   <button type="submit" disabled={createSubmitting} className="flex-1 py-2.5 bg-[image:var(--gradient)] text-white text-[14px] font-semibold rounded-xl cursor-pointer disabled:opacity-60">
                     {createSubmitting ? '...' : 'Registrar'}
