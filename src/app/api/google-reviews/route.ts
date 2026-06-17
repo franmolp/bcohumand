@@ -30,7 +30,7 @@ async function fetchReviews(key: string, dataId: string): Promise<GoogleReview[]
 
   const raw: SerpReview[] = data.reviews ?? data.reviews_results?.reviews ?? []
   return raw
-    .filter(r => (r.rating ?? 0) >= 4)
+    .filter(r => (r.rating ?? 0) >= 4 && r.snippet && r.snippet.trim().length > 0)
     .map(r => ({
       author: r.user?.name ?? 'Cliente',
       avatar: r.user?.thumbnail ?? null,
