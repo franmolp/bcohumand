@@ -63,7 +63,7 @@ function timeAgo(dateStr: string): string {
   const days = Math.round((todayMid - dateMid) / 86400000)
   if (days === 1) return 'ayer'
   if (days < 7)   return `hace ${days}d`
-  return date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+  return date.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
 }
 
 const blankForm = { titulo: '', mensaje: '', destinatario: 'todos', equipo_id: '', usuario_id: '' }
