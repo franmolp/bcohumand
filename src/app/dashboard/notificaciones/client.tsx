@@ -42,7 +42,7 @@ function tipoConfig(tipo: string) {
     evento_especial:       { icon: <IconCalendar size={14} />,     bg: 'bg-violet-100',  color: 'text-violet-600',  href: '/dashboard/calendario' },
     feriado:               { icon: <IconCalendar size={14} />,     bg: 'bg-violet-100',  color: 'text-violet-600',  href: '/dashboard/calendario' },
     compra:                { icon: <IconShoppingBag size={14} />,  bg: 'bg-pink-100',    color: 'text-pink-600',    href: '/dashboard/compras' },
-    monotributo:           { icon: <IconDollar size={14} />,       bg: 'bg-indigo-100',  color: 'text-indigo-600',  href: '/dashboard/liquidador' },
+    monotributo:           { icon: <IconDollar size={14} />,       bg: 'bg-indigo-100',  color: 'text-indigo-600',  href: '/dashboard/monotributo' },
     mural_post:            { icon: <IconWall size={14} />,         bg: 'bg-teal-100',    color: 'text-teal-600',    href: '/dashboard/muro' },
     mural_respuesta:       { icon: <IconWall size={14} />,         bg: 'bg-teal-100',    color: 'text-teal-600',    href: '/dashboard/muro' },
   }
@@ -163,6 +163,12 @@ export default function NotificacionesClient({ session }: { session: SessionUser
   }
 
   useEffect(() => { fetchNotifs() }, [fetchNotifs])
+  // Auto-mark all as read 1 second after opening the module
+  useEffect(() => {
+    const t = setTimeout(() => { markAll() }, 1000)
+    return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(''), 3000); return () => clearTimeout(t) } }, [toast])
   useEffect(() => {
     if (!isAdmin) return
@@ -355,20 +361,6 @@ export default function NotificacionesClient({ session }: { session: SessionUser
 
           {/* List */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            {/* Mark all header (inside the card) */}
-            {unread > 0 && (
-              <div className="flex items-center justify-end px-4 py-2.5 border-b border-gray-50">
-                <button
-                  onClick={markAll}
-                  disabled={marking}
-                  className="text-[12px] text-[var(--primary)] font-medium hover:opacity-70 transition-opacity cursor-pointer flex items-center gap-1"
-                >
-                  <IconCheck size={13} />
-                  Marcar todas como leídas
-                </button>
-              </div>
-            )}
-
             {notifs.length === 0 && (
               <div className="flex flex-col items-center py-16 text-center">
                 <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mb-3">
@@ -397,15 +389,6 @@ export default function NotificacionesClient({ session }: { session: SessionUser
                       <p className="text-[11px] text-gray-400 mt-1">{timeAgo(n.created_at)}</p>
                     </Link>
                     <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
-                      {!n.leida && (
-                        <button
-                          onClick={() => markOne(n.id)}
-                          title="Marcar como leída"
-                          className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-[var(--primary)] hover:text-white text-[var(--primary)] transition-colors cursor-pointer"
-                        >
-                          <IconCheck size={12} />
-                        </button>
-                      )}
                       {isAdmin && n.tipo === 'aviso' && (
                         <button
                           onClick={() => deleteAviso(n)}
@@ -415,7 +398,6 @@ export default function NotificacionesClient({ session }: { session: SessionUser
                           <IconTrash size={12} />
                         </button>
                       )}
-                      {n.leida && !(isAdmin && n.tipo === 'aviso') && <div className="w-6" />}
                     </div>
                   </div>
                 )

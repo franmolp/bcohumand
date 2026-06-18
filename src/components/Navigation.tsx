@@ -6,7 +6,6 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { SessionUser } from '@/types'
 import { IconHome, IconUsers, IconClipboard, IconFileText, IconLogout, IconBell, IconShoppingBag, IconWall, IconDollar, IconSettings, IconX, IconMore, IconCalendar, IconReceipt, IconShield, IconCamera } from '@/components/ui/Icons'
-import { Toast } from '@/components/ui'
 import PhotoCropModal from '@/components/PhotoCropModal'
 
 const allNav = [
@@ -155,7 +154,17 @@ export default function Navigation({ user }: { user: SessionUser }) {
 
   return (
     <>
-      <Toast visible={toast.visible} message={toast.msg} type="info" onClose={() => setToast(t => ({ ...t, visible: false }))} />
+      {toast.visible && (
+        <div className="fixed top-12 lg:top-14 right-4 lg:right-6 z-[60] fade-in">
+          <div className="flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-white bg-[var(--primary)] max-w-[calc(100vw-2rem)] lg:max-w-xs">
+            <IconBell size={16} className="shrink-0" />
+            <span className="text-sm font-medium leading-tight">{toast.msg}</span>
+            <button onClick={() => setToast(t => ({ ...t, visible: false }))} className="ml-1 opacity-70 hover:opacity-100 cursor-pointer shrink-0">
+              <IconX size={14} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ─── DESKTOP: Top header ─── */}
       <header className="hidden lg:flex fixed top-0 left-0 right-0 h-14 bg-[image:var(--gradient)] z-40 items-center justify-between px-6 shadow-sm">
