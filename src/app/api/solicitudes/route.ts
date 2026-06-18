@@ -4,6 +4,8 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/auth'
 import { crearNotificacion, crearNotificaciones, getAdminAndHRIds } from '@/lib/notificaciones'
 
+function fmtF(iso: string): string { const [, m, d] = iso.split('-'); return `${parseInt(d)}/${parseInt(m)}` }
+
 const DEFAULT_CONFIG = { vacaciones_min_dias: 15, otros_min_dias: 10 }
 
 async function getSolicitudesConfig() {
@@ -159,7 +161,7 @@ export async function POST(request: NextRequest) {
       const ids = (allUsers ?? []).map((u: { id: string }) => u.id).filter((id: string) => id !== session.id)
       await crearNotificaciones(ids, {
         titulo: `Feriado/Local cerrado: ${tipo}`,
-        mensaje: `${targetNombre} — ${fecha_inicio}${fecha_fin && fecha_fin !== fecha_inicio ? ` → ${fecha_fin}` : ''}`,
+        mensaje: `${targetNombre} — ${fmtF(fecha_inicio)}${fecha_fin && fecha_fin !== fecha_inicio ? ` → ${fmtF(fecha_fin)}` : ''}`,
         tipo: 'feriado',
       })
     } else if (adminCreatedForOther) {
@@ -167,13 +169,13 @@ export async function POST(request: NextRequest) {
       await crearNotificacion({
         usuario_id: targetUserId,
         titulo: `${session.nombre} creó una solicitud en tu nombre`,
-        mensaje: `${tipo} — ${fecha_inicio}${fecha_fin && fecha_fin !== fecha_inicio ? ` → ${fecha_fin}` : ''}`,
+        mensaje: `${tipo} — ${fmtF(fecha_inicio)}${fecha_fin && fecha_fin !== fecha_inicio ? ` → ${fmtF(fecha_fin)}` : ''}`,
         tipo: 'solicitud_creada_admin',
       })
     } else if (!canManage && insertData.estado === 'pending') {
       // Empleado creó solicitud → notificar admin+HR
       const adminIds = await getAdminAndHRIds()
-      const fechaStr = fecha_fin && fecha_fin !== fecha_inicio ? `${fecha_inicio} → ${fecha_fin}` : fecha_inicio
+      const fechaStr = fecha_fin && fecha_fin !== fecha_inicio ? `${fmtF(fecha_inicio)} → ${fmtF(fecha_fin)}` : fmtF(fecha_inicio)
       await crearNotificaciones(adminIds, {
         titulo: `Nueva solicitud de ${tipo.toLowerCase()} de ${session.nombre}`,
         mensaje: fechaStr + (motivo ? ` · ${motivo}` : ''),
