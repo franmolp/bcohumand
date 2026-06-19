@@ -54,7 +54,11 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  const fechasStr = [...dates].sort().join(', ')
+  const sortedDates = [...dates].sort()
+  const fechasStr = sortedDates
+    .map(d => { const [, m, day] = d.split('-'); return `${day}/${m}` })
+    .join(', ')
+
   const adminIds = await getAdminIds()
   if (adminIds.length) {
     await crearNotificaciones(adminIds, {
@@ -63,6 +67,15 @@ export async function POST(req: NextRequest) {
       tipo: 'aviso',
     })
   }
+
+  // Regenerar asistencia procesada para el rango de fechas importado
+  const proto = req.headers.get('x-forwarded-proto') ?? 'https'
+  const host  = req.headers.get('host') ?? 'localhost:3000'
+  fetch(`${proto}://${host}/api/asistencia/regenerar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cronSecret}` },
+    body: JSON.stringify({ fechaInicio: sortedDates[0], fechaFin: sortedDates[sortedDates.length - 1] }),
+  }).catch(() => {})
 
   return NextResponse.json({ ok: records.length, noEncontrados: [...noEncontrados], total: rows.length })
 }

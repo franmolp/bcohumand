@@ -5,10 +5,16 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { computeChip, getTeamType, DEFAULT_CONFIG, AsistenciaConfig } from '@/lib/asistencia'
 
 export async function POST(req: NextRequest) {
-  const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
-  if (!isAdmin) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
+  const authHeader = req.headers.get('authorization')
+  const bearerSecret = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+  const isInternal = bearerSecret && bearerSecret === process.env.CRON_SECRET
+
+  if (!isInternal) {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+    const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+    if (!isAdmin) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
+  }
 
   const body = await req.json()
   const { fechaInicio, fechaFin, usuarioId } = body as {
