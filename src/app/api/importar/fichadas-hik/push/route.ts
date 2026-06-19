@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     await crearNotificaciones(adminIds, {
       titulo: 'HIKVISION: fichadas importadas automáticamente',
       mensaje: `${records.length} fichadas${noEncontrados.size ? ` · ${noEncontrados.size} relojes sin usuario` : ''}. Fechas: ${fechasStr}.`,
-      tipo: 'aviso',
+      tipo: 'fichadas',
     })
   }
 

@@ -144,9 +144,17 @@ export async function POST(request: NextRequest) {
       targetIds = (await getUserIdsByRol(valor_destinatario)).filter(id => id !== session.id)
     }
     if (targetIds.length) {
+      const DIAS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
+      const [fy, fm, fd] = fecha.split('-').map(Number)
+      const fechaObj = new Date(fy, fm - 1, fd)
+      let mensajeFecha = `${DIAS[fechaObj.getDay()]} ${fd}`
+      if (!todo_el_dia && hora_desde) {
+        mensajeFecha += ` ${hora_desde.substring(0, 5)}`
+        if (hora_hasta) mensajeFecha += ` - ${hora_hasta.substring(0, 5)}`
+      }
       await crearNotificaciones(targetIds, {
         titulo: `${emoji ?? '📅'} Nuevo evento: ${titulo}`,
-        mensaje: fecha + (descripcion ? ` — ${descripcion}` : ''),
+        mensaje: mensajeFecha + (descripcion ? ` — ${descripcion}` : ''),
         tipo: 'evento_especial',
       })
     }

@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import type { SessionUser } from '@/types'
 import {
-  IconBell, IconCheck, IconX, IconFileText, IconCalendar,
-  IconShoppingBag, IconDollar, IconWall, IconAlertCircle, IconPlus, IconTrash, IconFilter,
+  IconBell, IconCheck, IconX, IconCalendar, IconCalendarCheck,
+  IconShoppingBag, IconReceipt, IconWall, IconAlertCircle, IconPlus, IconTrash, IconFilter, IconHeartFilled, IconFingerprint,
 } from '@/components/ui/Icons'
 import { Spinner, Modal, Button, Input, Select, Toast } from '@/components/ui'
 
@@ -34,17 +34,20 @@ interface EnviadaNotif {
 
 function tipoConfig(tipo: string) {
   const map: Record<string, { icon: React.ReactNode; bg: string; color: string; href: string }> = {
-    aviso:                 { icon: <IconBell size={14} />,         bg: 'bg-indigo-100',  color: 'text-indigo-600',  href: '/dashboard' },
-    solicitud_aprobada:    { icon: <IconCheck size={14} />,        bg: 'bg-emerald-100', color: 'text-emerald-600', href: '/dashboard/solicitudes' },
-    solicitud_rechazada:   { icon: <IconX size={14} />,            bg: 'bg-red-100',     color: 'text-red-500',     href: '/dashboard/solicitudes' },
-    solicitud_nueva:       { icon: <IconFileText size={14} />,     bg: 'bg-amber-100',   color: 'text-amber-600',   href: '/dashboard/solicitudes' },
-    solicitud_creada_admin:{ icon: <IconFileText size={14} />,     bg: 'bg-blue-100',    color: 'text-blue-600',    href: '/dashboard/solicitudes' },
-    evento_especial:       { icon: <IconCalendar size={14} />,     bg: 'bg-violet-100',  color: 'text-violet-600',  href: '/dashboard/calendario' },
-    feriado:               { icon: <IconCalendar size={14} />,     bg: 'bg-violet-100',  color: 'text-violet-600',  href: '/dashboard/calendario' },
-    compra:                { icon: <IconShoppingBag size={14} />,  bg: 'bg-pink-100',    color: 'text-pink-600',    href: '/dashboard/compras' },
-    monotributo:           { icon: <IconDollar size={14} />,       bg: 'bg-indigo-100',  color: 'text-indigo-600',  href: '/dashboard/monotributo' },
-    mural_post:            { icon: <IconWall size={14} />,         bg: 'bg-teal-100',    color: 'text-teal-600',    href: '/dashboard/muro' },
-    mural_respuesta:       { icon: <IconWall size={14} />,         bg: 'bg-teal-100',    color: 'text-teal-600',    href: '/dashboard/muro' },
+    aviso:                 { icon: <IconBell size={14} />,             bg: 'bg-indigo-100',  color: 'text-indigo-600',  href: '/dashboard' },
+    solicitud_aprobada:    { icon: <IconCalendarCheck size={14} />,    bg: 'bg-amber-100',   color: 'text-amber-600',   href: '/dashboard/solicitudes' },
+    solicitud_rechazada:   { icon: <IconCalendarCheck size={14} />,    bg: 'bg-amber-100',   color: 'text-amber-600',   href: '/dashboard/solicitudes' },
+    solicitud_nueva:       { icon: <IconCalendarCheck size={14} />,    bg: 'bg-amber-100',   color: 'text-amber-600',   href: '/dashboard/solicitudes' },
+    solicitud_creada_admin:{ icon: <IconCalendarCheck size={14} />,    bg: 'bg-amber-100',   color: 'text-amber-600',   href: '/dashboard/solicitudes' },
+    solicitud_modificada:  { icon: <IconCalendarCheck size={14} />,    bg: 'bg-amber-100',   color: 'text-amber-600',   href: '/dashboard/solicitudes' },
+    evento_especial:       { icon: <IconCalendar size={14} />,         bg: 'bg-violet-100',  color: 'text-violet-600',  href: '/dashboard/calendario' },
+    feriado:               { icon: <IconCalendar size={14} />,         bg: 'bg-violet-100',  color: 'text-violet-600',  href: '/dashboard/calendario' },
+    compra:                { icon: <IconShoppingBag size={14} />,      bg: 'bg-pink-100',    color: 'text-pink-600',    href: '/dashboard/compras' },
+    monotributo:           { icon: <IconReceipt size={14} />,          bg: 'bg-indigo-100',  color: 'text-indigo-600',  href: '/dashboard/monotributo' },
+    mural_post:            { icon: <IconWall size={14} />,             bg: 'bg-teal-100',    color: 'text-teal-600',    href: '/dashboard/muro' },
+    mural_respuesta:       { icon: <IconWall size={14} />,             bg: 'bg-teal-100',    color: 'text-teal-600',    href: '/dashboard/muro' },
+    mural_like:            { icon: <IconHeartFilled size={14} />,      bg: 'bg-teal-100',    color: 'text-teal-600',    href: '/dashboard/muro' },
+    fichadas:              { icon: <IconFingerprint size={14} />,      bg: 'bg-cyan-100',    color: 'text-cyan-600',    href: '/dashboard/asistencia' },
   }
   return map[tipo] ?? { icon: <IconBell size={14} />, bg: 'bg-gray-100', color: 'text-gray-500', href: '/dashboard' }
 }

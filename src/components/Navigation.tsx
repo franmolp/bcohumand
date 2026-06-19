@@ -5,13 +5,13 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { SessionUser } from '@/types'
-import { IconHome, IconUsers, IconClipboard, IconFileText, IconLogout, IconBell, IconShoppingBag, IconWall, IconDollar, IconSettings, IconX, IconMore, IconCalendar, IconReceipt, IconShield, IconCamera } from '@/components/ui/Icons'
+import { IconHome, IconUsers, IconClipboard, IconLogout, IconBell, IconShoppingBag, IconWall, IconDollar, IconSettings, IconX, IconMore, IconCalendar, IconReceipt, IconShield, IconCamera, IconCalendarCheck } from '@/components/ui/Icons'
 import PhotoCropModal from '@/components/PhotoCropModal'
 
 const allNav = [
   { href: '/dashboard',              label: 'Inicio',         icon: IconHome,        mobile: true },
   { href: '/dashboard/asistencia',   label: 'Asistencia',     icon: IconClipboard,   roles: ['Admin', 'admin', 'HR', 'Encargada'], mobile: true },
-  { href: '/dashboard/solicitudes',  label: 'Solicitudes',    labelEmp: 'Mis Solicitudes', icon: IconFileText, mobile: true },
+  { href: '/dashboard/solicitudes',  label: 'Solicitudes',    labelEmp: 'Mis Solicitudes', icon: IconCalendarCheck, mobile: true },
   { href: '/dashboard/empleados',    label: 'Empleados',      icon: IconUsers,       roles: ['Admin', 'admin', 'HR'] },
   { href: '/dashboard/liquidador',   label: 'Liquidaciones',  labelEmp: 'Mi Liquidación', icon: IconDollar },
   { href: '/dashboard/adelantos',    label: 'Adelantos',      labelEmp: 'Mis Adelantos', icon: IconDollar },
