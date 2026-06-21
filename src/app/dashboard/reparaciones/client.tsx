@@ -22,15 +22,15 @@ type Reparacion = {
 type Empleada = { id: string; nombre: string }
 
 const CATEGORIAS = [
-  { value: 'electrico',      label: 'Eléctrico',        bg: 'bg-yellow-50',  text: 'text-yellow-700' },
-  { value: 'agua_plomeria',  label: 'Agua / Plomería',  bg: 'bg-cyan-50',    text: 'text-cyan-600'   },
-  { value: 'electronicos',   label: 'Electrónicos',     bg: 'bg-indigo-50',  text: 'text-indigo-600' },
-  { value: 'mobiliario',     label: 'Mobiliario',       bg: 'bg-orange-50',  text: 'text-orange-600' },
-  { value: 'climatizacion',  label: 'Climatización',    bg: 'bg-sky-50',     text: 'text-sky-600'    },
-  { value: 'limpieza',       label: 'Limpieza',         bg: 'bg-teal-50',    text: 'text-teal-600'   },
-  { value: 'compra_insumo',  label: 'Compra / Insumo',  bg: 'bg-pink-50',    text: 'text-pink-600'   },
-  { value: 'mejora',         label: 'Mejora',           bg: 'bg-violet-50',  text: 'text-violet-600' },
-  { value: 'otro',           label: 'Otro',             bg: 'bg-gray-100',   text: 'text-gray-500'   },
+  { value: 'electrico',      label: 'Eléctrico',           hint: 'luces, enchufes, tomacorrientes',      bg: 'bg-yellow-50',  text: 'text-yellow-700' },
+  { value: 'agua_plomeria',  label: 'Agua / Plomería',     hint: 'piletas, canillas, desagüe, calefón',  bg: 'bg-cyan-50',    text: 'text-cyan-600'   },
+  { value: 'electronicos',   label: 'Equipos electrónicos',hint: 'secadores, planchas, máquinas',        bg: 'bg-indigo-50',  text: 'text-indigo-600' },
+  { value: 'mobiliario',     label: 'Mobiliario',          hint: 'sillones, espejos, muebles, mostrador',bg: 'bg-orange-50',  text: 'text-orange-600' },
+  { value: 'climatizacion',  label: 'Climatización',       hint: 'aire acondicionado, calefacción',      bg: 'bg-sky-50',     text: 'text-sky-600'    },
+  { value: 'limpieza',       label: 'Limpieza',            hint: 'limpieza profunda, manchas, plagas',   bg: 'bg-teal-50',    text: 'text-teal-600'   },
+  { value: 'compra_insumo',  label: 'Compra / Insumo',     hint: 'algo roto para reponer, falta stock',  bg: 'bg-pink-50',    text: 'text-pink-600'   },
+  { value: 'mejora',         label: 'Mejora',              hint: 'propuesta de cambio o incorporación',  bg: 'bg-violet-50',  text: 'text-violet-600' },
+  { value: 'otro',           label: 'Otro',                hint: 'lo que no entra en ninguna',           bg: 'bg-gray-100',   text: 'text-gray-500'   },
 ]
 
 const PRIORIDADES = [
@@ -179,13 +179,36 @@ export default function ReparacionesClient({
           <p className="text-[13px] text-[var(--text-sub)] mt-0.5">
             {isAdmin
               ? 'Gestioná los pedidos de arreglo y mejora del local'
-              : 'Reportá arreglos, mejoras o cosas que viste mal en el local'}
+              : 'Reportá cualquier problema o mejora que notes en el salón'}
           </p>
         </div>
         <Button onClick={openCreate} icon={<IconPlus size={14} />} size="sm">
           Nueva
         </Button>
       </div>
+
+      {/* Info banner — solo empleadas */}
+      {!isAdmin && (
+        <div className="bg-[var(--primary-light)] border border-[var(--primary)]/20 rounded-2xl p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <IconWrench size={15} className="text-[var(--primary)] shrink-0" />
+            <p className="text-[13px] font-semibold text-[var(--primary)]">Como funciona este modulo</p>
+          </div>
+          <ul className="space-y-1 pl-1">
+            {[
+              'Carga cualquier cosa que veas rota, que no funcione bien o que se pueda mejorar en el salon.',
+              'Elegí la categoria que mejor describe el problema y poné una prioridad si es urgente.',
+              'La admin va a revisar tu solicitud y te va a notificar cuando esté resuelta o si hay algún comentario.',
+              'Podés ver el estado de todas tus solicitudes en cualquier momento desde este modulo.',
+            ].map((t, i) => (
+              <li key={i} className="text-[12px] text-[var(--primary)]/80 flex gap-2">
+                <span className="shrink-0 mt-0.5 w-4 h-4 rounded-full bg-[var(--primary)]/15 flex items-center justify-center text-[9px] font-bold text-[var(--primary)]">{i + 1}</span>
+                {t}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
@@ -389,7 +412,7 @@ export default function ReparacionesClient({
               onChange={v => setForm(f => ({ ...f, categoria: v }))}
             >
               {CATEGORIAS.map(c => (
-                <option key={c.value} value={c.value}>{c.label}</option>
+                <option key={c.value} value={c.value}>{c.label} ({c.hint})</option>
               ))}
             </Select>
 
