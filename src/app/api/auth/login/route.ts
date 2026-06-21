@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
       equipo: usuario.equipo?.nombre || ''
     })
       .setProtectedHeader({ alg: 'HS256' })
-      .setExpirationTime('8h')
+      .setExpirationTime('30d')
       .sign(JWT_SECRET)
 
     const response = NextResponse.json({
@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 8,
+      maxAge: 60 * 60 * 24 * 30,
       path: '/'
     })
 
