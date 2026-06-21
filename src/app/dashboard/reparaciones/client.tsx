@@ -72,7 +72,8 @@ export default function ReparacionesClient({
 
   const [items, setItems]   = useState<Reparacion[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('todos')
+  const [filter, setFilter]   = useState('pendiente')
+  const [filterCat, setFilterCat] = useState('')
   const [toast, setToast]   = useState('')
 
   const [showCreate, setShowCreate] = useState(false)
@@ -96,13 +97,15 @@ export default function ReparacionesClient({
 
   useEffect(() => { load() }, [load])
 
-  const filtered = filter === 'todos' ? items : items.filter(i => i.estado === filter)
+  const byStatus = filter === 'todos' ? items : items.filter(i => i.estado === filter)
+  const filtered = filterCat ? byStatus.filter(i => i.categoria === filterCat) : byStatus
   const counts = {
     todos:     items.length,
     pendiente: items.filter(i => i.estado === 'pendiente').length,
     resuelto:  items.filter(i => i.estado === 'resuelto').length,
     rechazado: items.filter(i => i.estado === 'rechazado').length,
   }
+  const usedCats = [...new Set(items.map(i => i.categoria))]
 
   function openCreate() { setForm(blankForm); setFormError(''); setShowCreate(true) }
 
@@ -210,7 +213,7 @@ export default function ReparacionesClient({
         </div>
       )}
 
-      {/* Filters */}
+      {/* Status filters */}
       <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
         {FILTERS.map(f => (
           <button
@@ -231,6 +234,38 @@ export default function ReparacionesClient({
           </button>
         ))}
       </div>
+
+      {/* Category filters — only show categories that have at least one item */}
+      {usedCats.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+          <button
+            onClick={() => setFilterCat('')}
+            className={`px-3 py-1.5 rounded-xl text-[12px] font-semibold shrink-0 transition-all cursor-pointer ${
+              filterCat === ''
+                ? 'bg-gray-700 text-white'
+                : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            Todas las categorías
+          </button>
+          {usedCats.map(v => {
+            const cat = getCat(v)
+            return (
+              <button
+                key={v}
+                onClick={() => setFilterCat(filterCat === v ? '' : v)}
+                className={`px-3 py-1.5 rounded-xl text-[12px] font-semibold shrink-0 transition-all cursor-pointer ${
+                  filterCat === v
+                    ? `${cat.bg} ${cat.text} ring-1 ring-current`
+                    : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                {cat.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* List */}
       {loading ? (
