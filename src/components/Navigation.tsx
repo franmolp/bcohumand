@@ -173,11 +173,17 @@ export default function Navigation({ user }: { user: SessionUser }) {
   return (
     <>
       {toast.visible && (
-        <div className="fixed top-12 lg:top-14 right-4 lg:right-6 z-[60] fade-in">
-          <div className="flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-white bg-[var(--primary)] max-w-[calc(100vw-2rem)] lg:max-w-xs">
-            <IconBell size={16} className="shrink-0" />
-            <span className="text-sm font-medium leading-tight">{toast.msg}</span>
-            <button onClick={() => setToast(t => ({ ...t, visible: false }))} className="ml-1 opacity-70 hover:opacity-100 cursor-pointer shrink-0">
+        <div className="fixed top-12 lg:top-14 right-4 lg:right-6 z-[60] fade-in max-w-[calc(100vw-2rem)] lg:max-w-xs">
+          <div className="flex items-start gap-2 px-4 py-3 rounded-xl shadow-lg text-white bg-[var(--primary)]">
+            <IconBell size={16} className="shrink-0 mt-0.5" />
+            <Link
+              href="/dashboard/notificaciones"
+              onClick={() => setToast(t => ({ ...t, visible: false }))}
+              className="flex-1 text-sm font-medium leading-snug"
+            >
+              {toast.msg}
+            </Link>
+            <button onClick={() => setToast(t => ({ ...t, visible: false }))} className="ml-1 opacity-70 hover:opacity-100 cursor-pointer shrink-0 mt-0.5">
               <IconX size={14} />
             </button>
           </div>
