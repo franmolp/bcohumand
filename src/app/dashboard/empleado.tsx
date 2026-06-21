@@ -136,8 +136,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
     supabase
       .from('usuarios')
       .select('id, nombre, fecha_nacimiento, foto_perfil')
-      .eq('estado_cuenta', 'activo')
-      .not('fecha_nacimiento', 'is', null),
+      .eq('estado_cuenta', 'activo'),
 
     supabase
       .from('eventos_especiales')
@@ -217,11 +216,9 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
     : '¡Buenas noches y buen descanso!'
 
   const muroPost = (muroRes.data ?? [])[0] ?? null
-  let muroAutor: { nombre: string; foto_perfil?: string | null } | null = null
-  if (muroPost) {
-    const { data: u } = await supabase.from('usuarios').select('nombre, foto_perfil').eq('id', muroPost.usuario_id).single()
-    muroAutor = u
-  }
+  const muroAutor = muroPost
+    ? ((usersRes.data ?? []).find(u => u.id === muroPost.usuario_id) ?? null)
+    : null
 
   return (
     <div className="py-4 fade-in space-y-5">
