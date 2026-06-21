@@ -109,7 +109,9 @@ export default function Navigation({ user }: { user: SessionUser }) {
     fetchUnread()
     const interval = setInterval(fetchUnread, 5000)
     window.addEventListener('notif-updated', fetchUnread)
-    return () => { clearInterval(interval); window.removeEventListener('notif-updated', fetchUnread) }
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchUnread() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(interval); window.removeEventListener('notif-updated', fetchUnread); document.removeEventListener('visibilitychange', onVisible) }
   }, [])
 
   function handlePhotoSaved(url: string) {
