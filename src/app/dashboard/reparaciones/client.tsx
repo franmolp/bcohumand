@@ -22,12 +22,15 @@ type Reparacion = {
 type Empleada = { id: string; nombre: string }
 
 const CATEGORIAS = [
-  { value: 'electricidad', label: 'Electricidad', bg: 'bg-indigo-50',  text: 'text-indigo-600'  },
-  { value: 'plomeria',     label: 'Plomería',     bg: 'bg-cyan-50',    text: 'text-cyan-600'    },
-  { value: 'equipamiento', label: 'Equipamiento', bg: 'bg-gray-100',   text: 'text-gray-600'    },
-  { value: 'limpieza',     label: 'Limpieza',     bg: 'bg-teal-50',    text: 'text-teal-600'    },
-  { value: 'mejoras',      label: 'Mejoras',      bg: 'bg-violet-50',  text: 'text-violet-600'  },
-  { value: 'otro',         label: 'Otro',         bg: 'bg-gray-100',   text: 'text-gray-500'    },
+  { value: 'electrico',      label: 'Eléctrico',        bg: 'bg-yellow-50',  text: 'text-yellow-700' },
+  { value: 'agua_plomeria',  label: 'Agua / Plomería',  bg: 'bg-cyan-50',    text: 'text-cyan-600'   },
+  { value: 'electronicos',   label: 'Electrónicos',     bg: 'bg-indigo-50',  text: 'text-indigo-600' },
+  { value: 'mobiliario',     label: 'Mobiliario',       bg: 'bg-orange-50',  text: 'text-orange-600' },
+  { value: 'climatizacion',  label: 'Climatización',    bg: 'bg-sky-50',     text: 'text-sky-600'    },
+  { value: 'limpieza',       label: 'Limpieza',         bg: 'bg-teal-50',    text: 'text-teal-600'   },
+  { value: 'compra_insumo',  label: 'Compra / Insumo',  bg: 'bg-pink-50',    text: 'text-pink-600'   },
+  { value: 'mejora',         label: 'Mejora',           bg: 'bg-violet-50',  text: 'text-violet-600' },
+  { value: 'otro',           label: 'Otro',             bg: 'bg-gray-100',   text: 'text-gray-500'   },
 ]
 
 const PRIORIDADES = [
