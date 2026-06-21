@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import type { SessionUser } from '@/types'
-import { IconPlus, IconX, IconWrench } from '@/components/ui/Icons'
+import { IconPlus, IconWrench, IconAlertCircle } from '@/components/ui/Icons'
+import { Modal, Button, Input, Select, Toast } from '@/components/ui'
 
 type Reparacion = {
   id: string
@@ -21,12 +22,12 @@ type Reparacion = {
 type Empleada = { id: string; nombre: string }
 
 const CATEGORIAS = [
-  { value: 'electricidad', label: 'Electricidad', emoji: '💡' },
-  { value: 'plomeria',     label: 'Plomería',     emoji: '🔧' },
-  { value: 'equipamiento', label: 'Equipamiento', emoji: '⚙️' },
-  { value: 'limpieza',     label: 'Limpieza',     emoji: '🧹' },
-  { value: 'mejoras',      label: 'Mejoras',      emoji: '✨' },
-  { value: 'otro',         label: 'Otro',         emoji: '📋' },
+  { value: 'electricidad', label: 'Electricidad', bg: 'bg-indigo-50',  text: 'text-indigo-600'  },
+  { value: 'plomeria',     label: 'Plomería',     bg: 'bg-cyan-50',    text: 'text-cyan-600'    },
+  { value: 'equipamiento', label: 'Equipamiento', bg: 'bg-gray-100',   text: 'text-gray-600'    },
+  { value: 'limpieza',     label: 'Limpieza',     bg: 'bg-teal-50',    text: 'text-teal-600'    },
+  { value: 'mejoras',      label: 'Mejoras',      bg: 'bg-violet-50',  text: 'text-violet-600'  },
+  { value: 'otro',         label: 'Otro',         bg: 'bg-gray-100',   text: 'text-gray-500'    },
 ]
 
 const PRIORIDADES = [
@@ -36,9 +37,9 @@ const PRIORIDADES = [
 ]
 
 const ESTADOS = [
-  { value: 'pendiente', label: 'Pendiente', bg: 'bg-amber-50',  text: 'text-amber-700' },
-  { value: 'resuelto',  label: 'Resuelto',  bg: 'bg-green-50',  text: 'text-green-700' },
-  { value: 'rechazado', label: 'Rechazado', bg: 'bg-red-50',    text: 'text-red-700'   },
+  { value: 'pendiente', label: 'Pendiente', bg: 'bg-amber-50',  text: 'text-amber-700'  },
+  { value: 'resuelto',  label: 'Resuelto',  bg: 'bg-green-50',  text: 'text-green-700'  },
+  { value: 'rechazado', label: 'Rechazado', bg: 'bg-red-50',    text: 'text-red-700'    },
 ]
 
 const FILTERS = [
@@ -55,6 +56,8 @@ function getCat(v: string) { return CATEGORIAS.find(c => c.value === v) ?? CATEG
 function getPrio(v: string) { return PRIORIDADES.find(p => p.value === v) ?? PRIORIDADES[1] }
 function getEst(v: string) { return ESTADOS.find(e => e.value === v) ?? ESTADOS[0] }
 
+const blankForm = { titulo: '', descripcion: '', categoria: 'otro', prioridad: 'media', usuario_id: '', nombre_empleada: '' }
+
 export default function ReparacionesClient({
   user,
   empleadasList,
@@ -64,20 +67,19 @@ export default function ReparacionesClient({
 }) {
   const isAdmin = user.rol === 'admin' || user.rol === 'Admin'
 
-  const [items, setItems] = useState<Reparacion[]>([])
+  const [items, setItems]   = useState<Reparacion[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('todos')
+  const [toast, setToast]   = useState('')
 
   const [showCreate, setShowCreate] = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [form, setForm] = useState({
-    titulo: '', descripcion: '', categoria: 'otro', prioridad: 'media',
-    usuario_id: '', nombre_empleada: '',
-  })
+  const [creating, setCreating]     = useState(false)
+  const [form, setForm]             = useState(blankForm)
+  const [formError, setFormError]   = useState('')
 
-  const [actionId, setActionId] = useState<string | null>(null)
+  const [actionId, setActionId]   = useState<string | null>(null)
   const [actionForm, setActionForm] = useState({ estado: '', comentario: '' })
-  const [updating, setUpdating] = useState(false)
+  const [updating, setUpdating]   = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -99,10 +101,12 @@ export default function ReparacionesClient({
     rechazado: items.filter(i => i.estado === 'rechazado').length,
   }
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault()
-    if (!form.titulo.trim()) return
+  function openCreate() { setForm(blankForm); setFormError(''); setShowCreate(true) }
+
+  async function handleCreate() {
+    if (!form.titulo.trim()) { setFormError('El título es obligatorio'); return }
     setCreating(true)
+    setFormError('')
     try {
       const body: Record<string, string> = {
         titulo: form.titulo, descripcion: form.descripcion,
@@ -121,7 +125,10 @@ export default function ReparacionesClient({
         const item = await r.json()
         setItems(prev => [item, ...prev])
         setShowCreate(false)
-        setForm({ titulo: '', descripcion: '', categoria: 'otro', prioridad: 'media', usuario_id: '', nombre_empleada: '' })
+        setToast('Solicitud enviada')
+      } else {
+        const e = await r.json()
+        setFormError(e.error ?? 'Error al enviar')
       }
     } finally {
       setCreating(false)
@@ -140,6 +147,7 @@ export default function ReparacionesClient({
         const updated = await r.json()
         setItems(prev => prev.map(i => i.id === id ? updated : i))
         setActionId(null)
+        setToast('Cambios guardados')
       }
     } finally {
       setUpdating(false)
@@ -150,6 +158,7 @@ export default function ReparacionesClient({
     if (!confirm('¿Eliminar esta solicitud?')) return
     await fetch(`/api/reparaciones/${id}`, { method: 'DELETE' })
     setItems(prev => prev.filter(i => i.id !== id))
+    setToast('Solicitud eliminada')
   }
 
   function openAction(item: Reparacion) {
@@ -170,13 +179,9 @@ export default function ReparacionesClient({
               : 'Reportá arreglos, mejoras o cosas que viste mal en el local'}
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 bg-[var(--primary)] text-white px-3.5 py-2 rounded-xl text-[13px] font-semibold shrink-0 hover:opacity-90 transition-opacity active:scale-95 cursor-pointer"
-        >
-          <IconPlus size={14} />
+        <Button onClick={openCreate} icon={<IconPlus size={14} />} size="sm">
           Nueva
-        </button>
+        </Button>
       </div>
 
       {/* Filters */}
@@ -215,7 +220,7 @@ export default function ReparacionesClient({
             {filter === 'todos' ? 'Sin solicitudes aún' : `Sin solicitudes ${FILTERS.find(f => f.value === filter)?.label.toLowerCase()}`}
           </p>
           {filter === 'todos' && (
-            <p className="text-[12px] text-gray-300 mt-1">Tocá "+ Nueva" para cargar la primera</p>
+            <p className="text-[12px] text-gray-300 mt-1">Tocá "Nueva" para cargar la primera</p>
           )}
         </div>
       ) : (
@@ -227,12 +232,13 @@ export default function ReparacionesClient({
             const isOpen = actionId === item.id
 
             return (
-              <div key={item.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div key={item.id} className="bg-white rounded-2xl border border-[var(--border)] shadow-sm overflow-hidden">
                 <div className="p-4">
                   {/* Category + status + priority */}
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[14px]">{cat.emoji}</span>
-                    <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">{cat.label}</span>
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${cat.bg} ${cat.text}`}>
+                      {cat.label}
+                    </span>
                     <span className="flex-1" />
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${est.bg} ${est.text}`}>
                       {est.label}
@@ -245,7 +251,7 @@ export default function ReparacionesClient({
                   <p className="text-[14px] font-semibold text-[var(--text)] leading-snug">{item.titulo}</p>
 
                   {item.descripcion && (
-                    <p className="text-[12px] text-gray-500 mt-1 leading-relaxed">{item.descripcion}</p>
+                    <p className="text-[12px] text-[var(--text-sub)] mt-1 leading-relaxed">{item.descripcion}</p>
                   )}
 
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -255,7 +261,7 @@ export default function ReparacionesClient({
                         <span className="text-gray-300 text-[11px]">·</span>
                       </>
                     )}
-                    <span className="text-[11px] text-gray-400">{fmtDate(item.creado_en)}</span>
+                    <span className="text-[11px] text-[var(--text-sub)]">{fmtDate(item.creado_en)}</span>
                     {item.resuelto_en && (
                       <>
                         <span className="text-gray-300 text-[11px]">·</span>
@@ -266,13 +272,13 @@ export default function ReparacionesClient({
 
                   {item.comentario_admin && !isOpen && (
                     <div className="mt-2.5 px-3 py-2 bg-gray-50 rounded-xl">
-                      <p className="text-[10px] text-gray-400 font-semibold mb-0.5">Comentario</p>
-                      <p className="text-[12px] text-gray-600">{item.comentario_admin}</p>
+                      <p className="text-[10px] text-[var(--text-sub)] font-semibold mb-0.5">Comentario</p>
+                      <p className="text-[12px] text-[var(--text)]">{item.comentario_admin}</p>
                     </div>
                   )}
 
                   {isAdmin && (
-                    <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-50">
+                    <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-100">
                       <button
                         onClick={() => openAction(item)}
                         className="text-[12px] font-semibold text-[var(--primary)] hover:opacity-75 transition-opacity cursor-pointer"
@@ -292,7 +298,7 @@ export default function ReparacionesClient({
 
                 {/* Admin action panel */}
                 {isAdmin && isOpen && (
-                  <div className="px-4 pb-4 pt-3 border-t border-gray-100 bg-gray-50/40 space-y-3">
+                  <div className="px-4 pb-4 pt-3 border-t border-[var(--border)] bg-gray-50/40 space-y-3">
                     <div className="grid grid-cols-3 gap-2">
                       {ESTADOS.map(e => (
                         <button
@@ -313,15 +319,12 @@ export default function ReparacionesClient({
                       onChange={e => setActionForm(f => ({ ...f, comentario: e.target.value }))}
                       placeholder="Comentario para la empleada (opcional)…"
                       rows={2}
-                      className="w-full text-[13px] rounded-xl border border-gray-200 px-3 py-2 resize-none focus:outline-none focus:border-[var(--primary)] bg-white"
+                      style={{ fontSize: 16 }}
+                      className="w-full px-4 py-3 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] placeholder:text-[var(--text-muted)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] resize-none text-[13px]"
                     />
-                    <button
-                      onClick={() => handleUpdate(item.id)}
-                      disabled={updating}
-                      className="w-full py-2.5 bg-[var(--primary)] text-white rounded-xl text-[13px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
-                    >
-                      {updating ? 'Guardando…' : 'Guardar cambios'}
-                    </button>
+                    <Button onClick={() => handleUpdate(item.id)} loading={updating} className="w-full">
+                      Guardar cambios
+                    </Button>
                   </div>
                 )}
               </div>
@@ -330,110 +333,84 @@ export default function ReparacionesClient({
         </div>
       )}
 
-      {/* Create modal */}
-      {showCreate && (
-        <div
-          className="fixed inset-0 bg-black/40 z-50 flex items-end lg:items-center justify-center p-4 lg:p-6"
-          onClick={e => { if (e.target === e.currentTarget) setShowCreate(false) }}
-        >
-          <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h2 className="text-[15px] font-bold text-[var(--text)]">Nueva solicitud</h2>
-              <button onClick={() => setShowCreate(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer">
-                <IconX size={18} />
-              </button>
-            </div>
+      {/* ─── Modal: Nueva solicitud ─── */}
+      <Modal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        title="Nueva solicitud"
+        footer={<>
+          <Button variant="secondary" onClick={() => setShowCreate(false)} className="flex-1 lg:flex-none">Cancelar</Button>
+          <Button onClick={handleCreate} loading={creating} className="flex-1 lg:flex-none">Enviar</Button>
+        </>}
+      >
+        <div className="space-y-4">
+          {isAdmin && (
+            <Select
+              label="Para empleada"
+              value={form.usuario_id}
+              onChange={v => {
+                const emp = empleadasList.find(x => x.id === v)
+                setForm(f => ({ ...f, usuario_id: v, nombre_empleada: emp?.nombre ?? '' }))
+              }}
+            >
+              <option value="">Cargada por mí (admin)</option>
+              {empleadasList.map(e => (
+                <option key={e.id} value={e.id}>{e.nombre}</option>
+              ))}
+            </Select>
+          )}
 
-            <form onSubmit={handleCreate} className="px-5 py-4 space-y-4">
-              {isAdmin && (
-                <div>
-                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">
-                    Para empleada
-                  </label>
-                  <select
-                    value={form.usuario_id}
-                    onChange={e => {
-                      const emp = empleadasList.find(x => x.id === e.target.value)
-                      setForm(f => ({ ...f, usuario_id: e.target.value, nombre_empleada: emp?.nombre ?? '' }))
-                    }}
-                    className="w-full text-[13px] rounded-xl border border-gray-200 px-3 py-2.5 focus:outline-none focus:border-[var(--primary)] bg-white"
-                  >
-                    <option value="">Cargada por mí (admin)</option>
-                    {empleadasList.map(e => (
-                      <option key={e.id} value={e.id}>{e.nombre}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
+          <Input
+            label="Título *"
+            value={form.titulo}
+            onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))}
+            placeholder="Ej: Luz quemada en el baño"
+          />
 
-              <div>
-                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">
-                  Título *
-                </label>
-                <input
-                  value={form.titulo}
-                  onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))}
-                  placeholder="Ej: Luz quemada en el baño"
-                  required
-                  className="w-full text-[13px] rounded-xl border border-gray-200 px-3 py-2.5 focus:outline-none focus:border-[var(--primary)]"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">
-                  Descripción
-                </label>
-                <textarea
-                  value={form.descripcion}
-                  onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))}
-                  placeholder="Contá más detalles del problema o lo que se necesita…"
-                  rows={3}
-                  className="w-full text-[13px] rounded-xl border border-gray-200 px-3 py-2.5 resize-none focus:outline-none focus:border-[var(--primary)]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">
-                    Categoría
-                  </label>
-                  <select
-                    value={form.categoria}
-                    onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
-                    className="w-full text-[13px] rounded-xl border border-gray-200 px-3 py-2.5 focus:outline-none focus:border-[var(--primary)] bg-white"
-                  >
-                    {CATEGORIAS.map(c => (
-                      <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">
-                    Prioridad
-                  </label>
-                  <select
-                    value={form.prioridad}
-                    onChange={e => setForm(f => ({ ...f, prioridad: e.target.value }))}
-                    className="w-full text-[13px] rounded-xl border border-gray-200 px-3 py-2.5 focus:outline-none focus:border-[var(--primary)] bg-white"
-                  >
-                    {PRIORIDADES.map(p => (
-                      <option key={p.value} value={p.value}>{p.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={creating || !form.titulo.trim()}
-                className="w-full py-3 bg-[var(--primary)] text-white rounded-xl text-[14px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
-              >
-                {creating ? 'Enviando…' : 'Enviar solicitud'}
-              </button>
-            </form>
+          <div>
+            <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">Descripción</label>
+            <textarea
+              value={form.descripcion}
+              onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))}
+              placeholder="Contá más detalles del problema o lo que se necesita…"
+              rows={3}
+              style={{ fontSize: 16 }}
+              className="w-full px-4 py-3 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] placeholder:text-[var(--text-muted)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] resize-none text-sm"
+            />
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Select
+              label="Categoría"
+              value={form.categoria}
+              onChange={v => setForm(f => ({ ...f, categoria: v }))}
+            >
+              {CATEGORIAS.map(c => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </Select>
+
+            <Select
+              label="Prioridad"
+              value={form.prioridad}
+              onChange={v => setForm(f => ({ ...f, prioridad: v }))}
+            >
+              {PRIORIDADES.map(p => (
+                <option key={p.value} value={p.value}>{p.label}</option>
+              ))}
+            </Select>
+          </div>
+
+          {formError && (
+            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl">
+              <IconAlertCircle size={16} className="text-red-500 shrink-0" />
+              <p className="text-[13px] text-red-600 font-medium">{formError}</p>
+            </div>
+          )}
         </div>
-      )}
+      </Modal>
+
+      <Toast message={toast} visible={!!toast} onClose={() => setToast('')} />
     </div>
   )
 }
