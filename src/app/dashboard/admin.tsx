@@ -2,7 +2,7 @@ import React from 'react'
 import Link from 'next/link'
 import type { SessionUser } from '@/types'
 import { supabase, supabaseAdmin } from '@/lib/supabase'
-import { IconUsers, IconFileText, IconCalendar, IconChevronRight, IconCheck, IconX, IconAlertCircle, IconWall, IconShoppingBag, IconDollar, IconCamera } from '@/components/ui/Icons'
+import { IconUsers, IconFileText, IconCalendar, IconChevronRight, IconCheck, IconX, IconAlertCircle, IconWall, IconShoppingBag, IconDollar, IconCamera, IconWrench } from '@/components/ui/Icons'
 import GoogleReviewsCarousel from '@/components/GoogleReviewsCarousel'
 
 
@@ -107,7 +107,7 @@ export default async function AdminDashboard({ session }: { session: SessionUser
   const hace7 = new Date(today); hace7.setDate(today.getDate() - 7)
   const hace7Str = hace7.toISOString()
 
-  const [empData, ausentesData, pendData, actData, usersData] = await Promise.all([
+  const [empData, ausentesData, pendData, actData, usersData, repData] = await Promise.all([
     // Empleados activos
     supabase.from('usuarios').select('id').eq('estado_cuenta', 'activo'),
 
@@ -138,9 +138,13 @@ export default async function AdminDashboard({ session }: { session: SessionUser
       .select('nombre, fecha_nacimiento')
       .eq('estado_cuenta', 'activo')
       .not('fecha_nacimiento', 'is', null),
+
+    // Reparaciones pendientes
+    supabase.from('reparaciones').select('id').eq('estado', 'pendiente'),
   ])
 
   const totalEmpleados = empData.data?.length ?? 0
+  const repPendientes  = repData.data?.length ?? 0
   const TIPOS_AUSENCIA = ['Ausencia por Salud', 'Ausencia Injustificada', 'Vacaciones', 'Solicitud de Días', 'Cambio de horario/día']
   const ausentesHoyList = (ausentesData.data ?? []).filter(r => {
     if (!TIPOS_AUSENCIA.includes(r.tipo)) return false
@@ -268,7 +272,7 @@ export default async function AdminDashboard({ session }: { session: SessionUser
 
         {/* Empleados activos */}
         <Link href="/dashboard/empleados"
-          className="col-span-2 lg:col-span-1 bg-[image:var(--gradient)] rounded-2xl p-4 text-white shadow-sm hover:opacity-90 transition-opacity cursor-pointer">
+          className={`${isAdminRole ? '' : 'col-span-2'} lg:col-span-1 bg-[image:var(--gradient)] rounded-2xl p-4 text-white shadow-sm hover:opacity-90 transition-opacity cursor-pointer`}>
           <div className="flex items-start justify-between mb-3">
             <div className="w-8 h-8 bg-white/15 rounded-xl flex items-center justify-center">
               <IconUsers size={16} className="text-white" />
@@ -278,6 +282,22 @@ export default async function AdminDashboard({ session }: { session: SessionUser
           <p className="text-[32px] font-bold leading-none mb-1">{totalEmpleados}</p>
           <p className="text-[11px] text-white/70">Empleadas activas</p>
         </Link>
+
+        {/* Reparaciones pendientes — solo admin */}
+        {isAdminRole && (
+          <Link href="/dashboard/reparaciones"
+            className="lg:col-span-1 rounded-2xl p-4 text-white shadow-sm hover:opacity-90 transition-opacity cursor-pointer"
+            style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-8 h-8 bg-white/15 rounded-xl flex items-center justify-center">
+                <IconWrench size={16} className="text-white" />
+              </div>
+              <IconChevronRight size={14} className="text-white/50 mt-1" />
+            </div>
+            <p className="text-[32px] font-bold leading-none mb-1">{repPendientes}</p>
+            <p className="text-[11px] text-white/70">Reparaciones pend.</p>
+          </Link>
+        )}
 
         {/* Ausentes hoy */}
         <div className="col-span-2 lg:col-span-1 bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
