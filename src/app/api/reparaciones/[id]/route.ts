@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { crearNotificacion } from '@/lib/notificaciones'
 
 export async function PATCH(
   req: NextRequest,
@@ -28,6 +29,26 @@ export async function PATCH(
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Notify the employee when status changes (skip if they set it themselves — always admin here)
+  if (estado && data.usuario_id) {
+    const estadoLabels: Record<string, string> = {
+      resuelto:  'Reparación resuelta',
+      rechazado: 'Reparación rechazada',
+      pendiente: 'Reparación en revisión',
+    }
+    const titulo = estadoLabels[estado] ?? 'Actualización de reparación'
+    const msg = comentario_admin?.trim()
+      ? `${data.titulo} · ${comentario_admin.trim()}`
+      : data.titulo
+    await crearNotificacion({
+      usuario_id: data.usuario_id,
+      titulo,
+      mensaje: msg,
+      tipo: 'reparacion_actualizada',
+    }).catch(() => {})
+  }
+
   return NextResponse.json(data)
 }
 

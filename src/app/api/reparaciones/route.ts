@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { crearNotificaciones, getAdminIds } from '@/lib/notificaciones'
 
 export async function GET() {
   const session = await getSession()
@@ -54,5 +55,18 @@ export async function POST(req: Request) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Notify admins (skip if admin created it themselves)
+  if (!isAdmin) {
+    const adminIds = await getAdminIds()
+    if (adminIds.length) {
+      await crearNotificaciones(adminIds, {
+        titulo: 'Nueva solicitud de reparación',
+        mensaje: `${targetNombre}: ${titulo.trim()}`,
+        tipo: 'reparacion_nueva',
+      }).catch(() => {})
+    }
+  }
+
   return NextResponse.json(data)
 }
