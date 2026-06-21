@@ -41,7 +41,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(enabledEmps.map(emp => ({ ...emp, record: recMap.get(emp.id) ?? null })))
   }
 
-  const { data, error } = await supabase.from('monotributo').select('*').eq('usuario_id', session.id).order('mes', { ascending: false })
+  const now = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).slice(0, 7)
+  const [cy, cm] = now.split('-').map(Number)
+  let dm = cm - 2, dy = cy
+  if (dm <= 0) { dm += 12; dy -= 1 }
+  const desde = `${dy}-${String(dm).padStart(2, '0')}`
+  const { data, error } = await supabase.from('monotributo').select('*').eq('usuario_id', session.id).gte('mes', desde).order('mes', { ascending: false })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data ?? [])
 }
