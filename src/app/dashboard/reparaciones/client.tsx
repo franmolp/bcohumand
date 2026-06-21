@@ -192,14 +192,14 @@ export default function ReparacionesClient({
         <div className="bg-[var(--primary-light)] border border-[var(--primary)]/20 rounded-2xl p-4 space-y-2">
           <div className="flex items-center gap-2">
             <IconWrench size={15} className="text-[var(--primary)] shrink-0" />
-            <p className="text-[13px] font-semibold text-[var(--primary)]">Como funciona este modulo</p>
+            <p className="text-[13px] font-semibold text-[var(--primary)]">¿Cómo funciona este módulo?</p>
           </div>
           <ul className="space-y-1 pl-1">
             {[
-              'Carga cualquier cosa que veas rota, que no funcione bien o que se pueda mejorar en el salon.',
-              'Elegí la categoria que mejor describe el problema y poné una prioridad si es urgente.',
-              'La admin va a revisar tu solicitud y te va a notificar cuando esté resuelta o si hay algún comentario.',
-              'Podés ver el estado de todas tus solicitudes en cualquier momento desde este modulo.',
+              'Cargá cualquier cosa que veas rota, que no funcione bien o que se pueda mejorar en el salón.',
+              'Elegí la categoría que mejor describa el problema y poné una prioridad alta si es urgente o una prioridad media/baja si es algo que puede esperar.',
+              'El admin va a revisar tu solicitud y te va a notificar cuando esté resuelta o si hay algún comentario.',
+              'Podés ver el estado de todas tus solicitudes en cualquier momento desde este módulo.',
             ].map((t, i) => (
               <li key={i} className="text-[12px] text-[var(--primary)]/80 flex gap-2">
                 <span className="shrink-0 mt-0.5 w-4 h-4 rounded-full bg-[var(--primary)]/15 flex items-center justify-center text-[9px] font-bold text-[var(--primary)]">{i + 1}</span>
