@@ -390,7 +390,7 @@ export default function NotificacionesClient({ session }: { session: SessionUser
                         {n.titulo}
                       </p>
                       {n.mensaje && (
-                        <p className="text-[12px] text-gray-400 mt-0.5 line-clamp-2">{n.mensaje}</p>
+                        <p className="text-[12px] text-gray-400 mt-0.5">{n.mensaje}</p>
                       )}
                       <p className="text-[11px] text-gray-400 mt-1">{timeAgo(n.created_at)}</p>
                     </Link>
@@ -484,7 +484,7 @@ export default function NotificacionesClient({ session }: { session: SessionUser
                         </span>
                       </div>
                       {n.mensaje && (
-                        <p className="text-[12px] text-gray-400 mt-0.5 line-clamp-2">{n.mensaje}</p>
+                        <p className="text-[12px] text-gray-400 mt-0.5">{n.mensaje}</p>
                       )}
                       <p className="text-[11px] text-gray-400 mt-1">
                         <span className="font-medium">{n.usuario?.nombre ?? 'Empleado'}</span>
