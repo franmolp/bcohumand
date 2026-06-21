@@ -27,8 +27,18 @@ export async function GET(request: NextRequest) {
     if (anio) query = query.eq('anio', parseInt(anio))
     if (mes)  query = query.eq('mes', parseInt(mes))
   } else {
+    const nowStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).slice(0, 7)
+    const [cy, cm] = nowStr.split('-').map(Number)
+    const months: { anio: number; mes: number }[] = []
+    let ty = cy, tm = cm
+    for (let i = 0; i < 3; i++) {
+      months.push({ anio: ty, mes: tm })
+      if (--tm === 0) { tm = 12; ty-- }
+    }
     const nombreNorm = normNombre(session.nombre)
-    query = query.eq('nombre_empleada', nombreNorm)
+    query = query
+      .eq('nombre_empleada', nombreNorm)
+      .or(months.map(({ anio, mes }) => `and(anio.eq.${anio},mes.eq.${mes})`).join(','))
   }
 
   const { data, error } = await query
