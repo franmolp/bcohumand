@@ -268,7 +268,7 @@ export default async function AdminDashboard({ session }: { session: SessionUser
 
         {/* Empleados activos */}
         <Link href="/dashboard/empleados"
-          className="bg-[image:var(--gradient)] rounded-2xl p-4 text-white shadow-sm hover:opacity-90 transition-opacity cursor-pointer">
+          className="col-span-2 lg:col-span-1 bg-[image:var(--gradient)] rounded-2xl p-4 text-white shadow-sm hover:opacity-90 transition-opacity cursor-pointer">
           <div className="flex items-start justify-between mb-3">
             <div className="w-8 h-8 bg-white/15 rounded-xl flex items-center justify-center">
               <IconUsers size={16} className="text-white" />
