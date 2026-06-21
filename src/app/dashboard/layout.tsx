@@ -14,7 +14,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <PushSubscriber />
       <ActivityPing />
       {/* Mobile: body no scrollea → fixed nav no flota en iOS Safari */}
-      <main className="h-full overflow-y-auto overscroll-contain pt-12 pb-16 px-4 lg:h-auto lg:overflow-visible lg:pt-14 lg:pb-0 lg:pl-52 lg:pr-0">
+      <main className="h-full overflow-y-auto overscroll-contain pt-12 pb-16 px-4 lg:h-auto lg:overflow-visible lg:pt-14 lg:pb-0 lg:pl-52 lg:pr-0" style={{ touchAction: 'pan-y' }}>
         <div className="max-w-[1100px] lg:px-8 lg:py-8">
           {children}
         </div>

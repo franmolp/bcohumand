@@ -88,7 +88,7 @@ export default function Navigation({ user }: { user: SessionUser }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Notifications polling
+  // Notifications polling — pauses when tab is backgrounded, restarts cleanly on resume
   useEffect(() => {
     async function fetchUnread() {
       try {
@@ -106,12 +106,28 @@ export default function Navigation({ user }: { user: SessionUser }) {
         setModulos(mods ?? {})
       } catch { /* ignore */ }
     }
+    let interval: ReturnType<typeof setInterval> | null = setInterval(fetchUnread, 5000)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        // Restart interval fresh — prevents burst of stale ticks after iOS resume
+        if (interval) clearInterval(interval)
+        interval = setInterval(fetchUnread, 5000)
+        // Force iOS Safari to recalculate touch targets (clears stale layout cache)
+        document.documentElement.getBoundingClientRect()
+        fetchUnread()
+      } else {
+        if (interval) clearInterval(interval)
+        interval = null
+      }
+    }
     fetchUnread()
-    const interval = setInterval(fetchUnread, 5000)
     window.addEventListener('notif-updated', fetchUnread)
-    const onVisible = () => { if (document.visibilityState === 'visible') fetchUnread() }
     document.addEventListener('visibilitychange', onVisible)
-    return () => { clearInterval(interval); window.removeEventListener('notif-updated', fetchUnread); document.removeEventListener('visibilitychange', onVisible) }
+    return () => {
+      if (interval) clearInterval(interval)
+      window.removeEventListener('notif-updated', fetchUnread)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [])
 
   function handlePhotoSaved(url: string) {
