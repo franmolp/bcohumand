@@ -85,7 +85,8 @@ const SOL_COLORS: Record<string, string> = {
   'Ausencia por Salud': '#dc2626',
   'Solicitud de Días': '#fbbf24',
   'Ausencia Injustificada': '#fb923c',
-  'Cambio de Horario': '#8b5cf6',
+  'Cambio de Horario':    '#8b5cf6',
+  'Cambio de horario/día':'#8b5cf6',
   'Feriado/Local cerrado': '#6366f1',
 }
 const SOL_COLOR_DEFAULT = '#6b7280'
@@ -173,7 +174,7 @@ function buildDayMap(
     const isPending = s.estado === 'pending'
     const prefix = !canViewAll ? '' : `${s.empleado_nombre} · `
 
-    if (s.tipo === 'Cambio de Horario') {
+    if (s.tipo === 'Cambio de Horario' || s.tipo === 'Cambio de horario/día') {
       const day = dateInMonth(s.fecha_inicio, anio, mes)
       if (day) {
         const subtitle = s.subtipo_horario === 'mismo_dia'

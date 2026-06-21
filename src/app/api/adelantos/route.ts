@@ -9,6 +9,17 @@ function nextMonthStr(mes: string): string {
   return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
 }
 
+const DIA_CORTE = 8 // los ciclos cortan el día 8 (fecha de pago)
+
+function periodoLimites(mesStr: string): { desde: string; hasta: string } {
+  const [y, m] = mesStr.split('-').map(Number)
+  const desdeDate = new Date(y, m - 1, DIA_CORTE)
+  const hastaDate = new Date(y, m, DIA_CORTE) // 8 del mes siguiente, exclusive
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T00:00:00`
+  return { desde: fmt(desdeDate), hasta: fmt(hastaDate) }
+}
+
 async function getConfig() {
   const { data } = await supabaseAdmin
     .from('configuracion')
@@ -33,9 +44,8 @@ export async function GET(req: NextRequest) {
     query = query.eq('usuario_id', session.id)
   } else {
     if (mes) {
-      query = query
-        .gte('created_at', `${mes}-01T00:00:00`)
-        .lt('created_at', `${nextMonthStr(mes)}-01T00:00:00`)
+      const { desde, hasta } = periodoLimites(mes)
+      query = query.gte('created_at', desde).lt('created_at', hasta)
     }
     if (estado) {
       query = query.eq('estado', estado)
@@ -92,7 +102,13 @@ export async function POST(req: NextRequest) {
   const config = await getConfig()
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
   const day = now.getDate()
-  const mesStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const month = now.getMonth() + 1
+  const year = now.getFullYear()
+  // El período activo arranca el día 8: si hoy < 8, el período es del mes anterior
+  const periodoMes = day >= DIA_CORTE
+    ? `${year}-${String(month).padStart(2,'0')}`
+    : month === 1 ? `${year - 1}-12` : `${year}-${String(month - 1).padStart(2,'0')}`
+  const { desde: periodoDesde, hasta: periodoHasta } = periodoLimites(periodoMes)
   const monto = Number(body.monto)
 
   if (day < config.dia_habilitacion) {
@@ -110,8 +126,8 @@ export async function POST(req: NextRequest) {
     .select('id, monto')
     .eq('usuario_id', session.id)
     .neq('estado', 'rejected')
-    .gte('created_at', `${mesStr}-01T00:00:00`)
-    .lt('created_at', `${nextMonthStr(mesStr)}-01T00:00:00`)
+    .gte('created_at', periodoDesde)
+    .lt('created_at', periodoHasta)
 
   if ((existing?.length ?? 0) >= config.max_por_mes) {
     return NextResponse.json(
