@@ -38,6 +38,7 @@ const PRIORIDADES = [
   { value: 'media', label: 'Media',  bg: 'bg-amber-100', text: 'text-amber-700' },
   { value: 'baja',  label: 'Baja',   bg: 'bg-gray-100',  text: 'text-gray-500'  },
 ]
+const PRIO_ORDER: Record<string, number> = { alta: 0, media: 1, baja: 2 }
 
 const ESTADOS = [
   { value: 'pendiente', label: 'Pendiente', bg: 'bg-amber-50',  text: 'text-amber-700'  },
@@ -72,9 +73,10 @@ export default function ReparacionesClient({
 
   const [items, setItems]   = useState<Reparacion[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter]   = useState('pendiente')
+  const [filter, setFilter]     = useState('pendiente')
   const [filterCat, setFilterCat] = useState('')
-  const [toast, setToast]   = useState('')
+  const [filterEmp, setFilterEmp] = useState('')
+  const [toast, setToast]       = useState('')
 
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating]     = useState(false)
@@ -97,15 +99,24 @@ export default function ReparacionesClient({
 
   useEffect(() => { load() }, [load])
 
-  const byStatus = filter === 'todos' ? items : items.filter(i => i.estado === filter)
-  const filtered = filterCat ? byStatus.filter(i => i.categoria === filterCat) : byStatus
+  const byStatus    = filter === 'todos' ? items : items.filter(i => i.estado === filter)
+  const byCat       = filterCat ? byStatus.filter(i => i.categoria === filterCat) : byStatus
+  const byEmp       = filterEmp ? byCat.filter(i => i.usuario_id === filterEmp) : byCat
+  const filtered    = [...byEmp].sort((a, b) => (PRIO_ORDER[a.prioridad] ?? 1) - (PRIO_ORDER[b.prioridad] ?? 1))
   const counts = {
     todos:     items.length,
     pendiente: items.filter(i => i.estado === 'pendiente').length,
     resuelto:  items.filter(i => i.estado === 'resuelto').length,
     rechazado: items.filter(i => i.estado === 'rechazado').length,
   }
+  // Categories present in ALL items (for admin: always show; for employees: only if >1)
   const usedCats = [...new Set(items.map(i => i.categoria))]
+  // Employees present in ALL items (admin only)
+  const usedEmps = isAdmin
+    ? [...new Map(items.map(i => [i.usuario_id, i.nombre_empleada ?? i.usuario_id])).entries()]
+        .map(([id, nombre]) => ({ id, nombre }))
+        .sort((a, b) => a.nombre.localeCompare(b.nombre))
+    : []
 
   function openCreate() { setForm(blankForm); setFormError(''); setShowCreate(true) }
 
@@ -235,8 +246,8 @@ export default function ReparacionesClient({
         ))}
       </div>
 
-      {/* Category filters — only show categories that have at least one item */}
-      {usedCats.length > 1 && (
+      {/* Category filters — admin: always show; employees: only when >1 category used */}
+      {(isAdmin ? usedCats.length > 0 : usedCats.length > 1) && (
         <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
           <button
             onClick={() => setFilterCat('')}
@@ -246,7 +257,7 @@ export default function ReparacionesClient({
                 : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
             }`}
           >
-            Todas las categorías
+            Todas
           </button>
           {usedCats.map(v => {
             const cat = getCat(v)
@@ -264,6 +275,35 @@ export default function ReparacionesClient({
               </button>
             )
           })}
+        </div>
+      )}
+
+      {/* Employee filter — admin only, when >1 employee has items */}
+      {isAdmin && usedEmps.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+          <button
+            onClick={() => setFilterEmp('')}
+            className={`px-3 py-1.5 rounded-xl text-[12px] font-semibold shrink-0 transition-all cursor-pointer ${
+              filterEmp === ''
+                ? 'bg-gray-700 text-white'
+                : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            Todas las empleadas
+          </button>
+          {usedEmps.map(e => (
+            <button
+              key={e.id}
+              onClick={() => setFilterEmp(filterEmp === e.id ? '' : e.id)}
+              className={`px-3 py-1.5 rounded-xl text-[12px] font-semibold shrink-0 transition-all cursor-pointer ${
+                filterEmp === e.id
+                  ? 'bg-[var(--primary)] text-white'
+                  : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              {e.nombre.split(' ')[0]}
+            </button>
+          ))}
         </div>
       )}
 
