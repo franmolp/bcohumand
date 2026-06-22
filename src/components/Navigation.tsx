@@ -256,8 +256,8 @@ export default function Navigation({ user }: { user: SessionUser }) {
           <span className="text-[13px] font-bold text-white">HUMAND</span>
         </div>
         <div className="flex items-center gap-3">
-          <Link href="/dashboard/notificaciones" className="text-white/70 p-2 -mr-1">
-            <span className="relative inline-block">
+          <Link href="/dashboard/notificaciones" className="text-white/70 p-2 -mr-1 flex items-center justify-center">
+            <span className="relative inline-flex items-center justify-center">
               <IconBell size={18} />
               {unread > 0 && (
                 <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5">
@@ -266,7 +266,7 @@ export default function Navigation({ user }: { user: SessionUser }) {
               )}
             </span>
           </Link>
-          <Link href="/dashboard/perfil" className="rounded-full overflow-hidden border-2 border-white/30" style={{ width: 28, height: 28 }}>
+          <Link href="/dashboard/perfil" className="rounded-full overflow-hidden border-2 border-white/30 flex items-center justify-center flex-shrink-0" style={{ width: 32, height: 32 }}>
             <Avatar size={28} white />
           </Link>
         </div>
