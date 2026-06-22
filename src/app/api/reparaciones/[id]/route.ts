@@ -61,7 +61,19 @@ export async function DELETE(
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
-  if (!isAdmin) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
+
+  if (!isAdmin) {
+    // Employee: can only cancel their own pending requests
+    const { data: rep } = await supabaseAdmin
+      .from('reparaciones')
+      .select('usuario_id, estado')
+      .eq('id', id)
+      .single()
+    if (!rep || rep.usuario_id !== session.id)
+      return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
+    if (rep.estado !== 'pendiente')
+      return NextResponse.json({ error: 'Solo podés cancelar solicitudes pendientes' }, { status: 403 })
+  }
 
   const { error } = await supabaseAdmin.from('reparaciones').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
