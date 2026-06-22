@@ -140,7 +140,7 @@ export default async function AdminDashboard({ session }: { session: SessionUser
       .not('fecha_nacimiento', 'is', null),
 
     // Reparaciones pendientes
-    supabase.from('reparaciones').select('id').eq('estado', 'pendiente'),
+    supabaseAdmin.from('reparaciones').select('id').eq('estado', 'pendiente'),
   ])
 
   const totalEmpleados = empData.data?.length ?? 0
@@ -157,7 +157,7 @@ export default async function AdminDashboard({ session }: { session: SessionUser
     (usersData.data ?? []) as { nombre: string; fecha_nacimiento: string }[],
     today,
   )
-  const isAdminRole = session.rol === 'admin' || session.rol === 'Admin'
+  const isAdminRole = session.rol === 'admin' || session.rol === 'Admin' || session.rol === 'encargada' || session.rol === 'Encargada'
 
   // Fuentes adicionales de actividad (últimos 7 días)
   const [muroPostsRes, votosRes, fotosLogRes, comprasRes, monoRes] = await Promise.all([

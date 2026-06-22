@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { crearNotificacion, crearNotificaciones, getAdminIds } from '@/lib/notificaciones'
+import { crearNotificacion, crearNotificaciones, getAdminAndEncargadaIds } from '@/lib/notificaciones'
 
 export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+  const isAdmin = session.rol === 'admin' || session.rol === 'Admin' || session.rol === 'encargada' || session.rol === 'Encargada'
 
   if (isAdmin) {
     const { data, error } = await supabaseAdmin
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+  const isAdmin = session.rol === 'admin' || session.rol === 'Admin' || session.rol === 'encargada' || session.rol === 'Encargada'
   const body = await req.json()
   const { titulo, descripcion, categoria, prioridad, usuario_id, nombre_empleada } = body
 
@@ -56,9 +56,9 @@ export async function POST(req: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Notify admins when an employee creates a request
+  // Notify admins + encargadas when an employee creates a request
   if (!isAdmin) {
-    const adminIds = await getAdminIds()
+    const adminIds = await getAdminAndEncargadaIds()
     if (adminIds.length) {
       await crearNotificaciones(adminIds, {
         titulo: 'Nueva solicitud de reparación',

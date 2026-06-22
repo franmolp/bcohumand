@@ -68,7 +68,7 @@ export default function ReparacionesClient({
   user: SessionUser
   empleadasList: Empleada[]
 }) {
-  const isAdmin = user.rol === 'admin' || user.rol === 'Admin'
+  const isAdmin = user.rol === 'admin' || user.rol === 'Admin' || user.rol === 'encargada' || user.rol === 'Encargada'
 
   const [items, setItems]   = useState<Reparacion[]>([])
   const [loading, setLoading] = useState(true)

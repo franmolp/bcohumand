@@ -98,6 +98,21 @@ export async function getAdminIds(): Promise<string[]> {
   return (users ?? []).map((u: { id: string }) => u.id)
 }
 
+export async function getAdminAndEncargadaIds(): Promise<string[]> {
+  const { data: roles } = await supabase
+    .from('roles')
+    .select('id')
+    .or('nombre.ilike.admin,nombre.ilike.encargada')
+  if (!roles?.length) return []
+  const rolIds = roles.map((r: { id: number }) => r.id)
+  const { data: users } = await supabase
+    .from('usuarios')
+    .select('id')
+    .in('rol_id', rolIds)
+    .eq('estado_cuenta', 'activo')
+  return (users ?? []).map((u: { id: string }) => u.id)
+}
+
 export async function getAdminAndHRIds(): Promise<string[]> {
   const { data: roles } = await supabase
     .from('roles')

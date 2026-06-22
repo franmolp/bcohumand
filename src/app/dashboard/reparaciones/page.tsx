@@ -4,7 +4,7 @@ import ReparacionesClient from './client'
 
 export default async function ReparacionesPage() {
   const session = await requireAuth()
-  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+  const isAdmin = session.rol === 'admin' || session.rol === 'Admin' || session.rol === 'encargada' || session.rol === 'Encargada'
 
   const empleadasList = isAdmin
     ? ((await supabaseAdmin.from('usuarios').select('id, nombre').eq('estado_cuenta', 'activo').order('nombre')).data ?? [])

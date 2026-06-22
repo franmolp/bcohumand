@@ -11,7 +11,7 @@ export async function PATCH(
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+  const isAdmin = session.rol === 'admin' || session.rol === 'Admin' || session.rol === 'encargada' || session.rol === 'Encargada'
   if (!isAdmin) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
 
   const { estado, comentario_admin } = await req.json()
@@ -60,7 +60,7 @@ export async function DELETE(
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+  const isAdmin = session.rol === 'admin' || session.rol === 'Admin' || session.rol === 'encargada' || session.rol === 'Encargada'
 
   if (!isAdmin) {
     // Employee: can only cancel their own pending requests
