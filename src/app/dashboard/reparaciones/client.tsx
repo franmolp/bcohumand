@@ -355,6 +355,17 @@ export default function ReparacionesClient({
                       </button>
                     </div>
                   )}
+
+                  {!isAdmin && item.estado === 'pendiente' && (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        className="text-[12px] text-red-400 hover:text-red-600 transition-colors font-medium cursor-pointer"
+                      >
+                        Cancelar solicitud
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Admin action panel */}
