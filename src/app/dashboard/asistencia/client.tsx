@@ -267,7 +267,7 @@ export default function AsistenciaClient({ user }: Props) {
   // ── render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div>
+    <div className="pt-[41px] lg:pt-0">
 
       {/* Header — igual que los demás módulos */}
       <div className="pt-4 pb-3 flex items-center justify-between">
@@ -317,9 +317,6 @@ export default function AsistenciaClient({ user }: Props) {
           ))}
         </div>
       </div>
-      {/* Spacer to compensate for the fixed tab bar on mobile */}
-      <div className="h-[41px] lg:hidden" />
-
       {/* Content */}
       <div className="pb-24 lg:pb-8">
         {loading && <Spinner />}
