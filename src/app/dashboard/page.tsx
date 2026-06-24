@@ -4,8 +4,7 @@ import EmpleadoDashboard from './empleado'
 
 export default async function DashboardPage() {
   const session = await requireAuth()
-  const isAdmin     = session.rol === 'admin' || session.rol === 'Admin'
-  const isHR        = session.rol === 'HR'
-  const isEncargada = session.rol === 'encargada' || session.rol === 'Encargada'
-  return (isAdmin || isHR || isEncargada) ? <AdminDashboard session={session} /> : <EmpleadoDashboard session={session} />
+  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+  const isHR    = session.rol === 'HR'
+  return (isAdmin || isHR) ? <AdminDashboard session={session} /> : <EmpleadoDashboard session={session} />
 }

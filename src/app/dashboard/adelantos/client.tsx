@@ -54,6 +54,12 @@ function nextMes(s: string) {
   return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
 }
 
+function formatMiles(raw: string): string {
+  const digits = raw.replace(/\D/g, '')
+  if (!digits) return ''
+  return Number(digits).toLocaleString('es-AR')
+}
+
 function EstadoBadge({ estado }: { estado: string }) {
   if (estado === 'approved') return <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700">Aprobado</span>
   if (estado === 'rejected') return <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 text-red-600">Rechazado</span>
@@ -175,7 +181,7 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
       const res = await fetch('/api/adelantos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ monto: Number(monto), comentario_empleado: comentario || null }),
+        body: JSON.stringify({ monto: Number(monto.replace(/\./g, '')), comentario_empleado: comentario || null }),
       })
       const data = await res.json()
       if (!res.ok) { setFormError(data.error || 'Error al enviar'); return }
@@ -194,7 +200,7 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
       const res = await fetch('/api/adelantos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usuario_id: createUserId, empleado_nombre: createNombre, monto: Number(createMonto), comentario_admin: createComment || null }),
+        body: JSON.stringify({ usuario_id: createUserId, empleado_nombre: createNombre, monto: Number(createMonto.replace(/\./g, '')), comentario_admin: createComment || null }),
       })
       const data = await res.json()
       if (!res.ok) { setCreateError(data.error || 'Error al registrar'); return }
@@ -529,7 +535,7 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
                     <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Monto</label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-gray-400 font-medium">$</span>
-                      <input type="number" value={createMonto} onChange={e => setCreateMonto(e.target.value)} placeholder="0" required min={1}
+                      <input type="text" inputMode="numeric" value={createMonto} onChange={e => setCreateMonto(formatMiles(e.target.value))} placeholder="0" required
                         className="w-full border border-gray-200 rounded-xl pl-7 pr-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
                     </div>
                   </div>
@@ -612,8 +618,7 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
             </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[15px] text-gray-400 font-medium">$</span>
-              <input type="number" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0" required
-                min={config.monto_minimo} max={config.monto_maximo}
+              <input type="text" inputMode="numeric" value={monto} onChange={e => setMonto(formatMiles(e.target.value))} placeholder="0" required
                 className="w-full border border-gray-200 rounded-xl pl-7 pr-3 py-3 text-[16px] outline-none focus:border-[var(--primary)]" autoFocus />
             </div>
           </div>

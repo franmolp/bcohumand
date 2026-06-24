@@ -69,7 +69,8 @@ export default function ReparacionesClient({
   user: SessionUser
   empleadasList: Empleada[]
 }) {
-  const isAdmin = user.rol === 'admin' || user.rol === 'Admin' || user.rol === 'encargada' || user.rol === 'Encargada'
+  const isAdmin    = user.rol === 'admin' || user.rol === 'Admin' || user.rol === 'encargada' || user.rol === 'Encargada'
+  const canDelete  = user.rol === 'admin' || user.rol === 'Admin'
 
   const [items, setItems]   = useState<Reparacion[]>([])
   const [loading, setLoading] = useState(true)
@@ -387,12 +388,14 @@ export default function ReparacionesClient({
                         {isOpen ? 'Cancelar' : 'Actualizar'}
                       </button>
                       <span className="flex-1" />
-                      <button
-                        onClick={() => handleDelete(item.id)}
-                        className="text-[12px] text-red-400 hover:text-red-600 transition-colors font-medium cursor-pointer"
-                      >
-                        Eliminar
-                      </button>
+                      {canDelete && (
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          className="text-[12px] text-red-400 hover:text-red-600 transition-colors font-medium cursor-pointer"
+                        >
+                          Eliminar
+                        </button>
+                      )}
                     </div>
                   )}
 

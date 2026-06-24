@@ -60,10 +60,10 @@ export async function DELETE(
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const isAdmin = session.rol === 'admin' || session.rol === 'Admin' || session.rol === 'encargada' || session.rol === 'Encargada'
+  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
 
   if (!isAdmin) {
-    // Employee: can only cancel their own pending requests
+    // Employee/encargada: can only cancel their own pending requests
     const { data: rep } = await supabaseAdmin
       .from('reparaciones')
       .select('usuario_id, estado')

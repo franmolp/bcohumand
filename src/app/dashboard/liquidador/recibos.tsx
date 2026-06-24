@@ -115,7 +115,7 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
   useEffect(() => {
     fetch('/api/liquidador/recibos')
       .then(r => r.json())
-      .then(d => setRecibos(Array.isArray(d) ? d : []))
+      .then(d => setRecibos(Array.isArray(d) ? (d as ReciboDB[]).sort((a, b) => b.anio - a.anio || b.mes - a.mes) : []))
       .finally(() => setLoading(false))
   }, [])
 
