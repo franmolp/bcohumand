@@ -166,6 +166,9 @@ export default function AsistenciaClient({ user }: Props) {
   useEffect(() => { loadConfig() }, [loadConfig])
   useEffect(() => { loadRecords() }, [loadRecords])
   useEffect(() => { if (isAdmin || isHR || isEncargada) loadPrimerTurnos() }, [isAdmin, isHR, isEncargada, loadPrimerTurnos])
+  // Sync mes with the month of todosDate when in Todos tab (records are loaded per-month)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (tab === 'todos') { const m = todosDate.substring(0, 7); if (m !== mes) setMes(m) } }, [tab, todosDate])
 
   // ── memos ──────────────────────────────────────────────────────────────────
 
