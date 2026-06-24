@@ -196,9 +196,7 @@ export default function ReparacionesClient({
           <div>
             <h1 className="text-[17px] font-bold text-[var(--text)]">Reparaciones y mejoras</h1>
             <p className="text-xs text-[var(--text-muted)]">
-              {isAdmin
-                ? 'Gestioná los pedidos de arreglo y mejora del local'
-                : 'Reportá cualquier problema o mejora que notes en el salón'}
+              {isAdmin ? 'Mantenimiento y mejoras del local' : 'Reportá problemas o mejoras del salón'}
             </p>
           </div>
         </div>

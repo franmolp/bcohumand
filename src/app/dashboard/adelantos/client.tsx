@@ -321,7 +321,7 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
     const sorted = [...adelantos].sort((a, b) => a.empleado_nombre.localeCompare(b.empleado_nombre, 'es'))
 
     return (
-      <div className="p-4 lg:p-6 max-w-2xl mx-auto">
+      <div className="py-4 fade-in">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
@@ -589,7 +589,7 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
   byYear.forEach(yg => yg.months.sort((a, b) => b.mes.localeCompare(a.mes)))
 
   return (
-    <div className="p-4 lg:p-6 max-w-lg mx-auto space-y-4">
+    <div className="py-4 fade-in space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">

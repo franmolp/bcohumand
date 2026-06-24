@@ -286,40 +286,40 @@ export default function AsistenciaClient({ user }: Props) {
   // ── render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="pt-[41px] lg:pt-0">
+    <div className="pt-[100px] lg:pt-0">
 
-      {/* Header — igual que los demás módulos */}
-      <div className="pt-4 pb-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
-            <IconClipboard size={18} className="text-white" />
-          </div>
-          <h1 className="text-[17px] font-bold text-[var(--text)]">Asistencia</h1>
-        </div>
-        {isAdmin && (
-          <div className="flex items-center gap-3">
-            <button
-              onClick={regenerar}
-              disabled={regen || regenAnio}
-              className="flex items-center gap-1.5 text-sm text-[var(--primary)] font-medium disabled:opacity-50"
-            >
-              {regen ? <Spinner size={14} inline /> : <IconRefresh size={16} />}
-              {regen ? 'Regenerando…' : 'Mes'}
-            </button>
-            <button
-              onClick={regenerarAnio}
-              disabled={regen || regenAnio}
-              className="flex items-center gap-1.5 text-sm text-[var(--primary)] font-medium disabled:opacity-50"
-            >
-              {regenAnio ? <Spinner size={14} inline /> : <IconRefresh size={16} />}
-              {regenAnio ? 'Regenerando…' : 'Año completo'}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Tabs — fixed on mobile (sticky doesn't work inside overflow-y-auto on iOS Safari), sticky on desktop */}
+      {/* Header + Tabs — fixed on mobile (sticky doesn't work inside overflow-y-auto on iOS Safari), sticky on desktop */}
       <div className="fixed top-12 left-0 right-0 z-20 bg-white border-b border-[var(--border)] lg:sticky lg:top-14 lg:left-auto lg:right-auto">
+        {/* Header row */}
+        <div className="px-4 lg:px-0 pt-4 pb-2 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
+              <IconClipboard size={18} className="text-white" />
+            </div>
+            <h1 className="text-[17px] font-bold text-[var(--text)]">Asistencia</h1>
+          </div>
+          {isAdmin && (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={regenerar}
+                disabled={regen || regenAnio}
+                className="flex items-center gap-1.5 text-sm text-[var(--primary)] font-medium disabled:opacity-50"
+              >
+                {regen ? <Spinner size={14} inline /> : <IconRefresh size={16} />}
+                {regen ? 'Regenerando…' : 'Mes'}
+              </button>
+              <button
+                onClick={regenerarAnio}
+                disabled={regen || regenAnio}
+                className="flex items-center gap-1.5 text-sm text-[var(--primary)] font-medium disabled:opacity-50"
+              >
+                {regenAnio ? <Spinner size={14} inline /> : <IconRefresh size={16} />}
+                {regenAnio ? 'Regenerando…' : 'Año completo'}
+              </button>
+            </div>
+          )}
+        </div>
+        {/* Tabs row */}
         <div className="px-4 lg:px-0 flex gap-0 -mb-px overflow-x-auto scrollbar-none" style={{ touchAction: 'pan-x' }}>
           {TABS.map(t => (
             <button
