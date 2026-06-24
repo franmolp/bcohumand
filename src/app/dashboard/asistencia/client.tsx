@@ -668,7 +668,7 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
           <div className="ml-auto flex gap-4 text-center">
             <div><div className="text-lg font-bold text-emerald-600">{homeStats.presentes}</div><div className="text-[10px] text-[var(--text-muted)]">Pres.</div></div>
             <div><div className="text-lg font-bold text-amber-600">{homeStats.tardanzas}</div><div className="text-[10px] text-[var(--text-muted)]">Tard.</div></div>
-            <div><div className="text-lg font-bold text-red-600">{homeStats.ausencias}</div><div className="text-[10px] text-[var(--text-muted)]">Aus.</div></div>
+            <div><div className="text-lg font-bold text-red-600">{homeStats.ausencias + homeStats.justificadas}</div><div className="text-[10px] text-[var(--text-muted)]">Aus.</div></div>
           </div>
         </div>
       )}
