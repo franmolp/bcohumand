@@ -71,11 +71,25 @@ export async function POST(req: NextRequest) {
   // Regenerar asistencia procesada para el rango de fechas importado
   const proto = req.headers.get('x-forwarded-proto') ?? 'https'
   const host  = req.headers.get('host') ?? 'localhost:3000'
-  fetch(`${proto}://${host}/api/asistencia/regenerar`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cronSecret}` },
-    body: JSON.stringify({ fechaInicio: sortedDates[0], fechaFin: sortedDates[sortedDates.length - 1] }),
-  }).catch(() => {})
+  let regenOk = false
+  try {
+    const regenRes = await fetch(`${proto}://${host}/api/asistencia/regenerar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cronSecret}` },
+      body: JSON.stringify({ fechaInicio: sortedDates[0], fechaFin: sortedDates[sortedDates.length - 1] }),
+    })
+    regenOk = regenRes.ok
+  } catch {
+    regenOk = false
+  }
 
-  return NextResponse.json({ ok: records.length, noEncontrados: [...noEncontrados], total: rows.length })
+  if (!regenOk && adminIds.length) {
+    await crearNotificaciones(adminIds, {
+      titulo: 'HIKVISION: error en regeneración',
+      mensaje: `Las fichadas se importaron pero falló la regeneración automática del período ${sortedDates[0]} → ${sortedDates[sortedDates.length - 1]}. Regenerá manualmente.`,
+      tipo: 'warning',
+    }).catch(() => {})
+  }
+
+  return NextResponse.json({ ok: records.length, regenOk, noEncontrados: [...noEncontrados], total: rows.length })
 }
