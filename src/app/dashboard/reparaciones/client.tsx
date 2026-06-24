@@ -188,14 +188,19 @@ export default function ReparacionesClient({
   return (
     <div className="py-4 space-y-5 fade-in">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-[20px] lg:text-[22px] font-bold text-[var(--text)]">Reparaciones y mejoras</h1>
-          <p className="text-[13px] text-[var(--text-sub)] mt-0.5">
-            {isAdmin
-              ? 'Gestioná los pedidos de arreglo y mejora del local'
-              : 'Reportá cualquier problema o mejora que notes en el salón'}
-          </p>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
+            <IconWrench size={18} className="text-white" />
+          </div>
+          <div>
+            <h1 className="text-[17px] font-bold text-[var(--text)]">Reparaciones y mejoras</h1>
+            <p className="text-xs text-[var(--text-muted)]">
+              {isAdmin
+                ? 'Gestioná los pedidos de arreglo y mejora del local'
+                : 'Reportá cualquier problema o mejora que notes en el salón'}
+            </p>
+          </div>
         </div>
         <Button onClick={openCreate} icon={<IconPlus size={14} />} size="sm">
           Nueva

@@ -322,8 +322,13 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
 
     return (
       <div className="p-4 lg:p-6 max-w-2xl mx-auto">
-        <div className="flex items-center justify-between mb-5">
-          <h1 className="text-[22px] font-bold text-[var(--text)]">Adelantos</h1>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
+              <IconDollar size={18} className="text-white" />
+            </div>
+            <h1 className="text-[17px] font-bold text-[var(--text)]">Adelantos</h1>
+          </div>
           <button
             onClick={() => { setShowCreate(true); setCreateError('') }}
             className="flex items-center gap-1.5 px-3 py-2 bg-[image:var(--gradient)] text-white text-[13px] font-semibold rounded-xl cursor-pointer"
@@ -585,14 +590,19 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
 
   return (
     <div className="p-4 lg:p-6 max-w-lg mx-auto space-y-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-[22px] font-bold text-[var(--text)]">Mis Adelantos</h1>
-          {!loading && (
-            <p className="text-[13px] text-gray-400 mt-0.5">
-              {thisMesUsados} de {config.max_por_mes} adelanto{config.max_por_mes !== 1 ? 's' : ''} usados este mes
-            </p>
-          )}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
+            <IconDollar size={18} className="text-white" />
+          </div>
+          <div>
+            <h1 className="text-[17px] font-bold text-[var(--text)]">Mis Adelantos</h1>
+            {!loading && (
+              <p className="text-xs text-[var(--text-muted)]">
+                {thisMesUsados} de {config.max_por_mes} adelanto{config.max_por_mes !== 1 ? 's' : ''} usados este mes
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-1.5 text-[12px] text-gray-400 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-100">
           <IconAlertCircle size={13} />
