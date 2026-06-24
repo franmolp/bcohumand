@@ -81,6 +81,21 @@ function fmtFecha(f: string): string {
   return `${d}/${m}/${y}`
 }
 
+function weekMonSat(isoYear: number, isoWeek: number): { de: string; hasta: string } {
+  const jan4 = new Date(isoYear, 0, 4)
+  const dow = jan4.getDay() || 7
+  const monday1 = new Date(isoYear, 0, 4 - (dow - 1))
+  const monday = new Date(monday1)
+  monday.setDate(monday1.getDate() + (isoWeek - 1) * 7)
+  const saturday = new Date(monday)
+  saturday.setDate(monday.getDate() + 5)
+  const fmt = (d: Date) => {
+    const y = d.getFullYear(), mo = String(d.getMonth() + 1).padStart(2, '0'), dy = String(d.getDate()).padStart(2, '0')
+    return `${y}-${mo}-${dy}`
+  }
+  return { de: fmt(monday), hasta: fmt(saturday) }
+}
+
 
 function chipSeverity(estado: string | null): number {
   if (!estado) return -1
@@ -188,6 +203,7 @@ export default function AsistenciaClient({ user }: Props) {
 
   const weekData = useMemo(() => {
     if (!weekEmpId) return []
+    const [year] = mes.split('-').map(Number)
     const recs = records.filter(r => r.usuario_id === weekEmpId && r.fecha <= ayer)
     const byWeek = new Map<number, typeof recs>()
     for (const r of recs) {
@@ -197,10 +213,10 @@ export default function AsistenciaClient({ user }: Props) {
     }
     return Array.from(byWeek.entries()).sort(([a], [b]) => a - b).map(([semana, wr]) => {
       const stats = calcPresentismo(wr as Parameters<typeof calcPresentismo>[0], config, wr.length)
-      const fechas = wr.map(r => r.fecha).sort()
-      return { semana, stats, de: fechas[0], hasta: fechas[fechas.length - 1] }
+      const { de, hasta } = weekMonSat(year, semana)
+      return { semana, stats, de, hasta }
     })
-  }, [records, weekEmpId, config, ayer])
+  }, [records, weekEmpId, config, ayer, mes])
 
   // ── actions ────────────────────────────────────────────────────────────────
 
@@ -301,7 +317,7 @@ export default function AsistenciaClient({ user }: Props) {
 
       {/* Tabs — fixed on mobile (sticky doesn't work inside overflow-y-auto on iOS Safari), sticky on desktop */}
       <div className="fixed top-12 left-0 right-0 z-20 bg-white border-b border-[var(--border)] lg:sticky lg:top-14 lg:left-auto lg:right-auto">
-        <div className="px-4 lg:px-0 flex gap-0 -mb-px overflow-x-auto scrollbar-none">
+        <div className="px-4 lg:px-0 flex gap-0 -mb-px overflow-x-auto scrollbar-none" style={{ touchAction: 'pan-x' }}>
           {TABS.map(t => (
             <button
               key={t.key}
@@ -342,6 +358,7 @@ export default function AsistenciaClient({ user }: Props) {
             weekData={weekData} weekEmp={weekEmp} weekEmpId={weekEmpId}
             setWeekEmpId={setWeekEmpId}
             homeRecords={homeRecords}
+            onVerFicha={(empId) => { setHomeEmpId(empId); setTab('home') }}
           />
         )}
 
@@ -1337,7 +1354,7 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
 
 // ─── Tab: Presentismo ─────────────────────────────────────────────────────────
 
-function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, weekData, weekEmp, weekEmpId, setWeekEmpId, homeRecords }: {
+function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, weekData, weekEmp, weekEmpId, setWeekEmpId, homeRecords, onVerFicha }: {
   mes: string; setMes: (m: string) => void; isAdmin: boolean
   statsPerEmp: { emp: Empleado; stats: ReturnType<typeof calcPresentismo> }[]
   homeStats: ReturnType<typeof calcPresentismo>
@@ -1347,7 +1364,9 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
   weekEmpId: string | null
   setWeekEmpId: (id: string | null) => void
   homeRecords: AsistenciaProcesada[]
+  onVerFicha: (empId: string) => void
 }) {
+  const [sortBy, setSortBy] = useState<'alpha' | 'estado'>('alpha')
   const ESTADO_INFO: Record<string, { label: string; textCls: string; bgCls: string }> = {
     ok:         { label: 'Cumple',     textCls: 'text-emerald-700', bgCls: 'bg-emerald-50'  },
     bajo:       { label: 'Bajo',       textCls: 'text-amber-700',   bgCls: 'bg-amber-50'    },
@@ -1367,6 +1386,7 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
 
   // Weekly breakdown in employee view
   const empWeekData = useMemo(() => {
+    const [year] = mes.split('-').map(Number)
     const byWeek = new Map<number, { records: typeof homeRecords; semana: number }>()
     for (const r of homeRecords) {
       if (r.semana == null) continue
@@ -1375,16 +1395,17 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
     }
     return Array.from(byWeek.values()).sort((a, b) => a.semana - b.semana).map(({ semana, records: wr }) => {
       const stats = calcPresentismo(wr as Parameters<typeof calcPresentismo>[0], config, wr.length)
-      const fechas = wr.map(r => r.fecha).sort()
-      return { semana, stats, de: fechas[0], hasta: fechas[fechas.length - 1] }
+      const { de, hasta } = weekMonSat(year, semana)
+      return { semana, stats, de, hasta }
     })
-  }, [homeRecords, config])
+  }, [homeRecords, config, mes])
 
-  // Employees sorted worst → best
-  const sortedEmps = useMemo(() =>
-    [...statsPerEmp].sort((a, b) => (ESTADO_ORDER[a.stats.estado] ?? 3) - (ESTADO_ORDER[b.stats.estado] ?? 3)),
-    [statsPerEmp]
-  )
+  // Employees sorted by sortBy preference
+  const sortedEmps = useMemo(() => {
+    const arr = [...statsPerEmp]
+    if (sortBy === 'alpha') return arr.sort((a, b) => a.emp.nombre.localeCompare(b.emp.nombre, 'es'))
+    return arr.sort((a, b) => (ESTADO_ORDER[a.stats.estado] ?? 3) - (ESTADO_ORDER[b.stats.estado] ?? 3))
+  }, [statsPerEmp, sortBy])
 
   // Summary counts by estado
   const estadoCounts = useMemo(() => {
@@ -1407,6 +1428,17 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
 
       {isAdmin ? (
         <div className="space-y-3">
+          {/* Ordenamiento */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-[var(--text-muted)] mr-0.5">Ordenar:</span>
+            {(['alpha', 'estado'] as const).map(s => (
+              <button key={s} onClick={() => setSortBy(s)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${sortBy === s ? 'bg-[var(--primary)] text-white' : 'bg-gray-100 text-[var(--text-muted)] hover:bg-gray-200'}`}>
+                {s === 'alpha' ? 'A–Z' : 'Estado'}
+              </button>
+            ))}
+          </div>
+
           {/* Chips resumen de estados */}
           {estadoCounts.size > 0 && (
             <div className="flex flex-wrap gap-2">
@@ -1592,6 +1624,13 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
       {weekEmpId && weekEmp && (
         <Modal open={!!weekEmpId} onClose={() => setWeekEmpId(null)} title={`Detalle — ${weekEmp.nombre}`}>
           <div className="space-y-4 p-1">
+            {/* Acceso rápido a ficha */}
+            <button
+              onClick={() => { setWeekEmpId(null); onVerFicha(weekEmpId) }}
+              className="flex items-center gap-1 text-[12px] text-[var(--primary)] font-medium hover:opacity-75"
+            >
+              Ver ficha de {mesLabel(mes)} <IconChevronRight size={13} />
+            </button>
             {/* Resumen mensual */}
             {(() => {
               const empStats = statsPerEmp.find(s => s.emp.id === weekEmpId)?.stats
