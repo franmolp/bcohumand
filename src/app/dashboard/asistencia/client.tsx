@@ -299,9 +299,9 @@ export default function AsistenciaClient({ user }: Props) {
         )}
       </div>
 
-      {/* Tabs sticky */}
-      <div className="sticky top-14 z-20 bg-white border-b border-[var(--border)]">
-        <div className="flex gap-0 -mb-px overflow-x-auto scrollbar-none">
+      {/* Tabs — fixed on mobile (sticky doesn't work inside overflow-y-auto on iOS Safari), sticky on desktop */}
+      <div className="fixed top-12 left-0 right-0 z-20 bg-white border-b border-[var(--border)] lg:sticky lg:top-14 lg:left-auto lg:right-auto">
+        <div className="px-4 lg:px-0 flex gap-0 -mb-px overflow-x-auto scrollbar-none">
           {TABS.map(t => (
             <button
               key={t.key}
@@ -317,6 +317,8 @@ export default function AsistenciaClient({ user }: Props) {
           ))}
         </div>
       </div>
+      {/* Spacer to compensate for the fixed tab bar on mobile */}
+      <div className="h-[41px] lg:hidden" />
 
       {/* Content */}
       <div className="pb-24 lg:pb-8">
@@ -1002,6 +1004,7 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
   onRecordEdited: () => void
 }) {
   const [filterEquipo, setFilterEquipo] = useState('')
+  const [filterEstado, setFilterEstado] = useState('')
 
   // ── edit state ────────────────────────────────────────────────────────────
   const [editRec, setEditRec]               = useState<AsistenciaProcesada | null>(null)
@@ -1074,19 +1077,19 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
   }
 
   // ── memos ─────────────────────────────────────────────────────────────────
-  const counts = useMemo(() => {
-    let asistio = 0, tarde = 0, ausente = 0, justificado = 0, sinDatos = 0
-    for (const { rec } of todosData) {
-      const e = rec?.estado
-      if (!e) { sinDatos++; continue }
-      if (['Asistió', 'Tarde justificado', 'Salida temprana', 'Tarde justificado/Salida temprana'].includes(e)) asistio++
-      else if (['Llegada tarde', 'Llegada tarde/Salida temprana', 'Incompleto'].includes(e)) tarde++
-      else if (['Vacaciones', 'Ausencia justificada', 'Feriado/Local cerrado', 'Sin turnos', 'Solicitud pendiente'].includes(e)) justificado++
-      else if (['Ausente', 'Ausencia injustificada', 'Sin fichada'].includes(e)) ausente++
-      else sinDatos++
+  const filteredByEquipo = useMemo(() =>
+    filterEquipo ? todosData.filter(({ emp }) => String(emp.equipo?.id) === filterEquipo) : todosData
+  , [filterEquipo, todosData])
+
+  const stateCounts = useMemo(() => {
+    const map = new Map<string, number>()
+    let sinDatos = 0
+    for (const { rec } of filteredByEquipo) {
+      if (!rec?.estado) { sinDatos++; continue }
+      map.set(rec.estado, (map.get(rec.estado) ?? 0) + 1)
     }
-    return { asistio, tarde, ausente, justificado, sinDatos }
-  }, [todosData])
+    return { byState: map, sinDatos }
+  }, [filteredByEquipo])
 
   const equipos = useMemo(() => {
     const map = new Map<number, string>()
@@ -1094,18 +1097,31 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
     return [...map.entries()].sort(([, a], [, b]) => a.localeCompare(b, 'es'))
   }, [todosData])
 
-  const filtered = filterEquipo
-    ? todosData.filter(({ emp }) => String(emp.equipo?.id) === filterEquipo)
-    : todosData
+  const filtered = useMemo(() =>
+    filterEstado
+      ? filteredByEquipo.filter(({ rec }) =>
+          filterEstado === '__sin_datos__' ? !rec?.estado : rec?.estado === filterEstado
+        )
+      : filteredByEquipo
+  , [filteredByEquipo, filterEstado])
 
   const grouped = useMemo(() => {
+    const ROL_ORD: Record<string, number> = {
+      manicura: 0, manicuras: 0,
+      masaje: 1, masajista: 1, masajistas: 1,
+      peluquer: 2,
+      recepcion: 3, recepcionista: 3,
+      limpieza: 4,
+      admin: 99, administrador: 99,
+    }
+    const prio = (n: string) => { const l = n.toLowerCase(); for (const [k, v] of Object.entries(ROL_ORD)) if (l.includes(k)) return v; return 50 }
     const map = new Map<string, typeof filtered>()
     for (const item of filtered) {
       const key = item.emp.equipo?.nombre ?? 'Sin equipo'
       if (!map.has(key)) map.set(key, [])
       map.get(key)!.push(item)
     }
-    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b, 'es'))
+    return [...map.entries()].sort(([a], [b]) => prio(a) - prio(b) || a.localeCompare(b, 'es'))
   }, [filtered])
 
   const canGoNext = todosDate < maxDate
@@ -1139,14 +1155,42 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
         </button>
       </div>
 
-      {/* Barra resumen */}
+      {/* Barra resumen — badges por estado, clickables para filtrar */}
       {todosData.length > 0 && (
-        <div className="flex gap-2 flex-wrap">
-          {counts.asistio     > 0 && <span className="px-2.5 py-1 rounded-lg bg-green-50 text-green-700  text-[11px] font-semibold">{counts.asistio} asistieron</span>}
-          {counts.tarde       > 0 && <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700  text-[11px] font-semibold">{counts.tarde} tarde</span>}
-          {counts.ausente     > 0 && <span className="px-2.5 py-1 rounded-lg bg-red-50   text-red-700    text-[11px] font-semibold">{counts.ausente} ausentes</span>}
-          {counts.justificado > 0 && <span className="px-2.5 py-1 rounded-lg bg-blue-50  text-blue-700   text-[11px] font-semibold">{counts.justificado} justificados</span>}
-          {counts.sinDatos    > 0 && <span className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-500   text-[11px] font-semibold">{counts.sinDatos} sin datos</span>}
+        <div className="flex gap-1.5 flex-wrap">
+          {Object.entries(CHIP_INFO).map(([estado, chip]) => {
+            const count = stateCounts.byState.get(estado)
+            if (!count) return null
+            const active = filterEstado === estado
+            return (
+              <button key={estado}
+                onClick={() => setFilterEstado(active ? '' : estado)}
+                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-all border-2 ${
+                  active
+                    ? `${chip.bg} ${chip.text} border-current`
+                    : `${chip.bg} ${chip.text} border-transparent opacity-75 hover:opacity-100`
+                }`}>
+                {count} {estado}
+              </button>
+            )
+          })}
+          {stateCounts.sinDatos > 0 && (() => {
+            const active = filterEstado === '__sin_datos__'
+            return (
+              <button onClick={() => setFilterEstado(active ? '' : '__sin_datos__')}
+                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-all border-2 ${
+                  active ? 'bg-gray-200 text-gray-600 border-gray-400' : 'bg-gray-100 text-gray-400 border-transparent hover:opacity-100'
+                }`}>
+                {stateCounts.sinDatos} sin datos
+              </button>
+            )
+          })()}
+          {filterEstado && (
+            <button onClick={() => setFilterEstado('')}
+              className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white text-gray-500 border-2 border-gray-300 cursor-pointer hover:bg-gray-50">
+              ✕ todos
+            </button>
+          )}
         </div>
       )}
 
