@@ -1067,9 +1067,8 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
     if (next <= maxDate) setTodosDate(next)
   }
 
-  function getBase(rec: AsistenciaProcesada | null, turno: PrimerTurnoDia | null) {
-    if (turno?.primer_turno) return { entrada: turno.primer_turno, salida: turno.ultimo_turno, esFresha: true }
-    if (rec?.horario_base_entrada) return { entrada: rec.horario_base_entrada, salida: rec.horario_base_salida, esFresha: false }
+  function getBase(rec: AsistenciaProcesada | null) {
+    if (rec?.horario_base_entrada) return { entrada: rec.horario_base_entrada, salida: rec.horario_base_salida }
     return null
   }
 
@@ -1215,9 +1214,9 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
               <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-sub)] mb-2 px-1">{equipo}</p>
             )}
             <div className="space-y-2">
-              {items.map(({ emp, rec, turno }) => {
+              {items.map(({ emp, rec }) => {
                 const chip = rec?.estado ? (CHIP_INFO[rec.estado] ?? CHIP_INFO['Ausente']) : null
-                const base = getBase(rec, turno)
+                const base = getBase(rec)
 
                 return (
                   <div key={emp.id} className="bg-white rounded-xl border border-[var(--border)] px-3 py-3">
@@ -1236,8 +1235,8 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
                     </div>
                     {/* Fila base */}
                     {base && (
-                      <p className={`text-[11px] mb-1.5 ${base.esFresha ? 'text-violet-500 font-medium' : 'text-gray-400'}`}>
-                        {base.esFresha ? 'Fresha' : 'Base'}: {fmtTime(base.entrada)}–{fmtTime(base.salida)}
+                      <p className="text-[11px] mb-1.5 text-gray-400">
+                        Base: {fmtTime(base.entrada)}–{fmtTime(base.salida)}
                       </p>
                     )}
                     {/* Fila fichadas + horas */}
