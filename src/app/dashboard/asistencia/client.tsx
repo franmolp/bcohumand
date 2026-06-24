@@ -1500,12 +1500,18 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
                   </div>
 
                   {/* Incidencias inline */}
-                  {(stats.tardanzas > 0 || stats.ausencias > 0) && (
+                  {(stats.tardanzas > 0 || (stats.salidaTempranaCount ?? 0) > 0 || stats.ausencias > 0) && (
                     <div className="flex gap-3 mt-1.5 pt-1.5 border-t border-gray-50 text-[11px]">
                       {stats.tardanzas > 0 && (
                         <span className={stats.tardanzas > config.maxLlegadasTarde ? 'text-red-600 font-semibold' : 'text-amber-600'}>
                           {stats.tardanzas} tarde{stats.tardanzas !== 1 ? 's' : ''}
                           {stats.tardanzas > config.maxLlegadasTarde && ' · penaliza'}
+                        </span>
+                      )}
+                      {(stats.salidaTempranaCount ?? 0) > 0 && (
+                        <span className={(stats.salidaTempranaCount ?? 0) > config.maxSalidasTempranas ? 'text-red-600 font-semibold' : 'text-orange-600'}>
+                          {stats.salidaTempranaCount} salida{(stats.salidaTempranaCount ?? 0) !== 1 ? 's' : ''} temp.
+                          {(stats.salidaTempranaCount ?? 0) > config.maxSalidasTempranas && ' · penaliza'}
                         </span>
                       )}
                       {stats.ausencias > 0 && (
@@ -1556,7 +1562,7 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
           </div>
 
           {/* Cards de incidencias (solo si existen) */}
-          {(homeStats.tardanzas > 0 || homeStats.ausencias > 0) && (
+          {(homeStats.tardanzas > 0 || (homeStats.salidaTempranaCount ?? 0) > 0 || homeStats.ausencias > 0) && (
             <div className="flex gap-2">
               {homeStats.tardanzas > 0 && (
                 <div className={`flex-1 rounded-xl border p-3 text-center ${homeStats.tardanzas > config.maxLlegadasTarde ? 'border-red-200 bg-red-50' : 'border-amber-100 bg-amber-50'}`}>
@@ -1564,6 +1570,15 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
                   <div className="text-[10px] text-[var(--text-muted)] mt-0.5">Llegadas tarde</div>
                   <div className={`text-[10px] font-medium mt-0.5 ${homeStats.tardanzas > config.maxLlegadasTarde ? 'text-red-500' : 'text-amber-500'}`}>
                     {homeStats.tardanzas > config.maxLlegadasTarde ? 'Penaliza' : `Límite: ${config.maxLlegadasTarde}`}
+                  </div>
+                </div>
+              )}
+              {(homeStats.salidaTempranaCount ?? 0) > 0 && (
+                <div className={`flex-1 rounded-xl border p-3 text-center ${(homeStats.salidaTempranaCount ?? 0) > config.maxSalidasTempranas ? 'border-red-200 bg-red-50' : 'border-orange-100 bg-orange-50'}`}>
+                  <div className={`text-2xl font-bold ${(homeStats.salidaTempranaCount ?? 0) > config.maxSalidasTempranas ? 'text-red-600' : 'text-orange-600'}`}>{homeStats.salidaTempranaCount}</div>
+                  <div className="text-[10px] text-[var(--text-muted)] mt-0.5">Salidas temp.</div>
+                  <div className={`text-[10px] font-medium mt-0.5 ${(homeStats.salidaTempranaCount ?? 0) > config.maxSalidasTempranas ? 'text-red-500' : 'text-orange-500'}`}>
+                    {(homeStats.salidaTempranaCount ?? 0) > config.maxSalidasTempranas ? 'Penaliza' : `Límite: ${config.maxSalidasTempranas}`}
                   </div>
                 </div>
               )}
@@ -1660,12 +1675,18 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
                     {empStats.horasJustificadas > 0 && <span className="text-blue-500">+{fmtH(empStats.horasJustificadas)} justif</span>}
                     <span className="text-[var(--text-muted)]">/ {fmtH(empStats.minimoMensual)} mín</span>
                   </div>
-                  {(empStats.tardanzas > 0 || empStats.ausencias > 0) && (
+                  {(empStats.tardanzas > 0 || (empStats.salidaTempranaCount ?? 0) > 0 || empStats.ausencias > 0) && (
                     <div className="flex gap-3 text-[11px] pt-1.5 border-t border-gray-200">
                       {empStats.tardanzas > 0 && (
                         <span className={empStats.tardanzas > config.maxLlegadasTarde ? 'text-red-600 font-semibold' : 'text-amber-600'}>
                           {empStats.tardanzas} llegada{empStats.tardanzas !== 1 ? 's' : ''} tarde
                           {empStats.tardanzas > config.maxLlegadasTarde && ' (penaliza)'}
+                        </span>
+                      )}
+                      {(empStats.salidaTempranaCount ?? 0) > 0 && (
+                        <span className={(empStats.salidaTempranaCount ?? 0) > config.maxSalidasTempranas ? 'text-red-600 font-semibold' : 'text-orange-600'}>
+                          {empStats.salidaTempranaCount} salida{(empStats.salidaTempranaCount ?? 0) !== 1 ? 's' : ''} temp.
+                          {(empStats.salidaTempranaCount ?? 0) > config.maxSalidasTempranas && ' (penaliza)'}
                         </span>
                       )}
                       {empStats.ausencias > 0 && (
@@ -1788,6 +1809,7 @@ function AjustesTab({ configDraft, setConfigDraft, saveConfig, savingCfg, empLis
         <h2 className="text-sm font-semibold text-[var(--text)]">Penalizaciones</h2>
         <div className="grid grid-cols-2 gap-4">
           <InputNum label="Máx. llegadas tarde" field="maxLlegadasTarde" unit="por mes" />
+          <InputNum label="Máx. salidas tempranas" field="maxSalidasTempranas" unit="por mes" />
           <InputNum label="Máx. ausencias injust." field="maxAusenciasInjustificadas" />
         </div>
         <InputNum label="Mínimo semanal" field="minimoSemanal" unit="horas" />

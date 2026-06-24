@@ -29,6 +29,7 @@ export interface AsistenciaConfig {
   toleranciaEntrada: number
   toleranciaSalida: number
   maxLlegadasTarde: number
+  maxSalidasTempranas: number
   maxAusenciasInjustificadas: number
   minimoSemanal: number
   equiposPorTurnos: string[]
@@ -40,6 +41,7 @@ export const DEFAULT_CONFIG: AsistenciaConfig = {
   toleranciaEntrada: 0,
   toleranciaSalida: 15,
   maxLlegadasTarde: 2,
+  maxSalidasTempranas: 2,
   maxAusenciasInjustificadas: 1,
   minimoSemanal: 30,
   equiposPorTurnos: ['Masajes', 'Masajistas', 'Depilacion', 'Depiladoras'],
@@ -262,6 +264,7 @@ export function calcPresentismo(
 
   const penalizado =
     llegadasTardeCount > config.maxLlegadasTarde ||
+    salidaTempranaCount > config.maxSalidasTempranas ||
     ausenciasInjustificadasCount > config.maxAusenciasInjustificadas
 
   const estado: PresentismoResult['estado'] = penalizado ? 'penalizado'
