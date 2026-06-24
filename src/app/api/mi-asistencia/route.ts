@@ -17,14 +17,29 @@ export async function GET(request: NextRequest) {
   const lastDay = new Date(y, m, 0).getDate()
   const fechaFin = `${mes}-${String(lastDay).padStart(2, '0')}`
 
-  const { data, error } = await supabaseAdmin
-    .from('asistencia_procesada')
-    .select('fecha, dia_semana, estado, fichada_entrada, fichada_salida, horas_fichadas, horas_base, minutos_tarde, minutos_antes, tiene_justificacion, horario_base_entrada, horario_base_salida')
-    .eq('usuario_id', session.id)
-    .gte('fecha', fechaInicio)
-    .lte('fecha', fechaFin)
-    .order('fecha', { ascending: true })
+  const [{ data, error }, { data: solic }] = await Promise.all([
+    supabaseAdmin
+      .from('asistencia_procesada')
+      .select('fecha, dia_semana, estado, fichada_entrada, fichada_salida, horas_fichadas, horas_base, minutos_tarde, minutos_antes, tiene_justificacion, horario_base_entrada, horario_base_salida')
+      .eq('usuario_id', session.id)
+      .gte('fecha', fechaInicio)
+      .lte('fecha', fechaFin)
+      .order('fecha', { ascending: true }),
+    supabaseAdmin
+      .from('solicitudes')
+      .select('fecha_inicio, fecha_fin, motivo')
+      .eq('usuario_id', session.id)
+      .neq('estado', 'rechazada')
+      .gte('fecha_fin', fechaInicio)
+      .lte('fecha_inicio', fechaFin),
+  ])
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data ?? [])
+
+  const records = (data ?? []).map(r => {
+    const sol = (solic ?? []).find(s => r.fecha >= s.fecha_inicio && r.fecha <= s.fecha_fin && s.motivo)
+    return { ...r, motivo: sol?.motivo ?? null }
+  })
+
+  return NextResponse.json(records)
 }

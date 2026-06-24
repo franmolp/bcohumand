@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Spinner } from '@/components/ui'
 import { IconClipboard } from '@/components/ui/Icons'
 import { CHIP_INFO } from '@/lib/asistencia'
@@ -18,6 +18,7 @@ interface Registro {
   tiene_justificacion: boolean | null
   horario_base_entrada: string | null
   horario_base_salida: string | null
+  motivo: string | null
 }
 
 function daysInMonth(mes: string): number {
@@ -55,14 +56,21 @@ function mesLabel(mes: string): string {
   return raw.charAt(0).toUpperCase() + raw.slice(1)
 }
 
-export default function MiAsistenciaClient({ user }: { user: SessionUser }) {
+function buildMeses(): string[] {
   const hoy = new Date()
-  const defaultMes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
+  const prev = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1)
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  return [fmt(prev), fmt(hoy)]
+}
 
-  const [mes, setMes]         = useState(defaultMes)
+export default function MiAsistenciaClient({ user }: { user: SessionUser }) {
+  const MESES = useMemo(buildMeses, [])
+  const defaultMes = MESES[1]
+
+  const [mes, setMes]             = useState(defaultMes)
   const [registros, setRegistros] = useState<Registro[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
+  const [loading, setLoading]     = useState(false)
+  const [error, setError]         = useState('')
 
   useEffect(() => {
     setLoading(true)
@@ -80,7 +88,6 @@ export default function MiAsistenciaClient({ user }: { user: SessionUser }) {
   const dayMap = new Map(registros.map(r => [r.fecha, r]))
   const days   = Array.from({ length: daysInMonth(mes) }, (_, i) => i + 1)
 
-  // Estadísticas
   const presentes = registros.filter(r => CHIP_INFO[r.estado ?? '']?.present).length
   const tardanzas = registros.filter(r =>
     ['Llegada tarde', 'Llegada tarde/Salida temprana'].includes(r.estado ?? '')
@@ -112,10 +119,15 @@ export default function MiAsistenciaClient({ user }: { user: SessionUser }) {
         </div>
       </div>
 
-      {/* Selector de mes */}
-      <input type="month" value={mes} onChange={e => setMes(e.target.value)}
-        className="h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-        style={{ fontSize: 16 }} />
+      {/* Selector de mes (2 tabs) */}
+      <div className="flex rounded-xl border border-[var(--border)] overflow-hidden bg-white">
+        {MESES.map(m => (
+          <button key={m} onClick={() => setMes(m)}
+            className={`flex-1 py-2.5 text-sm font-medium transition-colors ${mes === m ? 'bg-[image:var(--gradient)] text-white' : 'text-[var(--text-muted)] hover:bg-gray-50'}`}>
+            {mesLabel(m)}
+          </button>
+        ))}
+      </div>
 
       {loading ? (
         <Spinner />
@@ -172,31 +184,38 @@ export default function MiAsistenciaClient({ user }: { user: SessionUser }) {
 
               const chip = CHIP_INFO[rec.estado ?? ''] ?? CHIP_INFO['Ausente']
               return (
-                <div key={d} className="px-3 py-2.5 bg-white rounded-xl border border-[var(--border)]">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-10 flex-shrink-0 text-center">
-                      <div className="text-sm font-bold text-[var(--text)]">{d}</div>
-                      <div className="text-[10px] text-[var(--text-muted)]">{dow.short}</div>
-                    </div>
-                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${chip.bg} ${chip.text}`}>
-                      {rec.estado}
-                    </span>
+                <div key={d} className="flex items-center gap-2 px-3 py-2.5 bg-white rounded-xl border border-[var(--border)]">
+                  {/* Columna de fecha — siempre centrada verticalmente */}
+                  <div className="w-10 flex-shrink-0 text-center">
+                    <div className="text-sm font-bold text-[var(--text)]">{d}</div>
+                    <div className="text-[10px] text-[var(--text-muted)]">{dow.short}</div>
                   </div>
-                  <div className="flex items-center gap-2 ml-12 text-[11px]">
-                    {(rec.horario_base_entrada || rec.horario_base_salida) && (
-                      <span className="text-gray-400">Base: {fmt5(rec.horario_base_entrada)}–{fmt5(rec.horario_base_salida)}</span>
+                  {/* Contenido */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${chip.bg} ${chip.text}`}>
+                        {rec.estado}
+                      </span>
+                    </div>
+                    {rec.motivo && (
+                      <div className="text-[10px] text-gray-400 italic mb-0.5 truncate">{rec.motivo}</div>
                     )}
-                    <div className="ml-auto flex items-center gap-1.5">
-                      {rec.fichada_entrada && (
-                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium border border-emerald-200">{fmt5(rec.fichada_entrada)}</span>
+                    <div className="flex items-center gap-1.5 text-[11px]">
+                      {(rec.horario_base_entrada || rec.horario_base_salida) && (
+                        <span className="text-gray-400 shrink-0">Base: {fmt5(rec.horario_base_entrada)}–{fmt5(rec.horario_base_salida)}</span>
                       )}
-                      {(rec.fichada_entrada || rec.fichada_salida) && <span className="text-gray-300">→</span>}
-                      {rec.fichada_salida && (
-                        <span className="px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 font-medium border border-rose-200">{fmt5(rec.fichada_salida)}</span>
-                      )}
-                      {rec.horas_fichadas != null && (
-                        <span className="font-semibold text-[var(--text)] ml-1">{fmtH(rec.horas_fichadas)}</span>
-                      )}
+                      <div className="ml-auto flex items-center gap-1.5">
+                        <span className={`px-1.5 py-0.5 rounded-full font-medium border min-w-[44px] text-center inline-block ${rec.fichada_entrada ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'invisible'}`}>
+                          {fmt5(rec.fichada_entrada) ?? ''}
+                        </span>
+                        <span className={`text-gray-300 ${!rec.fichada_entrada && !rec.fichada_salida ? 'invisible' : ''}`}>→</span>
+                        <span className={`px-1.5 py-0.5 rounded-full font-medium border min-w-[44px] text-center inline-block ${rec.fichada_salida ? 'bg-rose-50 text-rose-600 border-rose-200' : 'invisible'}`}>
+                          {fmt5(rec.fichada_salida) ?? ''}
+                        </span>
+                        {rec.horas_fichadas != null && (
+                          <span className="font-semibold text-[var(--text)] ml-1">{fmtH(rec.horas_fichadas)}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -246,6 +265,9 @@ export default function MiAsistenciaClient({ user }: { user: SessionUser }) {
                             <div className="text-xs text-gray-400 mt-0.5">
                               Base: {fmt5(rec.horario_base_entrada)} – {fmt5(rec.horario_base_salida)}
                             </div>
+                          )}
+                          {rec.motivo && (
+                            <div className="text-xs text-gray-400 italic mt-0.5">{rec.motivo}</div>
                           )}
                         </td>
                         <td className="px-4 py-3.5">

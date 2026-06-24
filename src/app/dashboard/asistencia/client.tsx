@@ -763,35 +763,43 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
             )
             const chip = CHIP_INFO[rec.estado ?? ''] ?? CHIP_INFO['Ausente']
             return (
-              <div key={d} className={`px-3 py-2.5 bg-white rounded-xl border ${isManual ? 'border-violet-200' : 'border-[var(--border)]'}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-10 flex-shrink-0 text-center">
-                    <div className="text-sm font-bold text-[var(--text)]">{d}</div>
-                    <div className="text-[10px] text-[var(--text-muted)]">{dowS}</div>
-                  </div>
-                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${chip.bg} ${chip.text}`}>{rec.estado}</span>
-                  {isManual && <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0" />}
-                  {isAdmin && (
-                    <button onClick={() => openEdit(rec)} className="ml-auto p-1.5 rounded-lg text-gray-300 hover:text-[var(--primary)] hover:bg-[var(--primary)]/5 transition-colors">
-                      <IconEdit size={14} />
-                    </button>
-                  )}
+              <div key={d} className={`flex items-center gap-2 px-3 py-2.5 bg-white rounded-xl border ${isManual ? 'border-violet-200' : 'border-[var(--border)]'}`}>
+                {/* Columna de fecha — siempre centrada verticalmente */}
+                <div className="w-10 flex-shrink-0 text-center">
+                  <div className="text-sm font-bold text-[var(--text)]">{d}</div>
+                  <div className="text-[10px] text-[var(--text-muted)]">{dowS}</div>
                 </div>
-                <div className="flex items-center gap-2 ml-12 text-[11px]">
-                  {(rec.horario_base_entrada || rec.horario_base_salida) && (
-                    <span className="text-gray-400">Base: {fmtTime(rec.horario_base_entrada)}–{fmtTime(rec.horario_base_salida)}</span>
-                  )}
-                  <div className="ml-auto flex items-center gap-1.5">
-                    {rec.fichada_entrada && <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium border border-emerald-200">{fmtTime(rec.fichada_entrada)}</span>}
-                    {(rec.fichada_entrada || rec.fichada_salida) && <span className="text-gray-300">→</span>}
-                    {rec.fichada_salida && <span className="px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 font-medium border border-rose-200">{fmtTime(rec.fichada_salida)}</span>}
-                    {rec.horas_fichadas != null
-                      ? <span className="font-semibold text-[var(--text)] ml-1">{fmtH(rec.horas_fichadas)}</span>
-                      : CHIP_INFO[rec.estado ?? '']?.justificado && horasJustif(rec) > 0
-                        ? <span className="font-semibold text-[var(--text-muted)] ml-1">{fmtH(horasJustif(rec))}</span>
-                        : null}
+                {/* Contenido */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${chip.bg} ${chip.text}`}>{rec.estado}</span>
+                    {isManual && <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0" />}
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[11px]">
+                    {(rec.horario_base_entrada || rec.horario_base_salida) && (
+                      <span className="text-gray-400 shrink-0">Base: {fmtTime(rec.horario_base_entrada)}–{fmtTime(rec.horario_base_salida)}</span>
+                    )}
+                    <div className="ml-auto flex items-center gap-1.5">
+                      <span className={`px-1.5 py-0.5 rounded-full font-medium border min-w-[44px] text-center inline-block ${rec.fichada_entrada ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'invisible'}`}>
+                        {fmtTime(rec.fichada_entrada) ?? ''}
+                      </span>
+                      <span className={`text-gray-300 ${!rec.fichada_entrada && !rec.fichada_salida ? 'invisible' : ''}`}>→</span>
+                      <span className={`px-1.5 py-0.5 rounded-full font-medium border min-w-[44px] text-center inline-block ${rec.fichada_salida ? 'bg-rose-50 text-rose-600 border-rose-200' : 'invisible'}`}>
+                        {fmtTime(rec.fichada_salida) ?? ''}
+                      </span>
+                      {rec.horas_fichadas != null
+                        ? <span className="font-semibold text-[var(--text)] ml-1">{fmtH(rec.horas_fichadas)}</span>
+                        : CHIP_INFO[rec.estado ?? '']?.justificado && horasJustif(rec) > 0
+                          ? <span className="font-semibold text-[var(--text-muted)] ml-1">{fmtH(horasJustif(rec))}</span>
+                          : null}
+                    </div>
                   </div>
                 </div>
+                {isAdmin && (
+                  <button onClick={() => openEdit(rec)} className="flex-shrink-0 p-1.5 rounded-lg text-gray-300 hover:text-[var(--primary)] hover:bg-[var(--primary)]/5 transition-colors">
+                    <IconEdit size={14} />
+                  </button>
+                )}
               </div>
             )
           })}
