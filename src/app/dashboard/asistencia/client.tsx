@@ -1348,17 +1348,21 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
   setWeekEmpId: (id: string | null) => void
   homeRecords: AsistenciaProcesada[]
 }) {
-  const estadoLabel: Record<string, { label: string; cls: string }> = {
-    ok:         { label: 'Cumple',     cls: 'text-emerald-600' },
-    bajo:       { label: 'Bajo',       cls: 'text-amber-600'   },
-    no_cumple:  { label: 'No cumple',  cls: 'text-red-600'     },
-    penalizado: { label: 'Penalizado', cls: 'text-red-700 font-bold' },
+  const ESTADO_INFO: Record<string, { label: string; textCls: string; bgCls: string }> = {
+    ok:         { label: 'Cumple',     textCls: 'text-emerald-700', bgCls: 'bg-emerald-50'  },
+    bajo:       { label: 'Bajo',       textCls: 'text-amber-700',   bgCls: 'bg-amber-50'    },
+    no_cumple:  { label: 'No cumple',  textCls: 'text-red-600',     bgCls: 'bg-red-50'      },
+    penalizado: { label: 'Penalizado', textCls: 'text-red-700',     bgCls: 'bg-red-100'     },
   }
+  const ESTADO_ORDER: Record<string, number> = { penalizado: 0, no_cumple: 1, bajo: 2, ok: 3 }
 
-  function PctBar({ pct }: { pct: number | null }) {
-    if (pct == null) return <span className="text-[var(--text-muted)]">—</span>
-    const cls = pct >= 100 ? 'text-emerald-600' : pct >= 85 ? 'text-amber-600' : 'text-red-600'
-    return <span className={`font-bold ${cls}`}>{pct}%</span>
+  function pctColor(pct: number | null) {
+    if (pct == null) return 'text-[var(--text-muted)]'
+    return pct >= 100 ? 'text-emerald-600' : pct >= 85 ? 'text-amber-600' : 'text-red-600'
+  }
+  function barColor(pct: number | null) {
+    if (pct == null) return 'bg-gray-300'
+    return pct >= 100 ? 'bg-emerald-500' : pct >= 85 ? 'bg-amber-400' : 'bg-red-500'
   }
 
   // Weekly breakdown in employee view
@@ -1376,13 +1380,25 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
     })
   }, [homeRecords, config])
 
+  // Employees sorted worst → best
+  const sortedEmps = useMemo(() =>
+    [...statsPerEmp].sort((a, b) => (ESTADO_ORDER[a.stats.estado] ?? 3) - (ESTADO_ORDER[b.stats.estado] ?? 3)),
+    [statsPerEmp]
+  )
+
+  // Summary counts by estado
+  const estadoCounts = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const { stats } of statsPerEmp) m.set(stats.estado, (m.get(stats.estado) ?? 0) + 1)
+    return m
+  }, [statsPerEmp])
+
   return (
     <div className="py-4 space-y-4">
+      {/* Selector mes */}
       <div className="flex items-center gap-2">
         <input
-          type="month"
-          value={mes}
-          onChange={e => setMes(e.target.value)}
+          type="month" value={mes} onChange={e => setMes(e.target.value)}
           className="h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
           style={{ fontSize: 16 }}
         />
@@ -1390,174 +1406,277 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
       </div>
 
       {isAdmin ? (
-        // Admin: tabla de todos
-        <div className="bg-white rounded-xl border border-[var(--border)] overflow-x-auto">
-          <table className="w-full text-sm min-w-[640px]">
-            <thead>
-              <tr className="border-b border-[var(--border)] bg-gray-50">
-                <th className="text-left px-4 py-3 font-semibold text-[var(--text)]">Empleado</th>
-                <th className="text-center px-3 py-3 font-semibold text-[var(--text-sub)]">Mínimo</th>
-                <th className="text-center px-3 py-3 font-semibold text-[var(--text-sub)]">Reales</th>
-                <th className="text-center px-3 py-3 font-semibold text-[var(--text-sub)]">(+Justif)</th>
-                <th className="text-center px-3 py-3 font-semibold text-[var(--text-sub)]">Dif</th>
-                <th className="text-center px-3 py-3 font-semibold text-[var(--text)]">%</th>
-                <th className="text-center px-3 py-3 font-semibold text-[var(--text-sub)]">Estado</th>
-                <th className="px-3 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {statsPerEmp.map(({ emp, stats }, idx) => {
-                const total = stats.horasReales + stats.horasJustificadas
-                const dif = parseFloat((total - stats.minimoMensual).toFixed(1))
-                const ei = estadoLabel[stats.estado]
+        <div className="space-y-3">
+          {/* Chips resumen de estados */}
+          {estadoCounts.size > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {(['penalizado', 'no_cumple', 'bajo', 'ok'] as const).map(k => {
+                const count = estadoCounts.get(k) ?? 0
+                if (count === 0) return null
+                const ei = ESTADO_INFO[k]
                 return (
-                  <tr key={emp.id} className={`border-b border-[var(--border)] ${idx % 2 === 0 ? '' : 'bg-gray-50/40'}`}>
-                    <td className="px-4 py-2.5 font-medium text-[var(--text)]">{emp.nombre}</td>
-                    <td className="px-3 py-2.5 text-center text-[var(--text-sub)]">{fmtH(stats.minimoMensual)}</td>
-                    <td className="px-3 py-2.5 text-center font-medium text-emerald-600">{fmtH(stats.horasReales)}</td>
-                    <td className="px-3 py-2.5 text-center text-[var(--text-muted)]">{fmtH(stats.horasJustificadas)}</td>
-                    <td className={`px-3 py-2.5 text-center font-medium ${dif >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                      {dif >= 0 ? '+' : ''}{fmtH(dif)}
-                    </td>
-                    <td className="px-3 py-2.5 text-center"><PctBar pct={stats.pct} /></td>
-                    <td className={`px-3 py-2.5 text-center text-xs ${ei.cls}`}>{ei.label}</td>
-                    <td className="px-3 py-2.5">
-                      <button
-                        onClick={() => setWeekEmpId(emp.id)}
-                        className="text-xs text-[var(--primary)] hover:underline flex items-center gap-0.5"
-                      >
-                        Semanas <IconChevronRight size={12} />
-                      </button>
-                    </td>
-                  </tr>
+                  <span key={k} className={`px-2.5 py-1 rounded-full text-xs font-semibold ${ei.bgCls} ${ei.textCls}`}>
+                    {count} {ei.label}
+                  </span>
                 )
               })}
-              {statsPerEmp.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-10 text-[var(--text-muted)] text-sm">Sin datos para {mesLabel(mes)}</td></tr>
-              )}
-            </tbody>
-          </table>
+            </div>
+          )}
+
+          {/* Cards por empleado — sin tabla, sin scroll horizontal */}
+          <div className="space-y-2">
+            {sortedEmps.map(({ emp, stats }) => {
+              const total = stats.horasReales + stats.horasJustificadas
+              const dif   = parseFloat((total - stats.minimoMensual).toFixed(1))
+              const pct   = stats.pct ?? 0
+              const ei    = ESTADO_INFO[stats.estado] ?? ESTADO_INFO['ok']
+              return (
+                <div key={emp.id} className="bg-white rounded-xl border border-[var(--border)] px-4 py-3">
+                  {/* Fila 1: nombre + estado + botón detalle */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-semibold text-sm text-[var(--text)] flex-1 min-w-0 truncate">{emp.nombre}</span>
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${ei.bgCls} ${ei.textCls}`}>{ei.label}</span>
+                    <button
+                      onClick={() => setWeekEmpId(emp.id)}
+                      className="text-[11px] text-[var(--primary)] hover:opacity-75 flex items-center gap-0.5 flex-shrink-0"
+                    >
+                      Detalle <IconChevronRight size={11} />
+                    </button>
+                  </div>
+
+                  {/* Barra de progreso + % */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${barColor(pct)}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                    </div>
+                    <span className={`text-xs font-bold w-9 text-right shrink-0 ${pctColor(stats.pct)}`}>
+                      {stats.pct != null ? `${stats.pct}%` : '—'}
+                    </span>
+                  </div>
+
+                  {/* Horas */}
+                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px]">
+                    <span className="text-emerald-600 font-medium">{fmtH(stats.horasReales)}</span>
+                    {stats.horasJustificadas > 0 && <span className="text-blue-500">+{fmtH(stats.horasJustificadas)} justif</span>}
+                    <span className="text-[var(--text-muted)]">/ {fmtH(stats.minimoMensual)} mín</span>
+                    <span className={`ml-auto font-semibold ${dif >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {dif >= 0 ? '+' : ''}{fmtH(dif)}
+                    </span>
+                  </div>
+
+                  {/* Incidencias inline */}
+                  {(stats.tardanzas > 0 || stats.ausencias > 0) && (
+                    <div className="flex gap-3 mt-1.5 pt-1.5 border-t border-gray-50 text-[11px]">
+                      {stats.tardanzas > 0 && (
+                        <span className={stats.tardanzas > config.maxLlegadasTarde ? 'text-red-600 font-semibold' : 'text-amber-600'}>
+                          {stats.tardanzas} tarde{stats.tardanzas !== 1 ? 's' : ''}
+                          {stats.tardanzas > config.maxLlegadasTarde && ' · penaliza'}
+                        </span>
+                      )}
+                      {stats.ausencias > 0 && (
+                        <span className={stats.ausencias >= config.maxAusenciasInjustificadas ? 'text-red-600 font-semibold' : 'text-[var(--text-sub)]'}>
+                          {stats.ausencias} ausencia{stats.ausencias !== 1 ? 's' : ''}
+                          {stats.ausencias >= config.maxAusenciasInjustificadas && ' · penaliza'}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+            {sortedEmps.length === 0 && (
+              <div className="text-center py-12 text-[var(--text-muted)] text-sm">Sin datos para {mesLabel(mes)}</div>
+            )}
+          </div>
         </div>
       ) : (
-        // Employee: resumen propio + semanas
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-            {[
-              { label: 'Mínimo req.', val: fmtH(homeStats.minimoMensual), cls: 'text-[var(--text)]' },
-              { label: 'Horas reales', val: fmtH(homeStats.horasReales), cls: 'text-emerald-600' },
-              { label: 'Justificadas', val: fmtH(homeStats.horasJustificadas), cls: 'text-blue-600' },
-              { label: 'Tardanzas', val: homeStats.tardanzas, cls: 'text-amber-600' },
-              { label: 'Ausencias', val: homeStats.ausencias, cls: 'text-red-600' },
-              { label: 'Presentismo', val: homeStats.pct != null ? `${homeStats.pct}%` : '—', cls: homeStats.pct == null ? 'text-[var(--text-muted)]' : homeStats.pct >= 100 ? 'text-emerald-600' : homeStats.pct >= 85 ? 'text-amber-600' : 'text-red-600' },
-            ].map(({ label, val, cls }) => (
-              <div key={label} className="bg-white rounded-xl border border-[var(--border)] p-3 text-center">
-                <div className={`text-xl font-bold ${cls}`}>{val}</div>
-                <div className="text-[11px] text-[var(--text-muted)] mt-0.5">{label}</div>
+        /* Vista empleada */
+        <div className="space-y-3">
+          {/* Card resumen grande */}
+          <div className="bg-white rounded-2xl border border-[var(--border)] p-4">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <div className="text-[11px] text-[var(--text-muted)] uppercase tracking-wide mb-0.5">Presentismo {mesLabel(mes)}</div>
+                <div className={`text-4xl font-bold ${pctColor(homeStats.pct)}`}>
+                  {homeStats.pct != null ? `${homeStats.pct}%` : '—'}
+                </div>
               </div>
-            ))}
+              {(() => {
+                const ei = ESTADO_INFO[homeStats.estado]
+                return ei ? (
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${ei.bgCls} ${ei.textCls}`}>{ei.label}</span>
+                ) : null
+              })()}
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-3">
+              <div className={`h-full rounded-full ${barColor(homeStats.pct)}`} style={{ width: `${Math.min(homeStats.pct ?? 0, 100)}%` }} />
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12px]">
+              <span><span className="text-emerald-600 font-semibold">{fmtH(homeStats.horasReales)}</span> <span className="text-[var(--text-muted)]">reales</span></span>
+              {homeStats.horasJustificadas > 0 && (
+                <span><span className="text-blue-500 font-semibold">+{fmtH(homeStats.horasJustificadas)}</span> <span className="text-[var(--text-muted)]">justif</span></span>
+              )}
+              <span className="text-[var(--text-muted)]">/ {fmtH(homeStats.minimoMensual)} mín</span>
+            </div>
           </div>
 
+          {/* Cards de incidencias (solo si existen) */}
+          {(homeStats.tardanzas > 0 || homeStats.ausencias > 0) && (
+            <div className="flex gap-2">
+              {homeStats.tardanzas > 0 && (
+                <div className={`flex-1 rounded-xl border p-3 text-center ${homeStats.tardanzas > config.maxLlegadasTarde ? 'border-red-200 bg-red-50' : 'border-amber-100 bg-amber-50'}`}>
+                  <div className={`text-2xl font-bold ${homeStats.tardanzas > config.maxLlegadasTarde ? 'text-red-600' : 'text-amber-600'}`}>{homeStats.tardanzas}</div>
+                  <div className="text-[10px] text-[var(--text-muted)] mt-0.5">Llegadas tarde</div>
+                  <div className={`text-[10px] font-medium mt-0.5 ${homeStats.tardanzas > config.maxLlegadasTarde ? 'text-red-500' : 'text-amber-500'}`}>
+                    {homeStats.tardanzas > config.maxLlegadasTarde ? 'Penaliza' : `Límite: ${config.maxLlegadasTarde}`}
+                  </div>
+                </div>
+              )}
+              {homeStats.ausencias > 0 && (
+                <div className={`flex-1 rounded-xl border p-3 text-center ${homeStats.ausencias >= config.maxAusenciasInjustificadas ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
+                  <div className={`text-2xl font-bold ${homeStats.ausencias >= config.maxAusenciasInjustificadas ? 'text-red-600' : 'text-[var(--text)]'}`}>{homeStats.ausencias}</div>
+                  <div className="text-[10px] text-[var(--text-muted)] mt-0.5">Ausencias inj.</div>
+                  <div className={`text-[10px] font-medium mt-0.5 ${homeStats.ausencias >= config.maxAusenciasInjustificadas ? 'text-red-500' : 'text-[var(--text-muted)]'}`}>
+                    {homeStats.ausencias >= config.maxAusenciasInjustificadas ? 'Penaliza' : `Límite: ${config.maxAusenciasInjustificadas}`}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Desglose semanal — sin tabla */}
           <div className="bg-white rounded-xl border border-[var(--border)] overflow-hidden">
             <div className="px-4 py-3 border-b border-[var(--border)]">
-              <h3 className="text-sm font-semibold text-[var(--text)]">Desglose semanal</h3>
+              <h3 className="text-sm font-semibold text-[var(--text)]">Semanas</h3>
             </div>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border)] bg-gray-50">
-                  <th className="text-left px-4 py-2 text-xs font-semibold text-[var(--text-sub)]">Sem.</th>
-                  <th className="text-left px-3 py-2 text-xs font-semibold text-[var(--text-sub)]">Rango</th>
-                  <th className="text-center px-3 py-2 text-xs font-semibold text-[var(--text-sub)]">Reales</th>
-                  <th className="text-center px-3 py-2 text-xs font-semibold text-[var(--text-sub)]">(+Justif)</th>
-                  <th className="text-center px-3 py-2 text-xs font-semibold text-[var(--text)]">%</th>
-                </tr>
-              </thead>
-              <tbody>
-                {empWeekData.map(({ semana, stats, de, hasta }) => {
-                  const total = stats.horasReales + stats.horasJustificadas
-                  const pct = config.minimoSemanal > 0 ? Math.round((total / config.minimoSemanal) * 100) : null
-                  return (
-                    <tr key={semana} className="border-b border-[var(--border)]">
-                      <td className="px-4 py-2 text-[var(--text-muted)]">S{semana}</td>
-                      <td className="px-3 py-2 text-xs text-[var(--text-sub)]">{fmtFecha(de)} – {fmtFecha(hasta)}</td>
-                      <td className="px-3 py-2 text-center text-emerald-600 font-medium">{fmtH(stats.horasReales)}</td>
-                      <td className="px-3 py-2 text-center text-[var(--text-muted)]">{fmtH(stats.horasJustificadas)}</td>
-                      <td className="px-3 py-2 text-center">
-                        {pct != null ? <span className={`font-bold ${pct >= 100 ? 'text-emerald-600' : pct >= 85 ? 'text-amber-600' : 'text-red-600'}`}>{pct}%</span> : '—'}
-                      </td>
-                    </tr>
-                  )
-                })}
-                {empWeekData.length === 0 && (
-                  <tr><td colSpan={5} className="text-center py-8 text-[var(--text-muted)] text-sm">Sin datos para {mesLabel(mes)}</td></tr>
-                )}
-              </tbody>
-            </table>
+            <div className="divide-y divide-[var(--border)]">
+              {empWeekData.map(({ semana, stats, de, hasta }) => {
+                const total = stats.horasReales + stats.horasJustificadas
+                const pct   = config.minimoSemanal > 0 ? Math.round((total / config.minimoSemanal) * 100) : null
+                const tard  = stats.llegadasTardeCount ?? 0
+                const aus   = stats.ausenciasInjustificadasCount ?? 0
+                return (
+                  <div key={semana} className="flex items-center gap-3 px-4 py-3">
+                    <div className="w-7 text-xs font-bold text-[var(--text-sub)] shrink-0">S{semana}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[10px] text-[var(--text-muted)] mb-1">{fmtFecha(de)} – {fmtFecha(hasta)}</div>
+                      <div className="h-1 bg-gray-100 rounded-full overflow-hidden mb-1">
+                        <div className={`h-full rounded-full ${barColor(pct)}`} style={{ width: `${Math.min(pct ?? 0, 100)}%` }} />
+                      </div>
+                      <div className="text-[11px] flex flex-wrap gap-x-1.5">
+                        <span className="text-emerald-600 font-medium">{fmtH(stats.horasReales)}</span>
+                        {stats.horasJustificadas > 0 && <span className="text-blue-400">+{fmtH(stats.horasJustificadas)}</span>}
+                        <span className="text-[var(--text-muted)]">/ {fmtH(config.minimoSemanal)} mín</span>
+                        {(tard > 0 || aus > 0) && (
+                          <span className="text-amber-600">
+                            {[tard > 0 && `${tard} tard`, aus > 0 && `${aus} aus`].filter(Boolean).join(' · ')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span className={`text-sm font-bold shrink-0 ${pctColor(pct)}`}>
+                      {pct != null ? `${pct}%` : '—'}
+                    </span>
+                  </div>
+                )
+              })}
+              {empWeekData.length === 0 && (
+                <div className="text-center py-8 text-[var(--text-muted)] text-sm">Sin datos para {mesLabel(mes)}</div>
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Modal semanas (admin) */}
+      {/* Modal detalle (admin) */}
       {weekEmpId && weekEmp && (
-        <Modal open={!!weekEmpId} onClose={() => setWeekEmpId(null)} title={`Semanas — ${weekEmp.nombre}`}>
-          <div className="space-y-3 p-1">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-[var(--border)] bg-gray-50">
-                    <th className="text-left px-3 py-2 text-xs font-semibold text-[var(--text-sub)]">Sem.</th>
-                    <th className="text-left px-3 py-2 text-xs font-semibold text-[var(--text-sub)]">Rango</th>
-                    <th className="text-center px-3 py-2 text-xs font-semibold text-[var(--text-sub)]">Reales</th>
-                    <th className="text-center px-3 py-2 text-xs font-semibold text-[var(--text-sub)]">(+Justif)</th>
-                    <th className="text-center px-3 py-2 text-xs font-semibold text-[var(--text-sub)]">Mín.</th>
-                    <th className="text-center px-3 py-2 text-xs font-semibold text-[var(--text)]">%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {weekData.map(({ semana, stats, de, hasta }) => {
-                    const total = stats.horasReales + stats.horasJustificadas
-                    const pct = config.minimoSemanal > 0 ? Math.round((total / config.minimoSemanal) * 100) : null
-                    return (
-                      <tr key={semana} className="border-b border-[var(--border)]">
-                        <td className="px-3 py-2 text-[var(--text-muted)]">S{semana}</td>
-                        <td className="px-3 py-2 text-xs text-[var(--text-sub)]">{fmtFecha(de)} – {fmtFecha(hasta)}</td>
-                        <td className="px-3 py-2 text-center text-emerald-600 font-medium">{fmtH(stats.horasReales)}</td>
-                        <td className="px-3 py-2 text-center text-[var(--text-muted)]">{fmtH(stats.horasJustificadas)}</td>
-                        <td className="px-3 py-2 text-center text-[var(--text-sub)]">{fmtH(config.minimoSemanal)}</td>
-                        <td className="px-3 py-2 text-center">
-                          {pct != null ? <span className={`font-bold ${pct >= 100 ? 'text-emerald-600' : pct >= 85 ? 'text-amber-600' : 'text-red-600'}`}>{pct}%</span> : '—'}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                  {weekData.length === 0 && (
-                    <tr><td colSpan={6} className="text-center py-8 text-[var(--text-muted)] text-sm">Sin datos</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            {/* Incidencias */}
-            {(weekEmp) && (() => {
-              const empRecs = weekData.flatMap(w => [])  // placeholder — incidencias vienen de records principales
-              const lts = weekData.reduce((s, w) => s + w.stats.llegadasTardeCount, 0)
-              const aus = weekData.reduce((s, w) => s + w.stats.ausenciasInjustificadasCount, 0)
-              return (lts > 0 || aus > 0) ? (
-                <div className="text-sm space-y-1 pt-2 border-t border-[var(--border)]">
-                  <div className="font-semibold text-[var(--text)] mb-2">Incidencias del mes</div>
-                  {lts > 0 && (
-                    <div className={`flex items-center gap-2 ${lts > config.maxLlegadasTarde ? 'text-red-600' : 'text-amber-600'}`}>
-                      <span className="font-medium">{lts} llegada{lts !== 1 ? 's' : ''} tarde</span>
-                      <span className="text-xs">({lts > config.maxLlegadasTarde ? 'penaliza' : `límite ${config.maxLlegadasTarde}`})</span>
-                    </div>
-                  )}
-                  {aus > 0 && (
-                    <div className={`flex items-center gap-2 ${aus >= config.maxAusenciasInjustificadas ? 'text-red-600' : 'text-[var(--text-sub)]'}`}>
-                      <span className="font-medium">{aus} ausencia{aus !== 1 ? 's' : ''} injustificada{aus !== 1 ? 's' : ''}</span>
-                      <span className="text-xs">({aus >= config.maxAusenciasInjustificadas ? 'penaliza' : `límite ${config.maxAusenciasInjustificadas}`})</span>
+        <Modal open={!!weekEmpId} onClose={() => setWeekEmpId(null)} title={`Detalle — ${weekEmp.nombre}`}>
+          <div className="space-y-4 p-1">
+            {/* Resumen mensual */}
+            {(() => {
+              const empStats = statsPerEmp.find(s => s.emp.id === weekEmpId)?.stats
+              if (!empStats) return null
+              const ei    = ESTADO_INFO[empStats.estado]
+              const total = empStats.horasReales + empStats.horasJustificadas
+              const dif   = parseFloat((total - empStats.minimoMensual).toFixed(1))
+              return (
+                <div className="bg-gray-50 rounded-xl px-4 py-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-2xl font-bold ${pctColor(empStats.pct)}`}>
+                      {empStats.pct != null ? `${empStats.pct}%` : '—'}
+                    </span>
+                    {ei && <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${ei.bgCls} ${ei.textCls}`}>{ei.label}</span>}
+                    <span className={`ml-auto text-sm font-semibold ${dif >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {dif >= 0 ? '+' : ''}{fmtH(dif)}
+                    </span>
+                  </div>
+                  <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${barColor(empStats.pct)}`} style={{ width: `${Math.min(empStats.pct ?? 0, 100)}%` }} />
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
+                    <span className="text-emerald-600 font-medium">{fmtH(empStats.horasReales)} reales</span>
+                    {empStats.horasJustificadas > 0 && <span className="text-blue-500">+{fmtH(empStats.horasJustificadas)} justif</span>}
+                    <span className="text-[var(--text-muted)]">/ {fmtH(empStats.minimoMensual)} mín</span>
+                  </div>
+                  {(empStats.tardanzas > 0 || empStats.ausencias > 0) && (
+                    <div className="flex gap-3 text-[11px] pt-1.5 border-t border-gray-200">
+                      {empStats.tardanzas > 0 && (
+                        <span className={empStats.tardanzas > config.maxLlegadasTarde ? 'text-red-600 font-semibold' : 'text-amber-600'}>
+                          {empStats.tardanzas} llegada{empStats.tardanzas !== 1 ? 's' : ''} tarde
+                          {empStats.tardanzas > config.maxLlegadasTarde && ' (penaliza)'}
+                        </span>
+                      )}
+                      {empStats.ausencias > 0 && (
+                        <span className={empStats.ausencias >= config.maxAusenciasInjustificadas ? 'text-red-600 font-semibold' : 'text-[var(--text-sub)]'}>
+                          {empStats.ausencias} ausencia{empStats.ausencias !== 1 ? 's' : ''}
+                          {empStats.ausencias >= config.maxAusenciasInjustificadas && ' (penaliza)'}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
-              ) : null
+              )
             })()}
+
+            {/* Semanas */}
+            <div>
+              <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">Semanas</h4>
+              <div className="space-y-1.5">
+                {weekData.map(({ semana, stats, de, hasta }) => {
+                  const total = stats.horasReales + stats.horasJustificadas
+                  const pct   = config.minimoSemanal > 0 ? Math.round((total / config.minimoSemanal) * 100) : null
+                  const tard  = stats.llegadasTardeCount ?? 0
+                  const aus   = stats.ausenciasInjustificadasCount ?? 0
+                  return (
+                    <div key={semana} className="flex items-center gap-3 bg-white rounded-xl border border-[var(--border)] px-3 py-2.5">
+                      <div className="w-7 text-xs font-bold text-[var(--text-sub)] shrink-0">S{semana}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[10px] text-[var(--text-muted)] mb-1">{fmtFecha(de)} – {fmtFecha(hasta)}</div>
+                        <div className="h-1 bg-gray-100 rounded-full overflow-hidden mb-1">
+                          <div className={`h-full rounded-full ${barColor(pct)}`} style={{ width: `${Math.min(pct ?? 0, 100)}%` }} />
+                        </div>
+                        <div className="text-[11px] flex flex-wrap gap-x-1.5">
+                          <span className="text-emerald-600 font-medium">{fmtH(stats.horasReales)}</span>
+                          {stats.horasJustificadas > 0 && <span className="text-blue-400">+{fmtH(stats.horasJustificadas)}</span>}
+                          <span className="text-[var(--text-muted)]">/ {fmtH(config.minimoSemanal)} mín</span>
+                          {(tard > 0 || aus > 0) && (
+                            <span className="text-amber-600">
+                              {[tard > 0 && `${tard} tard`, aus > 0 && `${aus} aus`].filter(Boolean).join(' · ')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <span className={`text-sm font-bold shrink-0 ${pctColor(pct)}`}>
+                        {pct != null ? `${pct}%` : '—'}
+                      </span>
+                    </div>
+                  )
+                })}
+                {weekData.length === 0 && (
+                  <div className="text-center py-6 text-[var(--text-muted)] text-sm">Sin datos</div>
+                )}
+              </div>
+            </div>
           </div>
         </Modal>
       )}
