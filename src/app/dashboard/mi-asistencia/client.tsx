@@ -15,45 +15,59 @@ interface Registro {
   horas_fichadas: number | null
   horas_base: number | null
   minutos_tarde: number | null
-  minutos_antes: number | null
   tiene_justificacion: boolean | null
   horario_base_entrada: string | null
   horario_base_salida: string | null
 }
 
-function getMeses(): { key: string; label: string }[] {
-  const hoy = new Date()
-  return [1, 0].map(offset => {
-    const d = new Date(hoy.getFullYear(), hoy.getMonth() - offset, 1)
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    const raw = d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
-    return { key, label: raw.charAt(0).toUpperCase() + raw.slice(1) }
-  })
+function daysInMonth(mes: string): number {
+  const [y, m] = mes.split('-').map(Number)
+  return new Date(y, m, 0).getDate()
+}
+
+function padDay(mes: string, d: number): string {
+  return `${mes}-${String(d).padStart(2, '0')}`
+}
+
+const DOW_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+const DOW_FULL  = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+
+function getDow(mes: string, d: number) {
+  const [y, m] = mes.split('-').map(Number)
+  const idx = new Date(y, m - 1, d).getDay()
+  return { short: DOW_SHORT[idx], full: DOW_FULL[idx], isSun: idx === 0 }
 }
 
 function fmt5(t: string | null | undefined): string | null {
   return t ? t.substring(0, 5) : null
 }
 
-function fmtHoras(h: number | null): string | null {
-  if (h == null) return null
-  const hrs = Math.floor(h)
+function fmtH(h: number): string {
+  const hrs  = Math.floor(h)
   const mins = Math.round((h - hrs) * 60)
-  if (hrs === 0) return `${mins}min`
-  return mins > 0 ? `${hrs}h ${mins}min` : `${hrs}h`
+  if (hrs === 0) return `${mins}m`
+  return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`
+}
+
+function mesLabel(mes: string): string {
+  const [y, m] = mes.split('-').map(Number)
+  const raw = new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+  return raw.charAt(0).toUpperCase() + raw.slice(1)
 }
 
 export default function MiAsistenciaClient({ user }: { user: SessionUser }) {
-  const meses = getMeses()
-  const [mesSel, setMesSel] = useState(meses[0].key)
+  const hoy = new Date()
+  const defaultMes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
+
+  const [mes, setMes]         = useState(defaultMes)
   const [registros, setRegistros] = useState<Registro[]>([])
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError]     = useState('')
 
   useEffect(() => {
     setLoading(true)
     setError('')
-    fetch(`/api/mi-asistencia?mes=${mesSel}`)
+    fetch(`/api/mi-asistencia?mes=${mes}`)
       .then(r => r.json())
       .then(d => {
         setRegistros(Array.isArray(d) ? d : [])
@@ -61,20 +75,34 @@ export default function MiAsistenciaClient({ user }: { user: SessionUser }) {
         setLoading(false)
       })
       .catch(() => { setError('Error de conexión'); setLoading(false) })
-  }, [mesSel])
+  }, [mes])
 
-  const presentes    = registros.filter(r => CHIP_INFO[r.estado ?? '']?.present).length
-  const tardanzas    = registros.filter(r => (r.minutos_tarde ?? 0) > 0 && !r.tiene_justificacion).length
-  const ausentes     = registros.filter(r => r.estado === 'Ausente' || r.estado === 'Ausencia injustificada').length
-  const justificados = registros.filter(r => CHIP_INFO[r.estado ?? '']?.justificado).length
+  const dayMap = new Map(registros.map(r => [r.fecha, r]))
+  const days   = Array.from({ length: daysInMonth(mes) }, (_, i) => i + 1)
 
-  const mesLabel = meses.find(m => m.key === mesSel)?.label ?? mesSel
+  // Estadísticas
+  const presentes = registros.filter(r => CHIP_INFO[r.estado ?? '']?.present).length
+  const tardanzas = registros.filter(r =>
+    ['Llegada tarde', 'Llegada tarde/Salida temprana'].includes(r.estado ?? '')
+  ).length
+  const ausentes  = registros.filter(r =>
+    ['Ausente', 'Ausencia injustificada'].includes(r.estado ?? '')
+  ).length
+
+  const horasTotal = parseFloat(registros.reduce((sum, r) => {
+    const chip = CHIP_INFO[r.estado ?? '']
+    if (chip?.present)     return sum + (r.horas_fichadas ?? 0)
+    if (chip?.justificado) return sum + (r.horas_base ?? 0)
+    return sum
+  }, 0).toFixed(2))
+
+  const hasData = registros.length > 0
 
   return (
-    <div className="py-4 fade-in">
+    <div className="py-4 space-y-4 fade-in">
 
-      {/* ─── Header ─── */}
-      <div className="flex items-center gap-3 mb-4">
+      {/* Header */}
+      <div className="flex items-center gap-3">
         <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
           <IconClipboard size={18} className="text-white" />
         </div>
@@ -84,152 +112,172 @@ export default function MiAsistenciaClient({ user }: { user: SessionUser }) {
         </div>
       </div>
 
-      {/* ─── Tabs de mes ─── */}
-      <div className="flex bg-white border border-gray-200/60 rounded-xl p-0.5 mb-4 w-fit">
-        {meses.map(m => (
-          <button key={m.key} onClick={() => setMesSel(m.key)}
-            className={`px-4 py-2 text-[12px] font-medium rounded-[10px] cursor-pointer transition-all whitespace-nowrap ${mesSel === m.key ? 'bg-[var(--primary)] text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>
-            {m.label}
-          </button>
-        ))}
-      </div>
+      {/* Selector de mes */}
+      <input type="month" value={mes} onChange={e => setMes(e.target.value)}
+        className="h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+        style={{ fontSize: 16 }} />
 
       {loading ? (
-        <div className="flex justify-center py-16"><Spinner size={28} /></div>
+        <Spinner />
       ) : error ? (
-        <div className="text-center py-16 text-sm text-red-500">{error}</div>
-      ) : registros.length === 0 ? (
-        <div className="text-center py-16">
-          <IconClipboard size={36} className="mx-auto text-gray-300 mb-2" />
-          <p className="text-sm text-[var(--text-sub)]">Sin registros para {mesLabel}</p>
-        </div>
+        <p className="text-center py-16 text-sm text-red-500">{error}</p>
       ) : (
         <>
-          {/* ─── Stats ─── */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
-            <div className="bg-white rounded-2xl border border-gray-200/60 p-3.5 shadow-sm">
-              <p className="text-[26px] font-bold text-emerald-600 leading-none">{presentes}</p>
-              <p className="text-[12px] text-[var(--text-sub)] mt-1">Días presentes</p>
+          {/* Card resumen */}
+          {hasData && (
+            <div className="bg-white rounded-2xl border border-[var(--border)] p-4 flex items-center gap-4">
+              <div>
+                <div className="text-xs text-[var(--text-muted)] mb-0.5">Horas {mesLabel(mes)}</div>
+                <div className="text-2xl font-bold text-[var(--text)]">{fmtH(horasTotal)}</div>
+              </div>
+              <div className="ml-auto flex gap-4 text-center">
+                <div>
+                  <div className="text-lg font-bold text-emerald-600">{presentes}</div>
+                  <div className="text-[10px] text-[var(--text-muted)]">Pres.</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-amber-600">{tardanzas}</div>
+                  <div className="text-[10px] text-[var(--text-muted)]">Tard.</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-red-600">{ausentes}</div>
+                  <div className="text-[10px] text-[var(--text-muted)]">Aus.</div>
+                </div>
+              </div>
             </div>
-            <div className="bg-white rounded-2xl border border-gray-200/60 p-3.5 shadow-sm">
-              <p className="text-[26px] font-bold text-amber-500 leading-none">{tardanzas}</p>
-              <p className="text-[12px] text-[var(--text-sub)] mt-1">Tardanzas</p>
-            </div>
-            <div className="bg-white rounded-2xl border border-gray-200/60 p-3.5 shadow-sm">
-              <p className="text-[26px] font-bold text-red-500 leading-none">{ausentes}</p>
-              <p className="text-[12px] text-[var(--text-sub)] mt-1">Ausencias</p>
-            </div>
-            <div className="bg-white rounded-2xl border border-gray-200/60 p-3.5 shadow-sm">
-              <p className="text-[26px] font-bold text-teal-500 leading-none">{justificados}</p>
-              <p className="text-[12px] text-[var(--text-sub)] mt-1">Justificados</p>
-            </div>
-          </div>
+          )}
 
-          {/* ─── MOBILE: lista ─── */}
-          <div className="lg:hidden bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
-            <div className="divide-y divide-gray-50">
-              {registros.map(r => {
-                const chip = CHIP_INFO[r.estado ?? ''] ?? CHIP_INFO['Ausente']
-                const dia = parseInt(r.fecha.split('-')[2], 10)
-                const entrada = fmt5(r.fichada_entrada)
-                const salida  = fmt5(r.fichada_salida)
-                const baseEnt = fmt5(r.horario_base_entrada)
-                const baseSal = fmt5(r.horario_base_salida)
-                const horas   = fmtHoras(r.horas_fichadas)
-                return (
-                  <div key={r.fecha} className="flex items-center gap-3 px-4 py-3.5">
-                    {/* Fecha */}
-                    <div className="w-10 text-center flex-shrink-0">
-                      <p className="text-[20px] font-bold text-[var(--text)] leading-none">{dia}</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5 uppercase">{(r.dia_semana ?? '').slice(0, 3)}</p>
+          {/* ── Mobile: cards ── */}
+          <div className="lg:hidden space-y-1.5">
+            {days.map(d => {
+              const fecha = padDay(mes, d)
+              const rec   = dayMap.get(fecha) ?? null
+              const dow   = getDow(mes, d)
+
+              if (dow.isSun && !rec) return (
+                <div key={d} className="py-1 px-3">
+                  <span className="text-xs text-gray-300">{d} Dom</span>
+                </div>
+              )
+
+              if (!rec) return (
+                <div key={d} className="flex items-center gap-3 px-3 py-2.5 bg-white rounded-xl border border-[var(--border)]">
+                  <div className="w-10 flex-shrink-0 text-center">
+                    <div className="text-sm font-bold text-[var(--text)]">{d}</div>
+                    <div className="text-[10px] text-[var(--text-muted)]">{dow.short}</div>
+                  </div>
+                  <span className="text-xs text-gray-300">—</span>
+                </div>
+              )
+
+              const chip = CHIP_INFO[rec.estado ?? ''] ?? CHIP_INFO['Ausente']
+              return (
+                <div key={d} className="px-3 py-2.5 bg-white rounded-xl border border-[var(--border)]">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-10 flex-shrink-0 text-center">
+                      <div className="text-sm font-bold text-[var(--text)]">{d}</div>
+                      <div className="text-[10px] text-[var(--text-muted)]">{dow.short}</div>
                     </div>
-
-                    {/* Estado + horas base */}
-                    <div className="flex-1 min-w-0">
-                      <span className={`inline-block text-[11px] font-semibold px-2.5 py-1 rounded-lg ${chip.bg} ${chip.text}`}>
-                        {r.estado}
-                      </span>
-                      {(r.minutos_tarde ?? 0) > 0 && !r.tiene_justificacion && (
-                        <span className="text-[11px] text-amber-600 ml-1.5">+{r.minutos_tarde}min</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${chip.bg} ${chip.text}`}>
+                      {rec.estado}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 ml-12 text-[11px]">
+                    {(rec.horario_base_entrada || rec.horario_base_salida) && (
+                      <span className="text-gray-400">Base: {fmt5(rec.horario_base_entrada)}–{fmt5(rec.horario_base_salida)}</span>
+                    )}
+                    <div className="ml-auto flex items-center gap-1.5">
+                      {rec.fichada_entrada && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium border border-emerald-200">{fmt5(rec.fichada_entrada)}</span>
                       )}
-                      {baseEnt && baseSal && (
-                        <p className="text-[11px] text-gray-400 mt-0.5">Base: {baseEnt} → {baseSal}</p>
+                      {(rec.fichada_entrada || rec.fichada_salida) && <span className="text-gray-300">→</span>}
+                      {rec.fichada_salida && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 font-medium border border-rose-200">{fmt5(rec.fichada_salida)}</span>
                       )}
-                    </div>
-
-                    {/* Fichadas */}
-                    <div className="text-right flex-shrink-0">
-                      {entrada || salida ? (
-                        <>
-                          <p className="text-[12px] font-medium text-[var(--text)]">
-                            {entrada ?? '—'} → {salida ?? '—'}
-                          </p>
-                          {horas && <p className="text-[10px] text-gray-400 mt-0.5">{horas}</p>}
-                        </>
-                      ) : (
-                        <p className="text-[11px] text-gray-300">Sin fichada</p>
+                      {rec.horas_fichadas != null && (
+                        <span className="font-semibold text-[var(--text)] ml-1">{fmtH(rec.horas_fichadas)}</span>
                       )}
                     </div>
                   </div>
-                )
-              })}
-            </div>
+                </div>
+              )
+            })}
           </div>
 
-          {/* ─── DESKTOP: tabla ─── */}
-          <div className="hidden lg:block bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-50 text-[11px] text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                  <th className="text-left py-3 px-4 font-semibold w-36">Día</th>
-                  <th className="text-left py-3 px-4 font-semibold">Estado</th>
-                  <th className="text-left py-3 px-4 font-semibold">Horario base</th>
-                  <th className="text-left py-3 px-4 font-semibold">Entrada</th>
-                  <th className="text-left py-3 px-4 font-semibold">Salida</th>
-                  <th className="text-left py-3 px-4 font-semibold">Horas</th>
-                </tr>
-              </thead>
-              <tbody>
-                {registros.map(r => {
-                  const chip    = CHIP_INFO[r.estado ?? ''] ?? CHIP_INFO['Ausente']
-                  const dia     = parseInt(r.fecha.split('-')[2], 10)
-                  const baseEnt = fmt5(r.horario_base_entrada)
-                  const baseSal = fmt5(r.horario_base_salida)
-                  return (
-                    <tr key={r.fecha} className="border-t border-gray-50 hover:bg-gray-50/50 transition-colors">
-                      <td className="py-3 px-4">
-                        <span className="text-[13px] font-semibold text-[var(--text)]">{r.dia_semana} {dia}</span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg ${chip.bg} ${chip.text}`}>
-                            {r.estado}
-                          </span>
-                          {(r.minutos_tarde ?? 0) > 0 && !r.tiene_justificacion && (
-                            <span className="text-[11px] text-amber-600">+{r.minutos_tarde}min</span>
+          {/* ── Desktop: tabla ── */}
+          {hasData && (
+            <div className="hidden lg:block bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-[var(--border)]">
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Fecha</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Entrada</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Salida</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Horas</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {days.map(d => {
+                    const fecha = padDay(mes, d)
+                    const rec   = dayMap.get(fecha) ?? null
+                    const dow   = getDow(mes, d)
+
+                    if (dow.isSun && !rec) return (
+                      <tr key={d} className="bg-gray-50/50">
+                        <td colSpan={5} className="px-5 py-2 text-xs text-gray-300">{dow.full} {d}</td>
+                      </tr>
+                    )
+                    if (!rec) return (
+                      <tr key={d} className="hover:bg-gray-50/40 transition-colors">
+                        <td className="px-5 py-3.5">
+                          <div className="text-sm font-semibold text-[var(--text)]">{dow.full} {d}</div>
+                        </td>
+                        <td colSpan={4} className="px-4 py-3.5 text-sm text-gray-300">—</td>
+                      </tr>
+                    )
+
+                    const chip = CHIP_INFO[rec.estado ?? ''] ?? CHIP_INFO['Ausente']
+                    return (
+                      <tr key={d} className="hover:bg-gray-50/40 transition-colors">
+                        <td className="px-5 py-3.5">
+                          <div className="text-sm font-semibold text-[var(--text)]">{dow.full} {d}</div>
+                          {(rec.horario_base_entrada || rec.horario_base_salida) && (
+                            <div className="text-xs text-gray-400 mt-0.5">
+                              Base: {fmt5(rec.horario_base_entrada)} – {fmt5(rec.horario_base_salida)}
+                            </div>
                           )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-[13px] text-gray-500">
-                        {baseEnt && baseSal
-                          ? <>{baseEnt} → {baseSal}</>
-                          : <span className="text-gray-300">—</span>}
-                      </td>
-                      <td className="py-3 px-4 text-[13px] text-[var(--text)]">
-                        {fmt5(r.fichada_entrada) ?? <span className="text-gray-300">—</span>}
-                      </td>
-                      <td className="py-3 px-4 text-[13px] text-[var(--text)]">
-                        {fmt5(r.fichada_salida) ?? <span className="text-gray-300">—</span>}
-                      </td>
-                      <td className="py-3 px-4 text-[13px] text-gray-500">
-                        {fmtHoras(r.horas_fichadas) ?? <span className="text-gray-300">—</span>}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          {rec.fichada_entrada
+                            ? <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">{fmt5(rec.fichada_entrada)}</span>
+                            : <span className="text-gray-300 text-sm">—</span>}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          {rec.fichada_salida
+                            ? <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-600 border border-rose-200">{fmt5(rec.fichada_salida)}</span>
+                            : <span className="text-gray-300 text-sm">—</span>}
+                        </td>
+                        <td className="px-4 py-3.5 text-sm font-medium text-[var(--text)]">
+                          {rec.horas_fichadas != null ? fmtH(rec.horas_fichadas) : '—'}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${chip.bg} ${chip.text}`}>{rec.estado}</span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {!hasData && (
+            <div className="text-center py-20">
+              <IconClipboard size={36} className="mx-auto text-gray-300 mb-2" />
+              <p className="text-sm text-[var(--text-muted)]">Sin registros para {mesLabel(mes)}</p>
+            </div>
+          )}
         </>
       )}
     </div>
