@@ -333,7 +333,7 @@ export default function AsistenciaClient({ user }: Props) {
         )}
 
         {!loading && tab === 'todos' && (isAdmin || isHR || isEncargada) && (
-          <TodosTab todosDate={todosDate} setTodosDate={setTodosDate} todosData={todosData} maxDate={ayer} />
+          <TodosTab todosDate={todosDate} setTodosDate={setTodosDate} todosData={todosData} maxDate={ayer} canEdit={canEdit} onRecordEdited={loadRecords} />
         )}
 
         {!loading && tab === 'presentismo' && (
@@ -993,14 +993,70 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
 
 // ─── Tab: Todos ───────────────────────────────────────────────────────────────
 
-function TodosTab({ todosDate, setTodosDate, todosData, maxDate }: {
+function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onRecordEdited }: {
   todosDate: string
   setTodosDate: (d: string) => void
   todosData: { emp: Empleado; rec: AsistenciaProcesada | null; turno: PrimerTurnoDia | null }[]
   maxDate: string
+  canEdit: boolean
+  onRecordEdited: () => void
 }) {
   const [filterEquipo, setFilterEquipo] = useState('')
 
+  // ── edit state ────────────────────────────────────────────────────────────
+  const [editRec, setEditRec]               = useState<AsistenciaProcesada | null>(null)
+  const [editEmpNombre, setEditEmpNombre]   = useState('')
+  const [editEstado, setEditEstado]         = useState('')
+  const [editEntrada, setEditEntrada]       = useState('')
+  const [editSalida, setEditSalida]         = useState('')
+  const [editBaseEntrada, setEditBaseEntrada] = useState('')
+  const [editBaseSalida, setEditBaseSalida] = useState('')
+  const [saving, setSaving]                 = useState(false)
+
+  function openEdit(rec: AsistenciaProcesada, empNombre: string) {
+    setEditRec(rec)
+    setEditEmpNombre(empNombre)
+    setEditEstado(rec.estado ?? 'Asistió')
+    setEditBaseEntrada(rec.horario_base_entrada?.substring(0, 5) ?? '')
+    setEditBaseSalida(rec.horario_base_salida?.substring(0, 5) ?? '')
+    setEditEntrada(rec.fichada_entrada?.substring(0, 5) ?? '')
+    setEditSalida(rec.fichada_salida?.substring(0, 5) ?? '')
+  }
+
+  async function saveEdit() {
+    if (!editRec) return
+    setSaving(true)
+    const horas = editEntrada && editSalida
+      ? parseFloat(((toMinutes(editSalida) - toMinutes(editEntrada)) / 60).toFixed(2))
+      : null
+    const res = await fetch('/api/asistencia/editar', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        usuario_id: editRec.usuario_id,
+        fecha: editRec.fecha,
+        estado: editEstado,
+        fichada_entrada: editEntrada || null,
+        fichada_salida: editSalida || null,
+        horas_fichadas: horas,
+        horario_base_entrada: editBaseEntrada || null,
+        horario_base_salida: editBaseSalida || null,
+        horas_base: editBaseEntrada && editBaseSalida
+          ? parseFloat(((toMinutes(editBaseSalida) - toMinutes(editBaseEntrada)) / 60).toFixed(2))
+          : null,
+      }),
+    })
+    const data = await res.json()
+    setSaving(false)
+    if (!data.error) { setEditRec(null); onRecordEdited() }
+  }
+
+  const estadoOpts = Object.keys(CHIP_INFO)
+  const editHoras = editEntrada && editSalida
+    ? parseFloat(((toMinutes(editSalida) - toMinutes(editEntrada)) / 60).toFixed(2))
+    : null
+
+  // ── helpers ───────────────────────────────────────────────────────────────
   function prevDay() {
     const d = new Date(todosDate + 'T00:00:00'); d.setDate(d.getDate() - 1)
     setTodosDate(d.toISOString().split('T')[0])
@@ -1011,24 +1067,13 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate }: {
     if (next <= maxDate) setTodosDate(next)
   }
 
-  // Horario de referencia: Fresha si hay turno, si no la base del registro
   function getBase(rec: AsistenciaProcesada | null, turno: PrimerTurnoDia | null) {
     if (turno?.primer_turno) return { entrada: turno.primer_turno, salida: turno.ultimo_turno, esFresha: true }
     if (rec?.horario_base_entrada) return { entrada: rec.horario_base_entrada, salida: rec.horario_base_salida, esFresha: false }
     return null
   }
 
-  // Δ en minutos entre base y fichada; isEntrada=true → positivo es tarde (malo)
-  function calcDelta(base: string | null | undefined, fichada: string | null | undefined, isEntrada: boolean) {
-    if (!base || !fichada) return null
-    const diff = toMinutes(fichada.substring(0, 5)) - toMinutes(base.substring(0, 5))
-    if (Math.abs(diff) < 2) return null
-    const bad = isEntrada ? diff > 0 : diff < 0
-    const sign = diff > 0 ? '+' : '−'
-    return { label: `${sign}${Math.abs(diff)}m`, bad }
-  }
-
-  // Resumen del día
+  // ── memos ─────────────────────────────────────────────────────────────────
   const counts = useMemo(() => {
     let asistio = 0, tarde = 0, ausente = 0, justificado = 0, sinDatos = 0
     for (const { rec } of todosData) {
@@ -1043,7 +1088,6 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate }: {
     return { asistio, tarde, ausente, justificado, sinDatos }
   }, [todosData])
 
-  // Equipos únicos del día
   const equipos = useMemo(() => {
     const map = new Map<number, string>()
     for (const { emp } of todosData) if (emp.equipo) map.set(emp.equipo.id, emp.equipo.nombre)
@@ -1054,7 +1098,6 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate }: {
     ? todosData.filter(({ emp }) => String(emp.equipo?.id) === filterEquipo)
     : todosData
 
-  // Agrupado por equipo (nombre)
   const grouped = useMemo(() => {
     const map = new Map<string, typeof filtered>()
     for (const item of filtered) {
@@ -1074,14 +1117,14 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate }: {
       <div className="flex items-center gap-2">
         <button onClick={prevDay}
           className="w-9 h-9 flex items-center justify-center rounded-xl border border-[var(--border)] bg-white hover:bg-gray-50 cursor-pointer flex-shrink-0">
-          <IconChevronRight size={16} className="text-[var(--text-sub)] rotate-180" />
+          <IconChevronRight size={16} className="text-[var(--text-sub)]" style={{ transform: 'rotate(180deg)' }} />
         </button>
         <input type="date" value={todosDate} max={maxDate}
           onChange={e => setTodosDate(e.target.value)}
           className="flex-1 h-9 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
           style={{ fontSize: 16 }} />
         <button onClick={nextDay} disabled={!canGoNext}
-          className="w-9 h-9 flex items-center justify-center rounded-xl border border-[var(--border)] bg-white hover:bg-gray-50 disabled:opacity-35 cursor-pointer flex-shrink-0">
+          className="w-9 h-9 flex items-center justify-center rounded-xl border border-[var(--border)] bg-white hover:bg-gray-50 disabled:opacity-40 cursor-pointer flex-shrink-0">
           <IconChevronRight size={16} className="text-[var(--text-sub)]" />
         </button>
       </div>
@@ -1089,11 +1132,11 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate }: {
       {/* Barra resumen */}
       {todosData.length > 0 && (
         <div className="flex gap-2 flex-wrap">
-          {counts.asistio  > 0 && <span className="px-2.5 py-1 rounded-lg bg-green-50  text-green-700  text-[11px] font-semibold">{counts.asistio} asistieron</span>}
-          {counts.tarde    > 0 && <span className="px-2.5 py-1 rounded-lg bg-amber-50  text-amber-700  text-[11px] font-semibold">{counts.tarde} tarde</span>}
-          {counts.ausente  > 0 && <span className="px-2.5 py-1 rounded-lg bg-red-50    text-red-700    text-[11px] font-semibold">{counts.ausente} ausentes</span>}
-          {counts.justificado > 0 && <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700  text-[11px] font-semibold">{counts.justificado} justificados</span>}
-          {counts.sinDatos > 0 && <span className="px-2.5 py-1 rounded-lg bg-gray-100  text-gray-500   text-[11px] font-semibold">{counts.sinDatos} sin datos</span>}
+          {counts.asistio     > 0 && <span className="px-2.5 py-1 rounded-lg bg-green-50 text-green-700  text-[11px] font-semibold">{counts.asistio} asistieron</span>}
+          {counts.tarde       > 0 && <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700  text-[11px] font-semibold">{counts.tarde} tarde</span>}
+          {counts.ausente     > 0 && <span className="px-2.5 py-1 rounded-lg bg-red-50   text-red-700    text-[11px] font-semibold">{counts.ausente} ausentes</span>}
+          {counts.justificado > 0 && <span className="px-2.5 py-1 rounded-lg bg-blue-50  text-blue-700   text-[11px] font-semibold">{counts.justificado} justificados</span>}
+          {counts.sinDatos    > 0 && <span className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-500   text-[11px] font-semibold">{counts.sinDatos} sin datos</span>}
         </div>
       )}
 
@@ -1113,8 +1156,8 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate }: {
         </div>
       )}
 
-      {/* ── Mobile: cards agrupadas ── */}
-      <div className="lg:hidden space-y-5">
+      {/* Cards agrupadas (mobile y desktop comparten el mismo layout) */}
+      <div className="space-y-5">
         {grouped.map(([equipo, items]) => (
           <div key={equipo}>
             {!filterEquipo && (
@@ -1124,44 +1167,40 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate }: {
               {items.map(({ emp, rec, turno }) => {
                 const chip = rec?.estado ? (CHIP_INFO[rec.estado] ?? CHIP_INFO['Ausente']) : null
                 const base = getBase(rec, turno)
-                const dEnt = calcDelta(base?.entrada, rec?.fichada_entrada, true)
-                const dSal = calcDelta(base?.salida, rec?.fichada_salida, false)
-                const hsOk = rec?.horas_fichadas != null && rec?.horas_base != null
-                  ? rec.horas_fichadas >= rec.horas_base - 0.25
-                  : null
 
                 return (
-                  <div key={emp.id} className="bg-white rounded-xl border border-[var(--border)] px-3 py-2.5">
-                    {/* Cabecera: nombre + chip */}
-                    <div className="flex items-center gap-2 mb-2">
+                  <div key={emp.id} className="bg-white rounded-xl border border-[var(--border)] px-3 py-3">
+                    {/* Fila superior: nombre + chip + edit */}
+                    <div className="flex items-center gap-2 mb-1.5">
                       <span className="text-[13px] font-semibold text-[var(--text)] flex-1 truncate">{emp.nombre}</span>
                       {chip
                         ? <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${chip.bg} ${chip.text}`}>{rec!.estado}</span>
                         : <span className="text-[10px] text-gray-300 shrink-0">Sin datos</span>}
+                      {canEdit && rec && (
+                        <button onClick={() => openEdit(rec, emp.nombre)}
+                          className="text-gray-400 hover:text-[var(--primary)] transition-colors cursor-pointer shrink-0 ml-1">
+                          <IconEdit size={14} />
+                        </button>
+                      )}
                     </div>
-                    {/* Grid 3 columnas: Base | Fichadas | Δ/Hs */}
-                    <div className="grid grid-cols-3 gap-x-3 gap-y-0.5 text-[11px]">
-                      <p className={`text-[9px] font-bold uppercase tracking-wide ${base?.esFresha ? 'text-violet-500' : 'text-gray-400'}`}>
-                        {base?.esFresha ? 'Fresha' : 'Base'}
+                    {/* Fila base */}
+                    {base && (
+                      <p className={`text-[11px] mb-1.5 ${base.esFresha ? 'text-violet-500 font-medium' : 'text-gray-400'}`}>
+                        {base.esFresha ? 'Fresha' : 'Base'}: {fmtTime(base.entrada)}–{fmtTime(base.salida)}
                       </p>
-                      <p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Fichadas</p>
-                      <p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Δ / Hs</p>
-
-                      {/* Entrada */}
-                      <p className="text-[var(--text-sub)]">{fmtTime(base?.entrada ?? null)}</p>
-                      <p className="text-[var(--text-sub)]">{fmtTime(rec?.fichada_entrada ?? null)}</p>
-                      <p className={dEnt ? (dEnt.bad ? 'text-red-500 font-semibold' : 'text-green-600 font-semibold') : 'text-gray-300'}>
-                        {dEnt?.label ?? '—'}
-                      </p>
-
-                      {/* Salida */}
-                      <p className="text-[var(--text-sub)]">{fmtTime(base?.salida ?? null)}</p>
-                      <p className="text-[var(--text-sub)]">{fmtTime(rec?.fichada_salida ?? null)}</p>
-                      <p className={rec?.horas_fichadas != null
-                        ? hsOk === null ? 'text-[var(--text-sub)]' : hsOk ? 'text-green-600 font-semibold' : 'text-amber-600 font-semibold'
-                        : 'text-gray-300'}>
-                        {fmtH(rec?.horas_fichadas ?? null)}
-                      </p>
+                    )}
+                    {/* Fila fichadas + horas */}
+                    <div className="flex items-center gap-1.5 text-[11px]">
+                      {rec?.fichada_entrada
+                        ? <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium border border-emerald-200">{fmtTime(rec.fichada_entrada)}</span>
+                        : <span className="text-gray-300">—</span>}
+                      {(rec?.fichada_entrada || rec?.fichada_salida) && <span className="text-gray-300">→</span>}
+                      {rec?.fichada_salida
+                        ? <span className="px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 font-medium border border-rose-200">{fmtTime(rec.fichada_salida)}</span>
+                        : rec?.fichada_entrada ? <span className="text-gray-300">—</span> : null}
+                      {rec?.horas_fichadas != null && (
+                        <span className="font-semibold text-[var(--text)] ml-1">{fmtH(rec.horas_fichadas)}</span>
+                      )}
                     </div>
                   </div>
                 )
@@ -1174,74 +1213,66 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate }: {
         )}
       </div>
 
-      {/* ── Desktop: tabla agrupada ── */}
-      <div className="hidden lg:block space-y-5">
-        {grouped.map(([equipo, items]) => (
-          <div key={equipo} className="bg-white rounded-xl border border-[var(--border)] overflow-hidden">
-            {!filterEquipo && (
-              <div className="px-4 py-2 bg-gray-50 border-b border-[var(--border)]">
-                <span className="text-[11px] font-bold uppercase tracking-widest text-[var(--text-sub)]">{equipo}</span>
-              </div>
-            )}
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border)] bg-gray-50/60">
-                  <th className="text-left px-4 py-2.5 font-semibold text-[var(--text-sub)] text-[12px]">Empleada</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-[var(--text-sub)] text-[12px]">Referencia</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-[var(--text-sub)] text-[12px]">Entrada</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-[var(--text-sub)] text-[12px]">Salida</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-[var(--text-sub)] text-[12px]">Δ entrada</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-[var(--text-sub)] text-[12px]">Hs</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-[var(--text-sub)] text-[12px]">Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map(({ emp, rec, turno }, idx) => {
-                  const chip = rec?.estado ? (CHIP_INFO[rec.estado] ?? CHIP_INFO['Ausente']) : null
-                  const base = getBase(rec, turno)
-                  const dEnt = calcDelta(base?.entrada, rec?.fichada_entrada, true)
-                  const hsOk = rec?.horas_fichadas != null && rec?.horas_base != null
-                    ? rec.horas_fichadas >= rec.horas_base - 0.25
-                    : null
-                  return (
-                    <tr key={emp.id} className={`border-b border-[var(--border)] ${idx % 2 === 0 ? '' : 'bg-gray-50/40'}`}>
-                      <td className="px-4 py-2.5 font-medium text-[var(--text)]">{emp.nombre}</td>
-                      <td className="px-3 py-2.5 text-center text-[11px]">
-                        {base ? (
-                          <span className={base.esFresha ? 'text-violet-600 font-medium' : 'text-[var(--text-sub)]'}>
-                            {fmtTime(base.entrada)} → {fmtTime(base.salida)}
-                            {base.esFresha && <span className="ml-1 text-[9px] text-violet-400">Fresha</span>}
-                          </span>
-                        ) : <span className="text-gray-300">—</span>}
-                      </td>
-                      <td className="px-3 py-2.5 text-center text-[var(--text-sub)]">{fmtTime(rec?.fichada_entrada ?? null)}</td>
-                      <td className="px-3 py-2.5 text-center text-[var(--text-sub)]">{fmtTime(rec?.fichada_salida ?? null)}</td>
-                      <td className="px-3 py-2.5 text-center">
-                        {dEnt ? (
-                          <span className={`text-[12px] font-semibold ${dEnt.bad ? 'text-red-500' : 'text-green-600'}`}>{dEnt.label}</span>
-                        ) : <span className="text-gray-300">—</span>}
-                      </td>
-                      <td className="px-3 py-2.5 text-center">
-                        <span className={`text-[12px] font-medium ${hsOk === null ? 'text-[var(--text-sub)]' : hsOk ? 'text-green-600' : 'text-amber-600'}`}>
-                          {fmtH(rec?.horas_fichadas ?? null)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-center">
-                        {chip
-                          ? <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${chip.bg} ${chip.text}`}>{rec!.estado}</span>
-                          : <span className="text-gray-300">—</span>}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+      {/* Modal editar */}
+      <Modal open={!!editRec} onClose={() => setEditRec(null)}
+        title={`Editar — ${editEmpNombre}${editRec ? ' · ' + fmtFecha(editRec.fecha) : ''}`}>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Estado</label>
+            <select value={editEstado} onChange={e => setEditEstado(e.target.value)}
+              className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+              style={{ fontSize: 16 }}>
+              {estadoOpts.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
           </div>
-        ))}
-        {filtered.length === 0 && (
-          <p className="text-center text-sm text-gray-400 py-10">Sin empleados para este día</p>
-        )}
-      </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Entrada</label>
+              <input type="time" value={editEntrada} onChange={e => setEditEntrada(e.target.value)}
+                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16 }} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Salida</label>
+              <input type="time" value={editSalida} onChange={e => setEditSalida(e.target.value)}
+                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16 }} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Entrada base</label>
+              <input type="time" value={editBaseEntrada} onChange={e => setEditBaseEntrada(e.target.value)}
+                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16 }} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Salida base</label>
+              <input type="time" value={editBaseSalida} onChange={e => setEditBaseSalida(e.target.value)}
+                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16 }} />
+            </div>
+          </div>
+          {editHoras !== null && (
+            <div className="text-xs text-[var(--text-muted)] bg-gray-50 rounded-lg px-3 py-2">
+              Horas calculadas: <strong className="text-[var(--text)]">{fmtH(editHoras)}</strong>
+            </div>
+          )}
+          <p className="text-xs text-violet-600 bg-violet-50 rounded-lg px-3 py-2">
+            Este registro quedará bloqueado y no se sobreescribirá al regenerar.
+          </p>
+          <div className="flex gap-2 justify-end pt-1">
+            <button onClick={() => setEditRec(null)}
+              className="h-9 px-4 rounded-xl text-sm font-medium text-[var(--text-muted)] hover:bg-gray-100 transition-colors cursor-pointer">
+              Cancelar
+            </button>
+            <button onClick={saveEdit} disabled={saving}
+              className="h-9 px-4 rounded-xl text-sm font-medium bg-[var(--primary)] text-white hover:opacity-90 disabled:opacity-50 transition-opacity cursor-pointer">
+              {saving ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
