@@ -11,6 +11,10 @@
     {
       "path": "/api/monotributo/notificar",
       "schedule": "0 9 26-31 * *"
+    },
+    {
+      "path": "/api/cron/convertir-certificados",
+      "schedule": "0 0 1 * *"
     }
   ]
 }
