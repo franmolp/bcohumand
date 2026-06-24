@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Button, Spinner, Toast, Modal } from '@/components/ui'
-import { IconRefresh, IconChevronRight, IconUpload, IconCheck, IconEdit, IconFileText, IconPlus, IconTrash, IconX, IconClipboard } from '@/components/ui/Icons'
+import { IconRefresh, IconChevronRight, IconChevronLeft, IconUpload, IconCheck, IconEdit, IconFileText, IconPlus, IconTrash, IconX, IconClipboard } from '@/components/ui/Icons'
 import { CHIP_INFO, calcPresentismo, DEFAULT_CONFIG, AsistenciaConfig, toMinutes } from '@/lib/asistencia'
 import { AsistenciaProcesada, SessionUser } from '@/types'
 
@@ -1117,12 +1117,22 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
       <div className="flex items-center gap-2">
         <button onClick={prevDay}
           className="w-9 h-9 flex items-center justify-center rounded-xl border border-[var(--border)] bg-white hover:bg-gray-50 cursor-pointer flex-shrink-0">
-          <IconChevronRight size={16} className="text-[var(--text-sub)]" style={{ transform: 'rotate(180deg)' }} />
+          <IconChevronLeft size={16} className="text-[var(--text-sub)]" />
         </button>
-        <input type="date" value={todosDate} max={maxDate}
-          onChange={e => setTodosDate(e.target.value)}
-          className="flex-1 h-9 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-          style={{ fontSize: 16 }} />
+        <label className="flex-1 relative cursor-pointer">
+          <span className="flex h-9 items-center justify-center rounded-xl border border-[var(--border)] bg-white px-3 text-sm font-medium text-[var(--text)] select-none">
+            {(() => {
+              const [y, m, d] = todosDate.split('-').map(Number)
+              const dia = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'][new Date(y, m - 1, d).getDay()]
+              const mes = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][m - 1]
+              return `${dia} ${d} de ${mes}`
+            })()}
+          </span>
+          <input type="date" value={todosDate} max={maxDate}
+            onChange={e => setTodosDate(e.target.value)}
+            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+            style={{ fontSize: 16 }} />
+        </label>
         <button onClick={nextDay} disabled={!canGoNext}
           className="w-9 h-9 flex items-center justify-center rounded-xl border border-[var(--border)] bg-white hover:bg-gray-50 disabled:opacity-40 cursor-pointer flex-shrink-0">
           <IconChevronRight size={16} className="text-[var(--text-sub)]" />
