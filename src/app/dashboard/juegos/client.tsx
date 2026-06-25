@@ -84,6 +84,8 @@ function HowToPlay() {
 function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) {
   const [largo, setLargo] = useState(5)
   const [pista, setPista] = useState<string | null>(null)
+  const [revelado, setRevelado] = useState(false)
+  const [revelando, setRevelando] = useState(false)
   const [intentos, setIntentos] = useState<FilaIntento[]>([])
   const [inputActual, setInputActual] = useState('')
   const [gameOver, setGameOver] = useState(false)
@@ -120,8 +122,11 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
         setTieneHoy(data.tieneHoy)
         setLargo(data.largo ?? 5)
         setPista(data.pista ?? null)
+        setRevelado(data.revelado ?? false)
         setIntentos(data.intentos ?? [])
-        if (data.jugado) {
+        if (!data.revelado) {
+          cargarRankings(false)
+        } else if (data.jugado) {
           setGameOver(true)
           setResuelta(data.resuelta)
           setPalabraCorrecta(data.palabraCorrecta)
@@ -201,6 +206,36 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
       <div className="text-4xl mb-3">📅</div>
       <p className="text-[15px] font-semibold text-[var(--text)]">No hay palabra para hoy</p>
       {isAdmin && <p className="text-[13px] text-[var(--text-muted)] mt-1">Cargá una en la sección Palabras</p>}
+    </div>
+  )
+
+  if (!revelado) return (
+    <div className="space-y-5">
+      <HowToPlay />
+      <div className="flex flex-col items-center gap-6 py-8">
+        <div className="flex gap-1.5">
+          {Array.from({ length: largo }, (_, i) => (
+            <div key={i} className="w-12 h-12 rounded-lg bg-gray-200 border-2 border-gray-200" />
+          ))}
+        </div>
+        <div className="text-center space-y-1">
+          <p className="text-[13px] text-[var(--text-muted)]">El cronómetro arranca cuando descubrís la palabra</p>
+        </div>
+        <button
+          onClick={async () => {
+            setRevelando(true)
+            await fetch('/api/juegos/revelar', { method: 'POST' })
+            setRevelado(true)
+            setRevelando(false)
+          }}
+          disabled={revelando}
+          className="w-full h-13 py-3.5 rounded-xl bg-[image:var(--gradient)] text-white text-[16px] font-bold shadow-sm active:scale-[0.98] transition-transform disabled:opacity-60 cursor-pointer"
+        >
+          {revelando ? '...' : 'Descubrir palabra'}
+        </button>
+      </div>
+      <RankingAyer data={rankingAyer} />
+      <RankingMes data={rankingMes} />
     </div>
   )
 

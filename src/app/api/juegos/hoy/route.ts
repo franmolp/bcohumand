@@ -24,6 +24,7 @@ export async function GET() {
 
   const largo = palabraHoy?.palabra?.length ?? 5
   const gameOver = partida ? partida.resuelta === true : false
+  const revelado = !!partida
 
   if (partida) {
     const { data: intentos } = await supabaseAdmin
@@ -36,6 +37,7 @@ export async function GET() {
       tieneHoy: !!palabraHoy,
       largo,
       pista: palabraHoy?.pista ?? null,
+      revelado: true,
       jugado: gameOver,
       resuelta: gameOver ? partida.resuelta : null,
       intentos: intentos ?? [],
@@ -47,6 +49,7 @@ export async function GET() {
     tieneHoy: !!palabraHoy,
     largo,
     pista: palabraHoy?.pista ?? null,
+    revelado: false,
     jugado: false,
     resuelta: null,
     intentos: [],
