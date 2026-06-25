@@ -269,17 +269,24 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
           {TECLADO.map((fila, fi) => (
             <div key={fi} className="flex gap-1">
               {fila.map(tecla => {
-                const esEspecial = tecla === '↵' || tecla === '⌫'
+                const esEnter = tecla === '↵'
+                const esBorrar = tecla === '⌫'
+                const esEspecial = esEnter || esBorrar
                 const estadoTecla = esEspecial ? null : calcEstadoTecla(tecla, intentos)
                 return (
                   <button
                     key={tecla}
                     onPointerDown={e => { e.preventDefault(); presionarTecla(tecla) }}
-                    className={`h-14 rounded-lg text-[13px] font-bold cursor-pointer select-none transition-colors active:scale-95
-                      ${esEspecial ? 'px-2 min-w-[48px] bg-gray-300 text-gray-700' :
-                        estadoTecla ? `w-9 ${COLORES[estadoTecla]}` : 'w-9 bg-gray-200 text-gray-800'}`}
+                    className={`rounded-lg font-bold cursor-pointer select-none transition-colors active:scale-95
+                      ${esEnter
+                        ? 'h-16 px-4 min-w-[72px] bg-[image:var(--gradient)] text-white text-[15px] shadow-md'
+                        : esBorrar
+                          ? 'h-14 px-2 min-w-[48px] bg-gray-300 text-gray-700 text-[13px]'
+                          : estadoTecla
+                            ? `h-14 w-9 text-[13px] ${COLORES[estadoTecla]}`
+                            : 'h-14 w-9 text-[13px] bg-gray-200 text-gray-800'}`}
                   >
-                    {tecla}
+                    {esEnter ? 'ENVIAR' : tecla}
                   </button>
                 )
               })}
