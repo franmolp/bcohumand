@@ -10,11 +10,13 @@ export async function POST() {
 
   const { data: palabraHoy } = await supabaseAdmin
     .from('juegos_palabras')
-    .select('id, palabra')
+    .select('id, palabra, pista')
     .eq('fecha', hoy)
     .single()
 
   if (!palabraHoy) return NextResponse.json({ error: 'No hay palabra para hoy' }, { status: 404 })
+
+  const pista = palabraHoy.pista ?? null
 
   // Crear partida solo si no existe — el created_at queda como momento de revelación
   const { data: existente } = await supabaseAdmin
@@ -25,11 +27,11 @@ export async function POST() {
     .eq('fecha', hoy)
     .maybeSingle()
 
-  if (existente) return NextResponse.json({ ok: true, yaRevelado: true })
+  if (existente) return NextResponse.json({ ok: true, yaRevelado: true, pista })
 
   await supabaseAdmin
     .from('juegos_partidas')
     .insert({ usuario_id: session.id, juego: 'wordle', fecha: hoy, intentos: 0, tiempo_seg: 0, resuelta: false })
 
-  return NextResponse.json({ ok: true, yaRevelado: false })
+  return NextResponse.json({ ok: true, yaRevelado: false, pista })
 }

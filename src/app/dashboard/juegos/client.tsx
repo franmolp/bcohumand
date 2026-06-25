@@ -224,7 +224,9 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
         <button
           onClick={async () => {
             setRevelando(true)
-            await fetch('/api/juegos/revelar', { method: 'POST' })
+            const res = await fetch('/api/juegos/revelar', { method: 'POST' })
+            const data = await res.json()
+            if (data.pista) setPista(data.pista)
             setRevelado(true)
             setRevelando(false)
           }}
