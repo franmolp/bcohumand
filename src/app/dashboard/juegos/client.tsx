@@ -219,7 +219,7 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
           ))}
         </div>
         <div className="text-center space-y-1">
-          <p className="text-[13px] text-[var(--text-muted)]">El cronómetro arranca cuando descubrís la palabra</p>
+          <p className="text-[13px] text-[var(--text-muted)]">El cronómetro arranca cuando destapás la palabra</p>
         </div>
         <button
           onClick={async () => {
@@ -233,7 +233,7 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
           disabled={revelando}
           className="w-full h-13 py-3.5 rounded-xl bg-[image:var(--gradient)] text-white text-[16px] font-bold shadow-sm active:scale-[0.98] transition-transform disabled:opacity-60 cursor-pointer"
         >
-          {revelando ? '...' : 'Descubrir palabra'}
+          {revelando ? '...' : 'Destapar palabra'}
         </button>
       </div>
       <RankingAyer data={rankingAyer} />
