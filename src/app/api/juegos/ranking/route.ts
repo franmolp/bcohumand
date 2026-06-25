@@ -12,9 +12,10 @@ export async function GET(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const tipo = request.nextUrl.searchParams.get('tipo') ?? 'hoy'
-  const hoy = new Date().toLocaleDateString('en-CA')
+  const tz = 'America/Argentina/Buenos_Aires'
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: tz })
   const ayerDate = new Date(); ayerDate.setDate(ayerDate.getDate() - 1)
-  const ayer = ayerDate.toLocaleDateString('en-CA')
+  const ayer = ayerDate.toLocaleDateString('en-CA', { timeZone: tz })
 
   if (tipo === 'hoy') {
     const { data: partidas } = await supabaseAdmin

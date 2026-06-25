@@ -9,7 +9,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   if (!isAdmin) return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
 
   const { id } = await params
-  const hoy = new Date().toLocaleDateString('en-CA')
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
 
   const { data: palabra } = await supabaseAdmin
     .from('juegos_palabras')

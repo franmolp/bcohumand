@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
   if (!palabra || typeof palabra !== 'string')
     return NextResponse.json({ error: 'Palabra inválida' }, { status: 400 })
 
-  const hoy = new Date().toLocaleDateString('en-CA')
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
   const guess = palabra.toUpperCase().trim()
 
   if (!/^[A-ZÑ]+$/.test(guess))

@@ -6,7 +6,7 @@ export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const hoy = new Date().toLocaleDateString('en-CA')
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
 
   const { data: palabraHoy } = await supabaseAdmin
     .from('juegos_palabras')
