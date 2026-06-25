@@ -30,6 +30,15 @@ export async function POST(request: NextRequest) {
   if (!/^[A-ZÑ]{2,15}$/.test(clean))
     return NextResponse.json({ error: 'La palabra debe tener 2–15 letras (A-Z, Ñ)' }, { status: 400 })
 
+  const { data: existente } = await supabaseAdmin
+    .from('juegos_palabras')
+    .select('id')
+    .eq('fecha', fecha)
+    .maybeSingle()
+
+  if (existente)
+    return NextResponse.json({ error: `Ya hay una palabra para esa fecha` }, { status: 409 })
+
   const { data, error } = await supabaseAdmin
     .from('juegos_palabras')
     .insert({ palabra: clean, fecha, pista: pista?.trim() || null, creado_por: session.id })
