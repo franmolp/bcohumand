@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import type { SessionUser } from '@/types'
 import { supabase } from '@/lib/supabase'
-import { IconCalendar, IconBell, IconAlertCircle, IconChevronRight } from '@/components/ui/Icons'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+import { IconCalendar, IconBell, IconAlertCircle, IconChevronRight, IconStar } from '@/components/ui/Icons'
 import GoogleReviewsCarousel from '@/components/GoogleReviewsCarousel'
 
 const VACACIONES_DEFAULT = 14
@@ -100,6 +101,66 @@ function tipoColor(tipo: string): string {
   return map[tipo] ?? '#6b7280'
 }
 
+// ─── Wordle Card ──────────────────────────────────────────────────────────────
+
+function WordleCard({ tieneHoy, revelado, resuelta, posicionMes, mesNombre }: {
+  tieneHoy: boolean
+  revelado: boolean
+  resuelta: boolean
+  posicionMes: number | null
+  mesNombre: string
+}) {
+  if (!tieneHoy) return null
+
+  const rankingBadge = posicionMes !== null ? (
+    <div className="text-right shrink-0">
+      <p className="text-[10px] text-gray-400 capitalize">{mesNombre}</p>
+      <p className="text-[16px] font-bold text-[var(--primary)]">{posicionMes}°</p>
+    </div>
+  ) : null
+
+  if (resuelta) {
+    return (
+      <Link href="/dashboard/juegos" className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-shadow">
+        <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center shrink-0 text-[20px]">✅</div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[14px] font-bold text-[var(--text)]">Ya participaste hoy</p>
+          <p className="text-[12px] text-gray-400">A las 00:00 tendrás una nueva palabra</p>
+        </div>
+        {rankingBadge}
+      </Link>
+    )
+  }
+
+  if (revelado) {
+    return (
+      <Link href="/dashboard/juegos" className="flex items-center gap-3 bg-white rounded-2xl border border-amber-100 shadow-sm p-4 hover:shadow-md transition-shadow">
+        <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0 text-[20px]">🟡</div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[14px] font-bold text-[var(--text)]">Tenés una partida en curso</p>
+          <p className="text-[12px] text-gray-400">¡Seguí intentando!</p>
+        </div>
+        <IconChevronRight size={14} className="text-gray-300 shrink-0" />
+      </Link>
+    )
+  }
+
+  return (
+    <Link href="/dashboard/juegos" className="flex items-center gap-3 rounded-2xl p-4 shadow-sm hover:opacity-95 transition-opacity" style={{ background: 'var(--gradient)' }}>
+      <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+        <IconStar size={20} className="text-white" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[14px] font-bold text-white">¡Jugá la palabra del día!</p>
+        <p className="text-[12px] text-white/70">Adiviná la palabra oculta</p>
+      </div>
+      <IconChevronRight size={16} className="text-white/60 shrink-0" />
+    </Link>
+  )
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+
 export default async function EmpleadoDashboard({ session }: { session: SessionUser }) {
   // Fecha en timezone Argentina para evitar desfase UTC
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
@@ -117,7 +178,12 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   const periodStart = `${periodYear}-04-01`
   const periodLabel = `${periodYear}/${String(periodYear + 1).slice(2)}`
 
-  const [vacRes, notifRes, usersRes, evRes, configRes, solPendRes, ausentesRes, muroRes] = await Promise.all([
+  // Mes actual para ranking de juegos
+  const mesStart = `${yr}-${String(mo).padStart(2,'0')}-01`
+  const mesEnd   = `${yr}-${String(mo).padStart(2,'0')}-${String(new Date(yr, mo, 0).getDate()).padStart(2,'0')}`
+  const mesNombre = today.toLocaleString('es', { month: 'long' })
+
+  const [vacRes, notifRes, usersRes, evRes, configRes, solPendRes, ausentesRes, muroRes, palabraHoyRes, partidaHoyRes, rankingMesRes] = await Promise.all([
     supabase
       .from('solicitudes')
       .select('dias')
@@ -172,6 +238,28 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
       .gte('created_at', hace7Str)
       .order('created_at', { ascending: false })
       .limit(1),
+
+    supabaseAdmin
+      .from('juegos_palabras')
+      .select('id')
+      .eq('fecha', todayStr)
+      .maybeSingle(),
+
+    supabaseAdmin
+      .from('juegos_partidas')
+      .select('id, resuelta')
+      .eq('usuario_id', session.id)
+      .eq('juego', 'wordle')
+      .eq('fecha', todayStr)
+      .maybeSingle(),
+
+    supabaseAdmin
+      .from('juegos_partidas')
+      .select('usuario_id, intentos')
+      .eq('juego', 'wordle')
+      .eq('resuelta', true)
+      .gte('fecha', mesStart)
+      .lte('fecha', mesEnd),
   ])
 
   // Vacaciones
@@ -204,6 +292,22 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
     return fin >= todayStr
   })
 
+  // Juegos
+  const tieneHoy  = !!palabraHoyRes.data
+  const partidaHoy = partidaHoyRes.data
+  const revelado  = !!partidaHoy
+  const resuelta  = partidaHoy?.resuelta ?? false
+
+  const rankMap: Record<string, number> = {}
+  for (const p of rankingMesRes.data ?? []) {
+    const pts = Math.max(1, 11 - (p.intentos ?? 0))
+    rankMap[p.usuario_id] = (rankMap[p.usuario_id] ?? 0) + pts
+  }
+  const sortedRanking = Object.entries(rankMap).sort(([, a], [, b]) => b - a)
+  const posicionMes = session.id in rankMap
+    ? sortedRanking.findIndex(([uid]) => uid === session.id) + 1
+    : null
+
   const notifs  = notifRes.data ?? []
   const misSOLS = solPendRes.data ?? []
   const firstName = session.nombre.split(' ')[0]
@@ -232,6 +336,15 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
           {fmtDateLabel(today)}
         </p>
       </div>
+
+      {/* Wordle del día */}
+      <WordleCard
+        tieneHoy={tieneHoy}
+        revelado={revelado}
+        resuelta={resuelta}
+        posicionMes={posicionMes}
+        mesNombre={mesNombre}
+      />
 
       {/* Ausentes hoy — visible para HR y Encargada */}
       {showAusentes && (
