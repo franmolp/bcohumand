@@ -1420,8 +1420,8 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
         message={`¿Eliminar la solicitud de ${deleteItem?.empleado_nombre ?? ''}? No se puede deshacer.`}
         confirmLabel="Eliminar" danger />
 
-      {/* ─── Herramientas admin ─── */}
-      {isAdmin && (
+      {/* ─── Herramientas admin (ocultas — cambiar false por isAdmin para reactivar) ─── */}
+      {false && isAdmin && (
         <div className="mt-8 border-t border-gray-100 pt-6 space-y-3">
           <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Herramientas de administración</p>
 
