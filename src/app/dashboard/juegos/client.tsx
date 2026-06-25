@@ -19,7 +19,7 @@ const COLORES: Record<Estado, string> = {
 const TECLADO = [
   ['Q','W','E','R','T','Y','U','I','O','P'],
   ['A','S','D','F','G','H','J','K','L','Ñ'],
-  ['↵','Z','X','C','V','B','N','M','⌫'],
+  ['Z','X','C','V','B','N','M','⌫'],
 ]
 
 function fmtTiempo(seg: number) {
@@ -267,31 +267,33 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
       {!gameOver && (
         <div className="flex flex-col items-center gap-1.5">
           {TECLADO.map((fila, fi) => (
-            <div key={fi} className="flex gap-1">
+            <div key={fi} className={`flex gap-1 ${fi === TECLADO.length - 1 ? 'justify-center' : ''}`}>
               {fila.map(tecla => {
-                const esEnter = tecla === '↵'
                 const esBorrar = tecla === '⌫'
-                const esEspecial = esEnter || esBorrar
-                const estadoTecla = esEspecial ? null : calcEstadoTecla(tecla, intentos)
+                const estadoTecla = esBorrar ? null : calcEstadoTecla(tecla, intentos)
                 return (
                   <button
                     key={tecla}
                     onPointerDown={e => { e.preventDefault(); presionarTecla(tecla) }}
-                    className={`rounded-lg font-bold cursor-pointer select-none transition-colors active:scale-95
-                      ${esEnter
-                        ? 'h-16 px-4 min-w-[72px] bg-[image:var(--gradient)] text-white text-[15px] shadow-md'
-                        : esBorrar
-                          ? 'h-14 px-2 min-w-[48px] bg-gray-300 text-gray-700 text-[13px]'
-                          : estadoTecla
-                            ? `h-14 w-9 text-[13px] ${COLORES[estadoTecla]}`
-                            : 'h-14 w-9 text-[13px] bg-gray-200 text-gray-800'}`}
+                    className={`h-14 rounded-lg font-bold cursor-pointer select-none transition-colors active:scale-95
+                      ${esBorrar
+                        ? 'px-2 min-w-[48px] bg-gray-300 text-gray-700 text-[13px]'
+                        : estadoTecla
+                          ? `w-9 text-[13px] ${COLORES[estadoTecla]}`
+                          : 'w-9 text-[13px] bg-gray-200 text-gray-800'}`}
                   >
-                    {esEnter ? 'ENVIAR' : tecla}
+                    {tecla}
                   </button>
                 )
               })}
             </div>
           ))}
+          <button
+            onPointerDown={e => { e.preventDefault(); presionarTecla('↵') }}
+            className="w-full h-12 mt-1 rounded-xl bg-[image:var(--gradient)] text-white text-[15px] font-bold cursor-pointer select-none shadow-sm active:scale-[0.98] transition-transform"
+          >
+            ENVIAR
+          </button>
         </div>
       )}
 
