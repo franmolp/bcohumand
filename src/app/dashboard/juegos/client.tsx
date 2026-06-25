@@ -473,6 +473,7 @@ function AdminPalabras() {
   const [pistaAdmin, setPistaAdmin] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+  const [editando, setEditando] = useState<PalabraAdmin | null>(null)
 
   const hoy = new Date().toLocaleDateString('en-CA')
 
@@ -558,8 +559,13 @@ function AdminPalabras() {
             {palabras.map(p => {
               const esPasada = p.fecha < hoy
               const esHoy = p.fecha === hoy
+              const editable = !esPasada && !esHoy
               return (
-                <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
+                <div
+                  key={p.id}
+                  onClick={() => editable && setEditando(p)}
+                  className={`flex items-center gap-3 px-4 py-2.5 ${editable ? 'cursor-pointer active:bg-gray-50' : ''}`}
+                >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className={`text-[13px] font-bold tracking-wider ${esPasada ? 'text-gray-300' : esHoy ? 'text-[var(--primary)]' : 'text-[var(--text)]'}`}>
@@ -571,10 +577,10 @@ function AdminPalabras() {
                     </div>
                     {p.pista && <p className="text-[11px] text-gray-400 truncate mt-0.5">{p.pista}</p>}
                   </div>
-                  {!esPasada && !esHoy && (
+                  {editable && (
                     <button
-                      onClick={() => eliminar(p.id)}
-                      className="ml-auto p-1.5 text-gray-300 hover:text-red-400 cursor-pointer transition-colors"
+                      onClick={ev => { ev.stopPropagation(); eliminar(p.id) }}
+                      className="p-1.5 text-gray-300 hover:text-red-400 cursor-pointer transition-colors shrink-0"
                     >
                       <IconTrash size={14} />
                     </button>
@@ -584,6 +590,90 @@ function AdminPalabras() {
             })}
           </div>
         )}
+      </div>
+
+      {editando && (
+        <EditarModal
+          palabra={editando}
+          hoy={hoy}
+          onClose={() => setEditando(null)}
+          onSaved={() => { setEditando(null); cargar() }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Modal editar ─────────────────────────────────────────────────────────────
+
+function EditarModal({ palabra, hoy, onClose, onSaved }: {
+  palabra: PalabraAdmin
+  hoy: string
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [palabraVal, setPalabraVal] = useState(palabra.palabra)
+  const [fechaVal, setFechaVal] = useState(palabra.fecha)
+  const [pistaVal, setPistaVal] = useState(palabra.pista ?? '')
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState('')
+
+  const guardar = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setGuardando(true)
+    setError('')
+    const res = await fetch(`/api/juegos/palabras/${palabra.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ palabra: palabraVal.toUpperCase().trim(), fecha: fechaVal, pista: pistaVal.trim() || null }),
+    })
+    const data = await res.json()
+    setGuardando(false)
+    if (!res.ok) { setError(data.error); return }
+    onSaved()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="w-full max-w-lg bg-white rounded-t-3xl p-5 space-y-4 pb-8"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <p className="text-[15px] font-bold text-[var(--text)]">Editar palabra</p>
+          <button onClick={onClose} className="text-gray-400 p-1 cursor-pointer">✕</button>
+        </div>
+        <form onSubmit={guardar} className="space-y-3">
+          <input
+            value={palabraVal}
+            onChange={e => setPalabraVal(e.target.value.toUpperCase())}
+            placeholder="PALABRA"
+            maxLength={15}
+            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] font-bold tracking-widest uppercase outline-none focus:border-[var(--primary)]"
+          />
+          <input
+            type="date"
+            value={fechaVal}
+            min={hoy}
+            onChange={e => setFechaVal(e.target.value)}
+            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] outline-none focus:border-[var(--primary)]"
+          />
+          <textarea
+            value={pistaVal}
+            onChange={e => setPistaVal(e.target.value)}
+            placeholder="Pista (opcional)..."
+            rows={2}
+            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] outline-none focus:border-[var(--primary)] resize-none"
+          />
+          {error && <p className="text-[12px] text-red-500">{error}</p>}
+          <button
+            type="submit"
+            disabled={guardando || !palabraVal || !fechaVal}
+            className="w-full py-3 bg-[image:var(--gradient)] text-white text-[14px] font-semibold rounded-xl disabled:opacity-50 cursor-pointer"
+          >
+            {guardando ? 'Guardando...' : 'Guardar cambios'}
+          </button>
+        </form>
       </div>
     </div>
   )
