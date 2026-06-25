@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { SessionUser } from '@/types'
-import { IconHome, IconUsers, IconClipboard, IconLogout, IconBell, IconShoppingBag, IconWall, IconDollar, IconSettings, IconX, IconMore, IconCalendar, IconReceipt, IconShield, IconCamera, IconCalendarCheck, IconWrench } from '@/components/ui/Icons'
+import { IconHome, IconUsers, IconClipboard, IconLogout, IconBell, IconShoppingBag, IconWall, IconDollar, IconSettings, IconX, IconMore, IconCalendar, IconReceipt, IconShield, IconCamera, IconCalendarCheck, IconWrench, IconStar } from '@/components/ui/Icons'
 import PhotoCropModal from '@/components/PhotoCropModal'
 
 const allNav = [
@@ -21,6 +21,7 @@ const allNav = [
   { href: '/dashboard/calendario',   label: 'Calendario',     icon: IconCalendar,    mobile: true },
   { href: '/dashboard/muro',          label: 'Muro Social',     icon: IconWall },
   { href: '/dashboard/reparaciones',  label: 'Reparaciones',    icon: IconWrench },
+  { href: '/dashboard/juegos',        label: 'Juegos',          icon: IconStar,        mobile: true },
   { href: '/dashboard/equipos',       label: 'Equipos y Roles', icon: IconSettings,   admin: true },
   { href: '/dashboard/seguridad',    label: 'Seguridad',      icon: IconShield,      admin: true },
 ]

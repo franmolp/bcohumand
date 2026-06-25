@@ -1,0 +1,531 @@
+'use client'
+
+import { useState, useEffect, useCallback, useRef } from 'react'
+import type { SessionUser } from '@/types'
+import { IconStar, IconTrophy, IconX, IconPlus, IconTrash } from '@/components/ui/Icons'
+
+type Estado = 'correct' | 'present' | 'absent'
+type FilaIntento = { palabra: string; resultado: Estado[] }
+type RankingEntry = { nombre: string; intentos: number; tiempo_seg: number; resuelta: boolean }
+type RankingMesEntry = { nombre: string; puntos: number; partidas: number; resueltas: number }
+type PalabraAdmin = { id: string; palabra: string; fecha: string }
+
+const COLORES: Record<Estado, string> = {
+  correct: 'bg-green-500 border-green-500 text-white',
+  present: 'bg-amber-400 border-amber-400 text-white',
+  absent:  'bg-gray-500 border-gray-500 text-white',
+}
+
+const FILAS = 6
+const TECLADO = [
+  ['Q','W','E','R','T','Y','U','I','O','P'],
+  ['A','S','D','F','G','H','J','K','L','Ñ'],
+  ['↵','Z','X','C','V','B','N','M','⌫'],
+]
+
+function fmtTiempo(seg: number) {
+  const m = Math.floor(seg / 60)
+  const s = seg % 60
+  return m > 0 ? `${m}m ${s}s` : `${s}s`
+}
+
+function calcEstadoTecla(letra: string, intentos: FilaIntento[]): Estado | null {
+  let mejor: Estado | null = null
+  for (const fila of intentos) {
+    for (let i = 0; i < fila.palabra.length; i++) {
+      if (fila.palabra[i] !== letra) continue
+      const e = fila.resultado[i]
+      if (e === 'correct') return 'correct'
+      if (e === 'present' && mejor !== 'correct') mejor = 'present'
+      if (e === 'absent' && !mejor) mejor = 'absent'
+    }
+  }
+  return mejor
+}
+
+// ─── Wordle game ──────────────────────────────────────────────────────────────
+
+function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) {
+  const [largo, setLargo] = useState(5)
+  const [intentos, setIntentos] = useState<FilaIntento[]>([])
+  const [inputActual, setInputActual] = useState('')
+  const [gameOver, setGameOver] = useState(false)
+  const [resuelta, setResuelta] = useState(false)
+  const [palabraCorrecta, setPalabraCorrecta] = useState<string | null>(null)
+  const [tieneHoy, setTieneHoy] = useState(true)
+  const [cargando, setCargando] = useState(true)
+  const [enviando, setEnviando] = useState(false)
+  const [error, setError] = useState('')
+  const [shake, setShake] = useState(false)
+  const [revealIdx, setRevealIdx] = useState<number | null>(null)
+
+  const [rankingHoy, setRankingHoy] = useState<{ ranking: RankingEntry[]; jugando: number } | null>(null)
+  const [rankingAyer, setRankingAyer] = useState<{ ranking: RankingEntry[]; palabra: string | null } | null>(null)
+  const [rankingMes, setRankingMes] = useState<RankingMesEntry[] | null>(null)
+
+  const startTimeRef = useRef<number | null>(null)
+
+  const cargarRankings = useCallback(async (jugoHoy: boolean) => {
+    const [hoy, ayer, mes] = await Promise.all([
+      jugoHoy ? fetch('/api/juegos/ranking?tipo=hoy').then(r => r.json()) : Promise.resolve(null),
+      fetch('/api/juegos/ranking?tipo=ayer').then(r => r.json()),
+      fetch('/api/juegos/ranking?tipo=mes').then(r => r.json()),
+    ])
+    if (hoy) setRankingHoy(hoy)
+    setRankingAyer(ayer)
+    setRankingMes(mes.ranking ?? [])
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/juegos/hoy')
+      .then(r => r.json())
+      .then(data => {
+        setTieneHoy(data.tieneHoy)
+        setLargo(data.largo ?? 5)
+        setIntentos(data.intentos ?? [])
+        if (data.jugado) {
+          setGameOver(true)
+          setResuelta(data.resuelta)
+          setPalabraCorrecta(data.palabraCorrecta)
+          cargarRankings(true)
+        } else {
+          cargarRankings(false)
+        }
+      })
+      .finally(() => setCargando(false))
+  }, [cargarRankings])
+
+  const enviarIntento = useCallback(async () => {
+    if (enviando || inputActual.length !== largo) return
+    setEnviando(true)
+    setError('')
+
+    const res = await fetch('/api/juegos/intento', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ palabra: inputActual }),
+    })
+    const data = await res.json()
+    setEnviando(false)
+
+    if (!res.ok) {
+      setError(data.error ?? 'Error al enviar')
+      setShake(true)
+      setTimeout(() => setShake(false), 500)
+      return
+    }
+
+    const nuevaFila: FilaIntento = { palabra: inputActual, resultado: data.resultado }
+    const nuevosIntentos = [...intentos, nuevaFila]
+    setRevealIdx(nuevosIntentos.length - 1)
+    setTimeout(() => setRevealIdx(null), largo * 100 + 400)
+
+    setIntentos(nuevosIntentos)
+    setInputActual('')
+
+    if (data.gameOver) {
+      setTimeout(() => {
+        setGameOver(true)
+        setResuelta(data.resuelta)
+        setPalabraCorrecta(data.palabraCorrecta)
+        cargarRankings(true)
+      }, largo * 100 + 500)
+    }
+  }, [enviando, inputActual, largo, intentos, cargarRankings])
+
+  const presionarTecla = useCallback((tecla: string) => {
+    if (gameOver) return
+    if (tecla === '⌫' || tecla === 'Backspace') {
+      setInputActual(p => p.slice(0, -1))
+      setError('')
+    } else if (tecla === '↵' || tecla === 'Enter') {
+      enviarIntento()
+    } else if (/^[A-ZÑ]$/i.test(tecla) && inputActual.length < largo) {
+      if (!startTimeRef.current) startTimeRef.current = Date.now()
+      setInputActual(p => (p + tecla.toUpperCase()).slice(0, largo))
+      setError('')
+    }
+  }, [gameOver, inputActual, largo, enviarIntento])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      presionarTecla(e.key)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [presionarTecla])
+
+  if (cargando) return <div className="py-16 flex justify-center"><div className="w-6 h-6 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" /></div>
+
+  if (!tieneHoy) return (
+    <div className="text-center py-16">
+      <div className="text-4xl mb-3">📅</div>
+      <p className="text-[15px] font-semibold text-[var(--text)]">No hay palabra para hoy</p>
+      {isAdmin && <p className="text-[13px] text-[var(--text-muted)] mt-1">Cargá una en la sección Palabras</p>}
+    </div>
+  )
+
+  const filasRender: { tipo: 'completada' | 'activa' | 'vacia'; fila?: FilaIntento; indice: number }[] =
+    Array.from({ length: FILAS }, (_, i) => {
+      if (i < intentos.length) return { tipo: 'completada', fila: intentos[i], indice: i }
+      if (i === intentos.length && !gameOver) return { tipo: 'activa', indice: i }
+      return { tipo: 'vacia', indice: i }
+    })
+
+  return (
+    <div className="space-y-5">
+      {/* Grilla */}
+      <div className="flex flex-col items-center gap-1.5">
+        {filasRender.map(({ tipo, fila, indice }) => (
+          <div key={indice} className={`flex gap-1.5 ${shake && tipo === 'activa' ? 'animate-[shake_0.4s_ease]' : ''}`}>
+            {Array.from({ length: largo }, (_, j) => {
+              const letraCompletada = fila?.palabra[j] ?? ''
+              const letraActiva = tipo === 'activa' ? (inputActual[j] ?? '') : ''
+              const letra = tipo === 'completada' ? letraCompletada : letraActiva
+              const estado = fila?.resultado[j]
+              const isRevealing = revealIdx === indice
+              const delay = isRevealing ? `${j * 100}ms` : '0ms'
+
+              return (
+                <div
+                  key={j}
+                  className={`w-12 h-12 flex items-center justify-center text-[20px] font-bold border-2 rounded-lg transition-all select-none
+                    ${estado ? `${COLORES[estado]} ${isRevealing ? 'scale-105' : ''}` : letra ? 'border-gray-400 text-[var(--text)] bg-white' : 'border-gray-200 bg-white'}`}
+                  style={{ transitionDelay: delay }}
+                >
+                  {letra}
+                </div>
+              )
+            })}
+          </div>
+        ))}
+      </div>
+
+      {error && <p className="text-center text-[13px] text-red-500 font-medium">{error}</p>}
+
+      {/* Resultado */}
+      {gameOver && (
+        <div className={`rounded-2xl p-4 text-center ${resuelta ? 'bg-green-50 border border-green-100' : 'bg-red-50 border border-red-100'}`}>
+          <p className="text-[18px] font-bold mb-0.5">{resuelta ? '🎉 ¡Lo lograste!' : '😅 ¡La próxima!'}</p>
+          {palabraCorrecta && (
+            <p className="text-[13px] text-gray-500">
+              La palabra era <span className="font-bold text-[var(--text)]">{palabraCorrecta}</span>
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Teclado — solo si no terminó */}
+      {!gameOver && (
+        <div className="flex flex-col items-center gap-1.5">
+          {TECLADO.map((fila, fi) => (
+            <div key={fi} className="flex gap-1">
+              {fila.map(tecla => {
+                const esEspecial = tecla === '↵' || tecla === '⌫'
+                const estadoTecla = esEspecial ? null : calcEstadoTecla(tecla, intentos)
+                return (
+                  <button
+                    key={tecla}
+                    onPointerDown={e => { e.preventDefault(); presionarTecla(tecla) }}
+                    className={`h-14 rounded-lg text-[13px] font-bold cursor-pointer select-none transition-colors active:scale-95
+                      ${esEspecial ? 'px-2 min-w-[48px] bg-gray-300 text-gray-700' :
+                        estadoTecla ? `w-9 ${COLORES[estadoTecla]}` : 'w-9 bg-gray-200 text-gray-800'}`}
+                  >
+                    {tecla}
+                  </button>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Rankings — visibles solo después de jugar */}
+      {gameOver && (
+        <div className="space-y-4 pb-4">
+          <RankingHoy data={rankingHoy} />
+          <RankingAyer data={rankingAyer} />
+          <RankingMes data={rankingMes} />
+        </div>
+      )}
+
+      {/* Rankings de ayer y mes siempre visibles (sin ranking de hoy) */}
+      {!gameOver && (
+        <div className="space-y-4 pb-4">
+          <RankingAyer data={rankingAyer} />
+          <RankingMes data={rankingMes} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Ranking hoy ──────────────────────────────────────────────────────────────
+
+function RankingHoy({ data }: { data: { ranking: RankingEntry[]; jugando: number } | null }) {
+  if (!data) return null
+  return (
+    <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+        <IconTrophy size={15} className="text-[var(--primary)]" />
+        <span className="text-[14px] font-semibold">Ranking de hoy</span>
+        {data.jugando > 0 && (
+          <span className="ml-auto text-[11px] text-gray-400">{data.jugando} jugando…</span>
+        )}
+      </div>
+      {data.ranking.length === 0 ? (
+        <p className="text-center text-[13px] text-gray-400 py-6">Nadie más terminó todavía</p>
+      ) : (
+        <div className="divide-y divide-gray-50">
+          {data.ranking.map((e, i) => (
+            <div key={i} className="flex items-center gap-3 px-4 py-2.5">
+              <span className={`w-6 h-6 flex items-center justify-center rounded-full text-[11px] font-bold shrink-0
+                ${i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-gray-300 text-gray-700' : i === 2 ? 'bg-orange-300 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                {i + 1}
+              </span>
+              <span className="flex-1 text-[13px] font-medium text-[var(--text)] truncate">{e.nombre}</span>
+              {e.resuelta ? (
+                <>
+                  <span className="text-[12px] text-gray-500">{e.intentos}/6</span>
+                  <span className="text-[11px] text-gray-400 w-12 text-right">{fmtTiempo(e.tiempo_seg)}</span>
+                </>
+              ) : (
+                <span className="text-[12px] text-red-400">Sin resolver</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Ranking ayer ─────────────────────────────────────────────────────────────
+
+function RankingAyer({ data }: { data: { ranking: RankingEntry[]; palabra: string | null } | null }) {
+  if (!data) return null
+  return (
+    <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2 flex-wrap">
+        <span className="text-[14px] font-semibold">Ayer</span>
+        {data.palabra && (
+          <span className="ml-auto text-[12px] font-bold tracking-widest text-[var(--primary)] bg-[var(--primary-light)] px-2 py-0.5 rounded-lg">
+            {data.palabra}
+          </span>
+        )}
+      </div>
+      {data.ranking.length === 0 ? (
+        <p className="text-center text-[13px] text-gray-400 py-6">Sin partidas ayer</p>
+      ) : (
+        <div className="divide-y divide-gray-50">
+          {data.ranking.map((e, i) => (
+            <div key={i} className="flex items-center gap-3 px-4 py-2.5">
+              <span className={`w-6 h-6 flex items-center justify-center rounded-full text-[11px] font-bold shrink-0
+                ${i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-gray-300 text-gray-700' : i === 2 ? 'bg-orange-300 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                {i + 1}
+              </span>
+              <span className="flex-1 text-[13px] font-medium text-[var(--text)] truncate">{e.nombre}</span>
+              {e.resuelta ? (
+                <>
+                  <span className="text-[12px] text-gray-500">{e.intentos}/6</span>
+                  <span className="text-[11px] text-gray-400 w-12 text-right">{fmtTiempo(e.tiempo_seg)}</span>
+                </>
+              ) : (
+                <span className="text-[12px] text-red-400">Sin resolver</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Ranking mes ──────────────────────────────────────────────────────────────
+
+function RankingMes({ data }: { data: RankingMesEntry[] | null }) {
+  if (!data) return null
+  const mes = new Date().toLocaleString('es', { month: 'long', year: 'numeric' })
+  return (
+    <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+        <IconStar size={15} className="text-amber-400" />
+        <span className="text-[14px] font-semibold capitalize">Ranking {mes}</span>
+      </div>
+      {data.length === 0 ? (
+        <p className="text-center text-[13px] text-gray-400 py-6">Sin partidas este mes</p>
+      ) : (
+        <div className="divide-y divide-gray-50">
+          {data.map((e, i) => (
+            <div key={i} className="flex items-center gap-3 px-4 py-2.5">
+              <span className={`w-6 h-6 flex items-center justify-center rounded-full text-[11px] font-bold shrink-0
+                ${i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-gray-300 text-gray-700' : i === 2 ? 'bg-orange-300 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                {i + 1}
+              </span>
+              <span className="flex-1 text-[13px] font-medium text-[var(--text)] truncate">{e.nombre}</span>
+              <div className="flex items-center gap-2 text-right">
+                <span className="text-[13px] font-bold text-[var(--primary)]">{e.puntos} pts</span>
+                <span className="text-[11px] text-gray-400">{e.resueltas}/{e.partidas}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Admin palabras ───────────────────────────────────────────────────────────
+
+function AdminPalabras() {
+  const [palabras, setPalabras] = useState<PalabraAdmin[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [nueva, setNueva] = useState('')
+  const [fecha, setFecha] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState('')
+
+  const hoy = new Date().toLocaleDateString('en-CA')
+
+  const cargar = useCallback(() => {
+    setCargando(true)
+    fetch('/api/juegos/palabras')
+      .then(r => r.json())
+      .then(d => setPalabras(Array.isArray(d) ? d : []))
+      .finally(() => setCargando(false))
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  const agregar = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!nueva || !fecha) return
+    setGuardando(true)
+    setError('')
+    const res = await fetch('/api/juegos/palabras', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ palabra: nueva.toUpperCase().trim(), fecha }),
+    })
+    const data = await res.json()
+    setGuardando(false)
+    if (!res.ok) { setError(data.error); return }
+    setNueva(''); setFecha('')
+    cargar()
+  }
+
+  const eliminar = async (id: string) => {
+    await fetch(`/api/juegos/palabras/${id}`, { method: 'DELETE' })
+    cargar()
+  }
+
+  return (
+    <div className="space-y-4">
+      <form onSubmit={agregar} className="bg-white rounded-2xl border border-[var(--border)] p-4 space-y-3">
+        <p className="text-[13px] font-semibold">Agregar palabra</p>
+        <div className="flex gap-2">
+          <input
+            value={nueva}
+            onChange={e => setNueva(e.target.value.toUpperCase())}
+            placeholder="PALABRA"
+            maxLength={10}
+            className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-[14px] font-bold tracking-widest uppercase outline-none focus:border-[var(--primary)]"
+          />
+          <input
+            type="date"
+            value={fecha}
+            min={hoy}
+            onChange={e => setFecha(e.target.value)}
+            className="border border-gray-200 rounded-xl px-3 py-2 text-[13px] outline-none focus:border-[var(--primary)]"
+          />
+        </div>
+        {error && <p className="text-[12px] text-red-500">{error}</p>}
+        <button
+          type="submit"
+          disabled={guardando || !nueva || !fecha}
+          className="flex items-center gap-1.5 px-4 py-2 bg-[image:var(--gradient)] text-white text-[13px] font-semibold rounded-xl disabled:opacity-50 cursor-pointer"
+        >
+          <IconPlus size={14} /> Agregar
+        </button>
+      </form>
+
+      <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100">
+          <span className="text-[13px] font-semibold">Palabras programadas</span>
+        </div>
+        {cargando ? (
+          <div className="py-8 flex justify-center"><div className="w-5 h-5 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" /></div>
+        ) : palabras.length === 0 ? (
+          <p className="text-center text-[13px] text-gray-400 py-6">Sin palabras cargadas</p>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {palabras.map(p => {
+              const esPasada = p.fecha < hoy
+              const esHoy = p.fecha === hoy
+              return (
+                <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <span className={`text-[13px] font-bold tracking-wider ${esPasada ? 'text-gray-300' : esHoy ? 'text-[var(--primary)]' : 'text-[var(--text)]'}`}>
+                    {p.palabra}
+                  </span>
+                  <span className="text-[11px] text-gray-400 ml-1">
+                    {esHoy ? '· hoy' : esPasada ? '· jugada' : `· ${new Date(p.fecha + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })}`}
+                  </span>
+                  {!esPasada && !esHoy && (
+                    <button
+                      onClick={() => eliminar(p.id)}
+                      className="ml-auto p-1.5 text-gray-300 hover:text-red-400 cursor-pointer transition-colors"
+                    >
+                      <IconTrash size={14} />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Main client ──────────────────────────────────────────────────────────────
+
+export default function JuegosClient({ user }: { user: SessionUser }) {
+  const isAdmin = user.rol === 'admin' || user.rol === 'Admin'
+  const TABS = isAdmin
+    ? [{ key: 'wordle', label: 'Wordle' }, { key: 'palabras', label: 'Palabras' }]
+    : [{ key: 'wordle', label: 'Wordle' }]
+  const [tab, setTab] = useState<'wordle' | 'palabras'>('wordle')
+
+  return (
+    <div className="py-4 fade-in">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
+          <IconStar size={18} className="text-white" />
+        </div>
+        <h1 className="text-[17px] font-bold text-[var(--text)]">Juegos</h1>
+      </div>
+
+      {/* Tabs */}
+      {isAdmin && (
+        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-4">
+          {TABS.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key as typeof tab)}
+              className={`flex-1 py-2 text-[13px] font-medium rounded-[10px] cursor-pointer transition-all
+                ${tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab === 'wordle' && <WordleGame user={user} isAdmin={isAdmin} />}
+      {tab === 'palabras' && isAdmin && <AdminPalabras />}
+    </div>
+  )
+}
