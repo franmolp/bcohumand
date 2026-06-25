@@ -555,40 +555,7 @@ function AdminPalabras() {
         ) : palabras.length === 0 ? (
           <p className="text-center text-[13px] text-gray-400 py-6">Sin palabras cargadas</p>
         ) : (
-          <div className="divide-y divide-gray-50">
-            {palabras.map(p => {
-              const esPasada = p.fecha < hoy
-              const esHoy = p.fecha === hoy
-              const editable = !esPasada && !esHoy
-              return (
-                <div
-                  key={p.id}
-                  onClick={() => editable && setEditando(p)}
-                  className={`flex items-center gap-3 px-4 py-2.5 ${editable ? 'cursor-pointer active:bg-gray-50' : ''}`}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className={`text-[13px] font-bold tracking-wider ${esPasada ? 'text-gray-300' : esHoy ? 'text-[var(--primary)]' : 'text-[var(--text)]'}`}>
-                        {p.palabra}
-                      </span>
-                      <span className="text-[11px] text-gray-400">
-                        {esHoy ? '· hoy' : esPasada ? '· jugada' : `· ${new Date(p.fecha + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })}`}
-                      </span>
-                    </div>
-                    {p.pista && <p className="text-[11px] text-gray-400 truncate mt-0.5">{p.pista}</p>}
-                  </div>
-                  {editable && (
-                    <button
-                      onClick={ev => { ev.stopPropagation(); eliminar(p.id) }}
-                      className="p-1.5 text-gray-300 hover:text-red-400 cursor-pointer transition-colors shrink-0"
-                    >
-                      <IconTrash size={14} />
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+          <PalabrasList palabras={palabras} hoy={hoy} onEditar={setEditando} onEliminar={eliminar} />
         )}
       </div>
 
@@ -599,6 +566,80 @@ function AdminPalabras() {
           onClose={() => setEditando(null)}
           onSaved={() => { setEditando(null); cargar() }}
         />
+      )}
+    </div>
+  )
+}
+
+// ─── Lista palabras ───────────────────────────────────────────────────────────
+
+function PalabrasList({ palabras, hoy, onEditar, onEliminar }: {
+  palabras: PalabraAdmin[]
+  hoy: string
+  onEditar: (p: PalabraAdmin) => void
+  onEliminar: (id: string) => void
+}) {
+  const [verMasFuturas, setVerMasFuturas] = useState(false)
+  const LIMITE_FUTURAS = 10
+
+  const pasadas = palabras.filter(p => p.fecha < hoy)
+  const deHoy = palabras.filter(p => p.fecha === hoy)
+  const futuras = palabras.filter(p => p.fecha > hoy)
+
+  const pasadasVisible = pasadas.slice(-3)
+  const futurasVisible = verMasFuturas ? futuras : futuras.slice(0, LIMITE_FUTURAS)
+  const hayMasFuturas = !verMasFuturas && futuras.length > LIMITE_FUTURAS
+
+  const renderFila = (p: PalabraAdmin) => {
+    const esPasada = p.fecha < hoy
+    const esHoy = p.fecha === hoy
+    const editable = !esPasada && !esHoy
+    return (
+      <div
+        key={p.id}
+        onClick={() => editable && onEditar(p)}
+        className={`flex items-center gap-3 px-4 py-2.5 ${editable ? 'cursor-pointer active:bg-gray-50' : ''}`}
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className={`text-[13px] font-bold tracking-wider ${esPasada ? 'text-gray-300' : esHoy ? 'text-[var(--primary)]' : 'text-[var(--text)]'}`}>
+              {p.palabra}
+            </span>
+            <span className="text-[11px] text-gray-400">
+              {esHoy ? '· hoy' : esPasada ? '· jugada' : `· ${new Date(p.fecha + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })}`}
+            </span>
+          </div>
+          {p.pista && <p className="text-[11px] text-gray-400 truncate mt-0.5">{p.pista}</p>}
+        </div>
+        {editable && (
+          <button
+            onClick={ev => { ev.stopPropagation(); onEliminar(p.id) }}
+            className="p-1.5 text-gray-300 hover:text-red-400 cursor-pointer transition-colors shrink-0"
+          >
+            <IconTrash size={14} />
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="divide-y divide-gray-50">
+      {pasadas.length > 3 && (
+        <div className="px-4 py-2 text-[11px] text-gray-300 text-center">
+          · · · {pasadas.length - 3} jugadas anteriores · · ·
+        </div>
+      )}
+      {pasadasVisible.map(renderFila)}
+      {deHoy.map(renderFila)}
+      {futurasVisible.map(renderFila)}
+      {hayMasFuturas && (
+        <button
+          onClick={() => setVerMasFuturas(true)}
+          className="w-full py-3 text-[13px] text-[var(--primary)] font-medium cursor-pointer"
+        >
+          Ver {futuras.length - LIMITE_FUTURAS} más →
+        </button>
       )}
     </div>
   )
@@ -634,9 +675,9 @@ function EditarModal({ palabra, hoy, onClose, onSaved }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/40" onClick={onClose}>
       <div
-        className="w-full max-w-lg bg-white rounded-t-3xl p-5 space-y-4 pb-8"
+        className="w-full max-w-sm bg-white rounded-2xl p-5 space-y-4 shadow-xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
