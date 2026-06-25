@@ -10,7 +10,7 @@ export async function GET() {
 
   const { data: palabraHoy } = await supabaseAdmin
     .from('juegos_palabras')
-    .select('id, palabra')
+    .select('id, palabra, pista')
     .eq('fecha', hoy)
     .single()
 
@@ -35,6 +35,7 @@ export async function GET() {
     return NextResponse.json({
       tieneHoy: !!palabraHoy,
       largo,
+      pista: palabraHoy?.pista ?? null,
       jugado: gameOver,
       resuelta: gameOver ? partida.resuelta : null,
       intentos: intentos ?? [],
@@ -45,6 +46,7 @@ export async function GET() {
   return NextResponse.json({
     tieneHoy: !!palabraHoy,
     largo,
+    pista: palabraHoy?.pista ?? null,
     jugado: false,
     resuelta: null,
     intentos: [],

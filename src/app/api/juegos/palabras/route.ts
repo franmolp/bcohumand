@@ -10,7 +10,7 @@ export async function GET() {
 
   const { data, error } = await supabaseAdmin
     .from('juegos_palabras')
-    .select('id, palabra, fecha')
+    .select('id, palabra, fecha, pista')
     .order('fecha', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
   if (!isAdmin) return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
 
-  const { palabra, fecha } = await request.json()
+  const { palabra, fecha, pista } = await request.json()
   if (!palabra || !fecha) return NextResponse.json({ error: 'Faltan campos' }, { status: 400 })
 
   const clean = palabra.toUpperCase().trim()
@@ -32,8 +32,8 @@ export async function POST(request: NextRequest) {
 
   const { data, error } = await supabaseAdmin
     .from('juegos_palabras')
-    .insert({ palabra: clean, fecha, creado_por: session.id })
-    .select('id, palabra, fecha')
+    .insert({ palabra: clean, fecha, pista: pista?.trim() || null, creado_por: session.id })
+    .select('id, palabra, fecha, pista')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

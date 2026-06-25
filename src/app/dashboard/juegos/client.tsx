@@ -8,7 +8,7 @@ type Estado = 'correct' | 'present' | 'absent'
 type FilaIntento = { palabra: string; resultado: Estado[] }
 type RankingEntry = { nombre: string; intentos: number; tiempo_seg: number; resuelta: boolean }
 type RankingMesEntry = { nombre: string; puntos: number; partidas: number; resueltas: number }
-type PalabraAdmin = { id: string; palabra: string; fecha: string }
+type PalabraAdmin = { id: string; palabra: string; fecha: string; pista?: string | null }
 
 const COLORES: Record<Estado, string> = {
   correct: 'bg-green-500 border-green-500 text-white',
@@ -83,6 +83,7 @@ function HowToPlay() {
 
 function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) {
   const [largo, setLargo] = useState(5)
+  const [pista, setPista] = useState<string | null>(null)
   const [intentos, setIntentos] = useState<FilaIntento[]>([])
   const [inputActual, setInputActual] = useState('')
   const [gameOver, setGameOver] = useState(false)
@@ -118,6 +119,7 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
       .then(data => {
         setTieneHoy(data.tieneHoy)
         setLargo(data.largo ?? 5)
+        setPista(data.pista ?? null)
         setIntentos(data.intentos ?? [])
         if (data.jugado) {
           setGameOver(true)
@@ -211,6 +213,14 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
     <div className="space-y-5">
       {/* Instrucciones */}
       <HowToPlay />
+
+      {/* Pista del día */}
+      {pista && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3">
+          <span className="text-[16px] mt-0.5">💡</span>
+          <p className="text-[13px] text-amber-800"><span className="font-semibold">Pista:</span> {pista}</p>
+        </div>
+      )}
 
       {/* Grilla */}
       <div className="flex flex-col items-center gap-1.5">
@@ -416,6 +426,7 @@ function AdminPalabras() {
   const [cargando, setCargando] = useState(true)
   const [nueva, setNueva] = useState('')
   const [fecha, setFecha] = useState('')
+  const [pistaAdmin, setPistaAdmin] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
 
@@ -439,12 +450,12 @@ function AdminPalabras() {
     const res = await fetch('/api/juegos/palabras', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ palabra: nueva.toUpperCase().trim(), fecha }),
+      body: JSON.stringify({ palabra: nueva.toUpperCase().trim(), fecha, pista: pistaAdmin.trim() || null }),
     })
     const data = await res.json()
     setGuardando(false)
     if (!res.ok) { setError(data.error); return }
-    setNueva(''); setFecha('')
+    setNueva(''); setFecha(''); setPistaAdmin('')
     cargar()
   }
 
@@ -472,6 +483,13 @@ function AdminPalabras() {
             onChange={e => setFecha(e.target.value)}
             className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] outline-none focus:border-[var(--primary)]"
           />
+          <textarea
+            value={pistaAdmin}
+            onChange={e => setPistaAdmin(e.target.value)}
+            placeholder="Pista para las jugadoras (opcional)..."
+            rows={2}
+            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] outline-none focus:border-[var(--primary)] resize-none"
+          />
         </div>
         {error && <p className="text-[12px] text-red-500">{error}</p>}
         <button
@@ -498,12 +516,17 @@ function AdminPalabras() {
               const esHoy = p.fecha === hoy
               return (
                 <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <span className={`text-[13px] font-bold tracking-wider ${esPasada ? 'text-gray-300' : esHoy ? 'text-[var(--primary)]' : 'text-[var(--text)]'}`}>
-                    {p.palabra}
-                  </span>
-                  <span className="text-[11px] text-gray-400 ml-1">
-                    {esHoy ? '· hoy' : esPasada ? '· jugada' : `· ${new Date(p.fecha + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })}`}
-                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-[13px] font-bold tracking-wider ${esPasada ? 'text-gray-300' : esHoy ? 'text-[var(--primary)]' : 'text-[var(--text)]'}`}>
+                        {p.palabra}
+                      </span>
+                      <span className="text-[11px] text-gray-400">
+                        {esHoy ? '· hoy' : esPasada ? '· jugada' : `· ${new Date(p.fecha + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })}`}
+                      </span>
+                    </div>
+                    {p.pista && <p className="text-[11px] text-gray-400 truncate mt-0.5">{p.pista}</p>}
+                  </div>
                   {!esPasada && !esHoy && (
                     <button
                       onClick={() => eliminar(p.id)}
