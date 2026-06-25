@@ -96,15 +96,22 @@ export async function GET(request: NextRequest) {
     const now = new Date()
     const inicioMes = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 
-    const { data: partidas } = await supabaseAdmin
-      .from('juegos_partidas')
-      .select('usuario_id, intentos, resuelta')
-      .eq('juego', 'wordle')
-      .gte('fecha', inicioMes)
-      .lte('fecha', hoy)
-      .eq('resuelta', true)
+    const [{ data: partidas }, { count: totalPalabras }] = await Promise.all([
+      supabaseAdmin
+        .from('juegos_partidas')
+        .select('usuario_id, intentos, resuelta')
+        .eq('juego', 'wordle')
+        .gte('fecha', inicioMes)
+        .lte('fecha', hoy)
+        .eq('resuelta', true),
+      supabaseAdmin
+        .from('juegos_palabras')
+        .select('id', { count: 'exact', head: true })
+        .gte('fecha', inicioMes)
+        .lte('fecha', hoy),
+    ])
 
-    if (!partidas?.length) return NextResponse.json({ ranking: [] })
+    if (!partidas?.length) return NextResponse.json({ ranking: [], totalPalabras: totalPalabras ?? 0 })
 
     const ids = [...new Set(partidas.map(p => p.usuario_id))]
     const { data: usuarios } = await supabaseAdmin
@@ -127,7 +134,7 @@ export async function GET(request: NextRequest) {
     }
 
     const ranking = [...acum.values()].sort((a, b) => b.puntos - a.puntos)
-    return NextResponse.json({ ranking })
+    return NextResponse.json({ ranking, totalPalabras: totalPalabras ?? 0 })
   }
 
   return NextResponse.json({ error: 'tipo inválido' }, { status: 400 })

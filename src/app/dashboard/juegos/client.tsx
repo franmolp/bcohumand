@@ -8,6 +8,7 @@ type Estado = 'correct' | 'present' | 'absent'
 type FilaIntento = { palabra: string; resultado: Estado[] }
 type RankingEntry = { nombre: string; intentos: number; tiempo_seg: number; resuelta: boolean }
 type RankingMesEntry = { nombre: string; puntos: number; partidas: number; resueltas: number }
+type RankingMesData = { ranking: RankingMesEntry[]; totalPalabras: number }
 type PalabraAdmin = { id: string; palabra: string; fecha: string; pista?: string | null }
 
 const COLORES: Record<Estado, string> = {
@@ -100,7 +101,7 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
 
   const [rankingHoy, setRankingHoy] = useState<{ ranking: RankingEntry[]; jugando: number } | null>(null)
   const [rankingAyer, setRankingAyer] = useState<{ ranking: RankingEntry[]; palabra: string | null } | null>(null)
-  const [rankingMes, setRankingMes] = useState<RankingMesEntry[] | null>(null)
+  const [rankingMes, setRankingMes] = useState<RankingMesData | null>(null)
 
   const startTimeRef = useRef<number | null>(null)
 
@@ -112,7 +113,7 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
     ])
     if (hoy) setRankingHoy(hoy)
     setRankingAyer(ayer)
-    setRankingMes(mes.ranking ?? [])
+    setRankingMes(mes)
   }, [])
 
   useEffect(() => {
@@ -433,7 +434,7 @@ function RankingAyer({ data }: { data: { ranking: RankingEntry[]; palabra: strin
 
 // ─── Ranking mes ──────────────────────────────────────────────────────────────
 
-function RankingMes({ data }: { data: RankingMesEntry[] | null }) {
+function RankingMes({ data }: { data: RankingMesData | null }) {
   if (!data) return null
   const mes = new Date().toLocaleString('es', { month: 'long', year: 'numeric' })
   return (
@@ -442,11 +443,11 @@ function RankingMes({ data }: { data: RankingMesEntry[] | null }) {
         <IconStar size={15} className="text-amber-400" />
         <span className="text-[14px] font-semibold capitalize">Ranking {mes}</span>
       </div>
-      {data.length === 0 ? (
+      {data.ranking.length === 0 ? (
         <p className="text-center text-[13px] text-gray-400 py-6">Sin partidas este mes</p>
       ) : (
         <div className="divide-y divide-gray-50">
-          {data.map((e, i) => (
+          {data.ranking.map((e, i) => (
             <div key={i} className="flex items-center gap-3 px-4 py-2.5">
               <span className={`w-6 h-6 flex items-center justify-center rounded-full text-[11px] font-bold shrink-0
                 ${i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-gray-300 text-gray-700' : i === 2 ? 'bg-orange-300 text-white' : 'bg-gray-100 text-gray-500'}`}>
@@ -455,7 +456,7 @@ function RankingMes({ data }: { data: RankingMesEntry[] | null }) {
               <span className="flex-1 text-[13px] font-medium text-[var(--text)] truncate">{e.nombre}</span>
               <div className="flex items-center gap-2 text-right">
                 <span className="text-[13px] font-bold text-[var(--primary)]">{e.puntos} pts</span>
-                <span className="text-[11px] text-gray-400">{e.resueltas}/{e.partidas}</span>
+                <span className="text-[11px] text-gray-400">{e.partidas}/{data.totalPalabras}</span>
               </div>
             </div>
           ))}
