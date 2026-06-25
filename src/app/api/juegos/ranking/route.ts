@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth'
 
 function puntosPorIntentos(intentos: number, resuelta: boolean) {
   if (!resuelta) return 0
-  return Math.max(1, 7 - intentos)
+  return Math.max(1, 11 - intentos)
 }
 
 export async function GET(request: NextRequest) {
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     const nombreMap = new Map((usuarios ?? []).map(u => [u.id, u.nombre]))
 
     const ranking = partidas
-      .filter(p => p.resuelta === true || p.intentos >= 6)
+      .filter(p => p.resuelta === true)
       .map(p => ({
         nombre: nombreMap.get(p.usuario_id) ?? '—',
         intentos: p.intentos,
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
         return a.tiempo_seg - b.tiempo_seg
       })
 
-    const jugando = partidas.filter(p => p.resuelta === false && p.intentos < 6).length
+    const jugando = partidas.filter(p => p.resuelta === false).length
     return NextResponse.json({ ranking, jugando })
   }
 
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
       .select('usuario_id, intentos, tiempo_seg, resuelta')
       .eq('fecha', ayer)
       .eq('juego', 'wordle')
-      .or('resuelta.eq.true,intentos.gte.6')
+      .eq('resuelta', true)
 
     if (!partidas?.length) return NextResponse.json({ ranking: [], palabra: palabraAyer?.palabra ?? null })
 
@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
       .eq('juego', 'wordle')
       .gte('fecha', inicioMes)
       .lte('fecha', hoy)
-      .or('resuelta.eq.true,intentos.gte.6')
+      .eq('resuelta', true)
 
     if (!partidas?.length) return NextResponse.json({ ranking: [] })
 

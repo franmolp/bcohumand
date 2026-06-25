@@ -27,8 +27,8 @@ export async function POST(request: NextRequest) {
   if (!palabra || !fecha) return NextResponse.json({ error: 'Faltan campos' }, { status: 400 })
 
   const clean = palabra.toUpperCase().trim()
-  if (!/^[A-ZÑ]{3,10}$/.test(clean))
-    return NextResponse.json({ error: 'La palabra debe tener 3–10 letras (A-Z, Ñ)' }, { status: 400 })
+  if (!/^[A-ZÑ]{2,15}$/.test(clean))
+    return NextResponse.json({ error: 'La palabra debe tener 2–15 letras (A-Z, Ñ)' }, { status: 400 })
 
   const { data, error } = await supabaseAdmin
     .from('juegos_palabras')

@@ -23,7 +23,7 @@ export async function GET() {
     .maybeSingle()
 
   const largo = palabraHoy?.palabra?.length ?? 5
-  const gameOver = partida ? (partida.resuelta === true || partida.intentos >= 6) : false
+  const gameOver = partida ? partida.resuelta === true : false
 
   if (partida) {
     const { data: intentos } = await supabaseAdmin

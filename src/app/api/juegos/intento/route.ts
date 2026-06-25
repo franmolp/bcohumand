@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     .eq('fecha', hoy)
     .maybeSingle()
 
-  if (partida && (partida.resuelta === true || partida.intentos >= 6))
+  if (partida && partida.resuelta === true)
     return NextResponse.json({ error: 'Ya terminaste el juego de hoy' }, { status: 400 })
 
   if (!partida) {
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     resultado,
   })
 
-  const gameOver = resuelta || nuevoOrden >= 6
+  const gameOver = resuelta
   await supabaseAdmin
     .from('juegos_partidas')
     .update({

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { SessionUser } from '@/types'
-import { IconStar, IconTrophy, IconX, IconPlus, IconTrash } from '@/components/ui/Icons'
+import { IconStar, IconTrophy, IconPlus, IconTrash } from '@/components/ui/Icons'
 
 type Estado = 'correct' | 'present' | 'absent'
 type FilaIntento = { palabra: string; resultado: Estado[] }
@@ -16,7 +16,6 @@ const COLORES: Record<Estado, string> = {
   absent:  'bg-gray-500 border-gray-500 text-white',
 }
 
-const FILAS = 6
 const TECLADO = [
   ['Q','W','E','R','T','Y','U','I','O','P'],
   ['A','S','D','F','G','H','J','K','L','Ñ'],
@@ -41,6 +40,43 @@ function calcEstadoTecla(letra: string, intentos: FilaIntento[]): Estado | null 
     }
   }
   return mejor
+}
+
+// ─── How to play ──────────────────────────────────────────────────────────────
+
+function HowToPlay() {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="bg-gray-50 rounded-2xl border border-[var(--border)] overflow-hidden">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 cursor-pointer"
+      >
+        <span className="text-[13px] font-semibold text-[var(--text)]">¿Cómo se juega?</span>
+        <span className="text-[18px] leading-none text-gray-400">{open ? '−' : '+'}</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-3 text-[13px] text-[var(--text-muted)]">
+          <p>Adiviná la palabra del día escribiéndola en el teclado. Después de cada intento las letras cambian de color:</p>
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-green-500 text-white font-bold text-[14px] shrink-0">A</div>
+              <span><span className="font-semibold text-[var(--text)]">Verde</span> — la letra está en esa posición exacta.</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-amber-400 text-white font-bold text-[14px] shrink-0">B</div>
+              <span><span className="font-semibold text-[var(--text)]">Amarillo</span> — la letra está en la palabra pero en otro lugar.</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-500 text-white font-bold text-[14px] shrink-0">C</div>
+              <span><span className="font-semibold text-[var(--text)]">Gris</span> — la letra no está en la palabra.</span>
+            </div>
+          </div>
+          <p>No hay límite de intentos — ¡podés seguir hasta adivinarla!</p>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ─── Wordle game ──────────────────────────────────────────────────────────────
@@ -166,15 +202,16 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
     </div>
   )
 
-  const filasRender: { tipo: 'completada' | 'activa' | 'vacia'; fila?: FilaIntento; indice: number }[] =
-    Array.from({ length: FILAS }, (_, i) => {
-      if (i < intentos.length) return { tipo: 'completada', fila: intentos[i], indice: i }
-      if (i === intentos.length && !gameOver) return { tipo: 'activa', indice: i }
-      return { tipo: 'vacia', indice: i }
-    })
+  const filasRender: { tipo: 'completada' | 'activa'; fila?: FilaIntento; indice: number }[] = [
+    ...intentos.map((fila, i) => ({ tipo: 'completada' as const, fila, indice: i })),
+    ...(!gameOver ? [{ tipo: 'activa' as const, fila: undefined, indice: intentos.length }] : []),
+  ]
 
   return (
     <div className="space-y-5">
+      {/* Instrucciones */}
+      <HowToPlay />
+
       {/* Grilla */}
       <div className="flex flex-col items-center gap-1.5">
         {filasRender.map(({ tipo, fila, indice }) => (
@@ -205,9 +242,9 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
       {error && <p className="text-center text-[13px] text-red-500 font-medium">{error}</p>}
 
       {/* Resultado */}
-      {gameOver && (
-        <div className={`rounded-2xl p-4 text-center ${resuelta ? 'bg-green-50 border border-green-100' : 'bg-red-50 border border-red-100'}`}>
-          <p className="text-[18px] font-bold mb-0.5">{resuelta ? '🎉 ¡Lo lograste!' : '😅 ¡La próxima!'}</p>
+      {gameOver && resuelta && (
+        <div className="rounded-2xl p-4 text-center bg-green-50 border border-green-100">
+          <p className="text-[18px] font-bold mb-0.5">🎉 ¡Lo lograste!</p>
           {palabraCorrecta && (
             <p className="text-[13px] text-gray-500">
               La palabra era <span className="font-bold text-[var(--text)]">{palabraCorrecta}</span>
@@ -285,13 +322,11 @@ function RankingHoy({ data }: { data: { ranking: RankingEntry[]; jugando: number
                 {i + 1}
               </span>
               <span className="flex-1 text-[13px] font-medium text-[var(--text)] truncate">{e.nombre}</span>
-              {e.resuelta ? (
+              {e.resuelta && (
                 <>
-                  <span className="text-[12px] text-gray-500">{e.intentos}/6</span>
+                  <span className="text-[12px] text-gray-500">{e.intentos} int.</span>
                   <span className="text-[11px] text-gray-400 w-12 text-right">{fmtTiempo(e.tiempo_seg)}</span>
                 </>
-              ) : (
-                <span className="text-[12px] text-red-400">Sin resolver</span>
               )}
             </div>
           ))}
@@ -326,13 +361,11 @@ function RankingAyer({ data }: { data: { ranking: RankingEntry[]; palabra: strin
                 {i + 1}
               </span>
               <span className="flex-1 text-[13px] font-medium text-[var(--text)] truncate">{e.nombre}</span>
-              {e.resuelta ? (
+              {e.resuelta && (
                 <>
-                  <span className="text-[12px] text-gray-500">{e.intentos}/6</span>
+                  <span className="text-[12px] text-gray-500">{e.intentos} int.</span>
                   <span className="text-[11px] text-gray-400 w-12 text-right">{fmtTiempo(e.tiempo_seg)}</span>
                 </>
-              ) : (
-                <span className="text-[12px] text-red-400">Sin resolver</span>
               )}
             </div>
           ))}
@@ -429,7 +462,7 @@ function AdminPalabras() {
             value={nueva}
             onChange={e => setNueva(e.target.value.toUpperCase())}
             placeholder="PALABRA"
-            maxLength={10}
+            maxLength={15}
             className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] font-bold tracking-widest uppercase outline-none focus:border-[var(--primary)]"
           />
           <input
