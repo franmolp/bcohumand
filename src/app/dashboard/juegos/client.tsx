@@ -436,12 +436,14 @@ function RankingAyer({ data }: { data: { ranking: RankingEntry[]; palabra: strin
 
 function RankingMes({ data }: { data: RankingMesData | null }) {
   if (!data) return null
-  const mes = new Date().toLocaleString('es', { month: 'long', year: 'numeric' })
+  const _d = new Date()
+  const _m = _d.toLocaleString('es', { month: 'long' })
+  const mes = `${_m.charAt(0).toUpperCase() + _m.slice(1)} ${_d.getFullYear()}`
   return (
     <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
         <IconStar size={15} className="text-amber-400" />
-        <span className="text-[14px] font-semibold capitalize">Ranking {mes}</span>
+        <span className="text-[14px] font-semibold">Ranking {mes}</span>
       </div>
       {data.ranking.length === 0 ? (
         <p className="text-center text-[13px] text-gray-400 py-6">Sin partidas este mes</p>
