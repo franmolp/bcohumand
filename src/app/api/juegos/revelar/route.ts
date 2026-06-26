@@ -17,6 +17,10 @@ export async function POST() {
   if (!palabraHoy) return NextResponse.json({ error: 'No hay palabra para hoy' }, { status: 404 })
 
   const pista = palabraHoy.pista ?? null
+  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+
+  // Admins pueden jugar pero no se guarda la partida
+  if (isAdmin) return NextResponse.json({ ok: true, yaRevelado: false, pista })
 
   // Crear partida solo si no existe — el created_at queda como momento de revelación
   const { data: existente } = await supabaseAdmin

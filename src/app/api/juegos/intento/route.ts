@@ -34,6 +34,8 @@ export async function POST(request: NextRequest) {
   if (!/^[A-ZÑ]+$/.test(guess))
     return NextResponse.json({ error: 'Solo letras A-Z y Ñ' }, { status: 400 })
 
+  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+
   const { data: palabraHoy } = await supabaseAdmin
     .from('juegos_palabras')
     .select('id, palabra')
@@ -47,6 +49,19 @@ export async function POST(request: NextRequest) {
 
   if (guess.length !== target.length)
     return NextResponse.json({ error: `La palabra debe tener ${target.length} letras` }, { status: 400 })
+
+  // Admins pueden jugar pero no se guardan resultados
+  if (isAdmin) {
+    const resultado = calcularResultado(guess, target)
+    const resuelta = resultado.every(r => r === 'correct')
+    return NextResponse.json({
+      resultado,
+      resuelta,
+      gameOver: resuelta,
+      intentosUsados: 0,
+      palabraCorrecta: resuelta ? target : null,
+    })
+  }
 
   // Get or create partida
   let { data: partida } = await supabaseAdmin

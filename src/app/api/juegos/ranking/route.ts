@@ -17,8 +17,7 @@ export async function GET(request: NextRequest) {
   const ayerDate = new Date(); ayerDate.setDate(ayerDate.getDate() - 1)
   const ayer = ayerDate.toLocaleDateString('en-CA', { timeZone: tz })
 
-  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
-  const adminIds = new Set(isAdmin ? [session.id] : [])
+  const adminIds = new Set<string>()
 
   if (tipo === 'hoy') {
     const { data: partidas } = await supabaseAdmin
