@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/convertir-certificados",
       "schedule": "0 0 1 * *"
+    },
+    {
+      "path": "/api/google-reviews/refresh",
+      "schedule": "0 12 * * *"
     }
   ]
 }
