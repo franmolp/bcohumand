@@ -126,14 +126,14 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
         setRevelado(data.revelado ?? false)
         setIntentos(data.intentos ?? [])
         if (!data.revelado) {
-          cargarRankings(false)
+          cargarRankings(isAdmin)
         } else if (data.jugado) {
           setGameOver(true)
           setResuelta(data.resuelta)
           setPalabraCorrecta(data.palabraCorrecta)
           cargarRankings(true)
         } else {
-          cargarRankings(false)
+          cargarRankings(isAdmin)
         }
       })
       .finally(() => setCargando(false))
@@ -237,6 +237,7 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
           {revelando ? '...' : 'Destapar palabra'}
         </button>
       </div>
+      {isAdmin && <RankingHoy data={rankingHoy} />}
       <RankingAyer data={rankingAyer} />
       <RankingMes data={rankingMes} />
     </div>
@@ -344,9 +345,10 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
         </div>
       )}
 
-      {/* Rankings de ayer y mes siempre visibles (sin ranking de hoy) */}
+      {/* Rankings de ayer y mes siempre visibles; hoy también para admin */}
       {!gameOver && (
         <div className="space-y-4 pb-4">
+          {isAdmin && <RankingHoy data={rankingHoy} />}
           <RankingAyer data={rankingAyer} />
           <RankingMes data={rankingMes} />
         </div>
