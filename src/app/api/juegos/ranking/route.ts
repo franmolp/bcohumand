@@ -7,14 +7,6 @@ function puntosPorIntentos(intentos: number, resuelta: boolean) {
   return Math.max(1, 11 - intentos)
 }
 
-async function getAdminIds(): Promise<Set<string>> {
-  const { data } = await supabaseAdmin
-    .from('usuarios')
-    .select('id')
-    .in('rol', ['admin', 'Admin'])
-  return new Set((data ?? []).map(u => u.id))
-}
-
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
@@ -25,7 +17,8 @@ export async function GET(request: NextRequest) {
   const ayerDate = new Date(); ayerDate.setDate(ayerDate.getDate() - 1)
   const ayer = ayerDate.toLocaleDateString('en-CA', { timeZone: tz })
 
-  const adminIds = await getAdminIds()
+  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+  const adminIds = new Set(isAdmin ? [session.id] : [])
 
   if (tipo === 'hoy') {
     const { data: partidas } = await supabaseAdmin
