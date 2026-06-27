@@ -304,9 +304,9 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
 
       {/* Teclado — solo si no terminó */}
       {!gameOver && (
-        <div className="flex flex-col items-center gap-1.5">
+        <div className="flex flex-col items-center gap-1 w-full px-2">
           {TECLADO.map((fila, fi) => (
-            <div key={fi} className={`flex gap-1 ${fi === TECLADO.length - 1 ? 'justify-center' : ''}`}>
+            <div key={fi} className="flex gap-1 justify-center w-full">
               {fila.map(tecla => {
                 const esBorrar = tecla === '⌫'
                 const estadoTecla = esBorrar ? null : calcEstadoTecla(tecla, intentos)
@@ -314,12 +314,17 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
                   <button
                     key={tecla}
                     onPointerDown={e => { e.preventDefault(); presionarTecla(tecla) }}
-                    className={`h-14 rounded-lg font-bold cursor-pointer select-none transition-colors active:scale-95
+                    style={{
+                      width: esBorrar ? 'calc((100vw - 40px - 7 * 4px) / 5.5)' : 'calc((100vw - 40px - 9 * 4px) / 10)',
+                      height: 'min(56px, 12vw)',
+                      fontSize: 'min(13px, 3.5vw)',
+                    }}
+                    className={`rounded-lg font-bold cursor-pointer select-none transition-colors active:scale-95 shrink-0
                       ${esBorrar
-                        ? 'px-2 min-w-[48px] bg-gray-300 text-gray-700 text-[13px]'
+                        ? 'bg-gray-300 text-gray-700'
                         : estadoTecla
-                          ? `w-9 text-[13px] ${COLORES[estadoTecla]}`
-                          : 'w-9 text-[13px] bg-gray-200 text-gray-800'}`}
+                          ? COLORES[estadoTecla]
+                          : 'bg-gray-200 text-gray-800'}`}
                   >
                     {tecla}
                   </button>
