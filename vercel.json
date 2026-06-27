@@ -18,7 +18,7 @@
     },
     {
       "path": "/api/google-reviews/refresh",
-      "schedule": "0 0,6,12,18 * * *"
+      "schedule": "0 9 * * *"
     }
   ]
 }
