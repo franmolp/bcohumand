@@ -31,7 +31,7 @@ async function notificar(req: NextRequest, isCron: boolean) {
       usuario_id: emp.id,
       titulo: 'Monotributo pendiente',
       mensaje: `Recordá presentar el comprobante de monotributo antes del ${lastDay}/${month}.`,
-      tipo: 'warning',
+      tipo: 'monotributo',
       leida: false,
     }))
   )
