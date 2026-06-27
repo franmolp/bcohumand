@@ -262,9 +262,9 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
       )}
 
       {/* Grilla */}
-      <div className="flex flex-col items-center gap-1.5">
+      <div className="flex flex-col items-center gap-1.5 w-full px-2">
         {filasRender.map(({ tipo, fila, indice }) => (
-          <div key={indice} className={`flex gap-1.5 ${shake && tipo === 'activa' ? 'animate-[shake_0.4s_ease]' : ''}`}>
+          <div key={indice} className={`flex gap-1.5 justify-center w-full ${shake && tipo === 'activa' ? 'animate-[shake_0.4s_ease]' : ''}`}>
             {Array.from({ length: largo }, (_, j) => {
               const letraCompletada = fila?.palabra[j] ?? ''
               const letraActiva = tipo === 'activa' ? (inputActual[j] ?? '') : ''
@@ -272,13 +272,14 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
               const estado = fila?.resultado[j]
               const isRevealing = revealIdx === indice
               const delay = isRevealing ? `${j * 100}ms` : '0ms'
+              const cellSize = `min(48px, calc((100vw - 40px - ${largo - 1} * 6px) / ${largo}))`
 
               return (
                 <div
                   key={j}
-                  className={`w-12 h-12 flex items-center justify-center text-[20px] font-bold border-2 rounded-lg transition-all select-none
+                  style={{ width: cellSize, height: cellSize, fontSize: `min(20px, calc((100vw - 40px - ${largo - 1} * 6px) / ${largo} * 0.4))`, transitionDelay: delay }}
+                  className={`flex items-center justify-center font-bold border-2 rounded-lg transition-all select-none shrink-0
                     ${estado ? `${COLORES[estado]} ${isRevealing ? 'scale-105' : ''}` : letra ? 'border-gray-400 text-[var(--text)] bg-white' : 'border-gray-200 bg-white'}`}
-                  style={{ transitionDelay: delay }}
                 >
                   {letra}
                 </div>
