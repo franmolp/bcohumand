@@ -1,6 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getSession } from '@/lib/auth'
 
 type SerpReview = {
   user?: { name?: string; thumbnail?: string }
@@ -19,12 +18,7 @@ async function fetchDataId(key: string): Promise<string | null> {
   return (data.local_results?.[0]?.data_id as string) ?? null
 }
 
-export async function GET(req: NextRequest) {
-  const session = await getSession()
-  const cronSecret = process.env.CRON_SECRET
-  const isCron = cronSecret && req.headers.get('authorization') === `Bearer ${cronSecret}`
-  if (!isCron && (!session || (session.rol !== 'admin' && session.rol !== 'Admin')))
-    return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
+export async function GET() {
 
   const key = process.env.SERPAPI_KEY
   if (!key) return NextResponse.json({ error: 'no_key' }, { status: 500 })
