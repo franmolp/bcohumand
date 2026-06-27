@@ -3,14 +3,7 @@ import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-export async function POST(req: NextRequest) {
-  const session = await getSession()
-  const cronSecret = process.env.CRON_SECRET
-  const isCron = cronSecret && req.headers.get('authorization') === `Bearer ${cronSecret}`
-
-  if (!isCron && (!session || (session.rol !== 'admin' && session.rol !== 'Admin')))
-    return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
-
+async function notificar(req: NextRequest, isCron: boolean) {
   const tz = 'America/Argentina/Buenos_Aires'
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: tz })
   const [year, month, day] = todayStr.split('-').map(Number)
@@ -45,4 +38,22 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ notified: pendientes.length })
+}
+
+// Vercel crons invocan GET
+export async function GET(req: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET
+  const isCron = !!(cronSecret && req.headers.get('authorization') === `Bearer ${cronSecret}`)
+  if (!isCron) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
+  return notificar(req, true)
+}
+
+// Botón manual del admin invoca POST
+export async function POST(req: NextRequest) {
+  const session = await getSession()
+  const cronSecret = process.env.CRON_SECRET
+  const isCron = !!(cronSecret && req.headers.get('authorization') === `Bearer ${cronSecret}`)
+  if (!isCron && (!session || (session.rol !== 'admin' && session.rol !== 'Admin')))
+    return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
+  return notificar(req, isCron)
 }
