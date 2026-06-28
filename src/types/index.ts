@@ -51,6 +51,9 @@ export interface AsistenciaProcesada {
   nota_justificacion: string | null
   editado_manual: boolean | null
   ultima_actualizacion: string
+  tipo_ausencia?: string | null
+  motivo?: string | null
+  comentario_admin?: string | null
 }
 
 export interface HorarioBase {

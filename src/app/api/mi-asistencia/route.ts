@@ -27,9 +27,9 @@ export async function GET(request: NextRequest) {
       .order('fecha', { ascending: true }),
     supabaseAdmin
       .from('solicitudes')
-      .select('fecha_inicio, fecha_fin, motivo')
+      .select('fecha_inicio, fecha_fin, tipo, motivo, comentario_admin')
       .eq('usuario_id', session.id)
-      .neq('estado', 'rechazada')
+      .in('estado', ['approved', 'pending'])
       .gte('fecha_fin', fechaInicio)
       .lte('fecha_inicio', fechaFin),
   ])
@@ -37,8 +37,13 @@ export async function GET(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const records = (data ?? []).map(r => {
-    const sol = (solic ?? []).find(s => r.fecha >= s.fecha_inicio && r.fecha <= s.fecha_fin && s.motivo)
-    return { ...r, motivo: sol?.motivo ?? null }
+    const sol = (solic ?? []).find(s => r.fecha >= s.fecha_inicio && r.fecha <= (s.fecha_fin ?? s.fecha_inicio))
+    return {
+      ...r,
+      tipo_ausencia: sol?.tipo ?? null,
+      motivo: sol?.motivo ?? null,
+      comentario_admin: sol?.comentario_admin ?? null,
+    }
   })
 
   return NextResponse.json(records)

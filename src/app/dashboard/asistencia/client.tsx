@@ -741,6 +741,9 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
                         <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${chip.bg} ${chip.text}`}>{rec.estado}</span>
                         {isManual && <span title="Editado manualmente" className="w-2 h-2 rounded-full bg-violet-400 flex-shrink-0" />}
                       </div>
+                      {rec.tipo_ausencia && <div className="text-[11px] text-gray-400 mt-0.5">{rec.tipo_ausencia}</div>}
+                      {rec.motivo && <div className="text-[11px] text-gray-400 italic mt-0.5">"{rec.motivo}"</div>}
+                      {rec.comentario_admin && <div className="text-[11px] text-indigo-500 mt-0.5">Admin: {rec.comentario_admin}</div>}
                     </td>
                     <td className="px-3 py-3.5 text-right">
                       {isAdmin && (
@@ -795,6 +798,9 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
                     <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${chip.bg} ${chip.text}`}>{rec.estado}</span>
                     {isManual && <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0" />}
                   </div>
+                  {rec.tipo_ausencia && <div className="text-[10px] text-gray-400 mb-0.5">{rec.tipo_ausencia}</div>}
+                  {rec.motivo && <div className="text-[10px] text-gray-400 italic mb-0.5 truncate">"{rec.motivo}"</div>}
+                  {rec.comentario_admin && <div className="text-[10px] text-indigo-500 mb-0.5 truncate">Admin: {rec.comentario_admin}</div>}
                   <div className="flex items-center gap-1.5 text-[11px]">
                     {(rec.horario_base_entrada || rec.horario_base_salida) && (
                       <span className="text-gray-400 shrink-0">Base: {fmtTime(rec.horario_base_entrada)}–{fmtTime(rec.horario_base_salida)}</span>
@@ -1249,7 +1255,7 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
                 return (
                   <div key={emp.id} className="bg-white rounded-xl border border-[var(--border)] px-3 py-3">
                     {/* Fila superior: nombre + chip + edit */}
-                    <div className="flex items-center gap-2 mb-1.5">
+                    <div className="flex items-center gap-2 mb-1">
                       <span className="text-[13px] font-semibold text-[var(--text)] flex-1 truncate">{emp.nombre}</span>
                       {chip
                         ? <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${chip.bg} ${chip.text}`}>{rec!.estado}</span>
@@ -1261,6 +1267,9 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
                         </button>
                       )}
                     </div>
+                    {rec?.tipo_ausencia && <div className="text-[10px] text-gray-400 mb-0.5">{rec.tipo_ausencia}</div>}
+                    {rec?.motivo && <div className="text-[10px] text-gray-400 italic mb-0.5 truncate">"{rec.motivo}"</div>}
+                    {rec?.comentario_admin && <div className="text-[10px] text-indigo-500 mb-0.5 truncate">Admin: {rec.comentario_admin}</div>}
                     {/* Fila base */}
                     {base && (
                       <p className="text-[11px] mb-1.5 text-gray-400">

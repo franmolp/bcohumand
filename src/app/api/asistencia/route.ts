@@ -52,5 +52,36 @@ export async function GET(req: NextRequest) {
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json(data ?? [])
+  const records = data ?? []
+  if (records.length === 0) return NextResponse.json([])
+
+  // Enriquecer con tipo, motivo y comentario_admin de solicitudes
+  const userIds = [...new Set(records.map(r => r.usuario_id).filter(Boolean))]
+  const fechas = records.map(r => r.fecha).filter(Boolean) as string[]
+  const minFecha = fechas.reduce((a, b) => a < b ? a : b)
+  const maxFecha = fechas.reduce((a, b) => a > b ? a : b)
+
+  const { data: solicitudes } = await supabaseAdmin
+    .from('solicitudes')
+    .select('usuario_id, tipo, motivo, comentario_admin, fecha_inicio, fecha_fin')
+    .in('usuario_id', userIds)
+    .in('estado', ['approved', 'pending'])
+    .lte('fecha_inicio', maxFecha)
+    .gte('fecha_fin', minFecha)
+
+  const enriched = records.map(r => {
+    const sol = (solicitudes ?? []).find(s =>
+      s.usuario_id === r.usuario_id &&
+      r.fecha >= s.fecha_inicio &&
+      r.fecha <= (s.fecha_fin ?? s.fecha_inicio)
+    )
+    return {
+      ...r,
+      tipo_ausencia: sol?.tipo ?? null,
+      motivo: sol?.motivo ?? null,
+      comentario_admin: sol?.comentario_admin ?? null,
+    }
+  })
+
+  return NextResponse.json(enriched)
 }
