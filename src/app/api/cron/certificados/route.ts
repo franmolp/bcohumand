@@ -57,6 +57,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: insertError.message }, { status: 500 })
   }
 
+  // Notificar al admin
+  const { data: adminRow } = await supabaseAdmin
+    .from('usuarios')
+    .select('id')
+    .eq('email', 'francomoran@gmail.com')
+    .single()
+  if (adminRow) {
+    await supabaseAdmin.from('notificaciones').insert({
+      usuario_id: adminRow.id,
+      titulo: `Certificados: ${usuarioIds.length} recordatorio${usuarioIds.length > 1 ? 's' : ''} enviado${usuarioIds.length > 1 ? 's' : ''}`,
+      mensaje: `Se notificó a ${usuarioIds.length} empleada${usuarioIds.length > 1 ? 's' : ''} con ausencia por salud sin certificado en ${nombreMes}.`,
+      tipo: 'aviso',
+      leida: false,
+    })
+  }
+
   console.log(`[cron certificados] enviadas: ${usuarioIds.length}`)
   return NextResponse.json({ ok: true, enviadas: usuarioIds.length })
 }

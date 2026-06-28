@@ -37,6 +37,24 @@ async function notificar(req: NextRequest, isCron: boolean) {
   )
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Notificar al admin
+  const { data: adminRow } = await supabaseAdmin
+    .from('usuarios')
+    .select('id')
+    .eq('email', 'francomoran@gmail.com')
+    .single()
+  if (adminRow) {
+    const nombres = pendientes.map(e => e.nombre).join(', ')
+    await supabaseAdmin.from('notificaciones').insert({
+      usuario_id: adminRow.id,
+      titulo: `Monotributo: ${pendientes.length} recordatorio${pendientes.length > 1 ? 's' : ''} enviado${pendientes.length > 1 ? 's' : ''}`,
+      mensaje: `Se notificó a: ${nombres}.`,
+      tipo: 'aviso',
+      leida: false,
+    })
+  }
+
   return NextResponse.json({ notified: pendientes.length })
 }
 
