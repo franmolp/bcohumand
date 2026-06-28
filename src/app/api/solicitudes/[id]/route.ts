@@ -3,6 +3,19 @@ import { supabase } from '@/lib/supabase'
 import { getSession } from '@/lib/auth'
 import { crearNotificacion } from '@/lib/notificaciones'
 
+async function regenerarAsistencia(req: NextRequest, usuarioId: string, fechaInicio: string, fechaFin: string | null) {
+  const hoy = new Date().toISOString().split('T')[0]
+  if (fechaInicio > hoy) return // Todo futuro, nada que regenerar
+  try {
+    const origin = new URL(req.url).origin
+    await fetch(`${origin}/api/asistencia/regenerar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.CRON_SECRET}` },
+      body: JSON.stringify({ fechaInicio, fechaFin: fechaFin ?? fechaInicio, usuarioId }),
+    })
+  } catch { /* no bloquear la respuesta si regenerar falla */ }
+}
+
 function fmtF(iso: string): string { const [, m, d] = iso.split('-'); return `${parseInt(d)}/${parseInt(m)}` }
 function buildMsg(fechaInicio: string, fechaFin: string | null, moderador: string, comentario: string | null): string {
   const fecha = fechaFin && fechaFin !== fechaInicio ? `${fmtF(fechaInicio)} → ${fmtF(fechaFin)}` : fmtF(fechaInicio)
@@ -90,6 +103,10 @@ export async function PUT(
         })
       }
 
+      if (data?.usuario_id) {
+        await regenerarAsistencia(request, data.usuario_id, data.fecha_inicio, data.fecha_fin ?? null)
+      }
+
       return NextResponse.json(data)
     }
 
@@ -140,6 +157,17 @@ export async function PUT(
     const estadoNuevo = updates.estado as string | undefined
     const comentNuevo = updates.comentario_admin as string | null | undefined
     const comentCambio = 'comentario_admin' in updates && comentNuevo !== (old.comentario_admin ?? null)
+
+    // Regenerar asistencia si cambió estado o fechas
+    const estadoCambio = estadoNuevo && estadoNuevo !== old.estado
+    const fechasCambiaron = 'fecha_inicio' in updates || 'fecha_fin' in updates
+    if (data?.usuario_id && (estadoCambio || fechasCambiaron)) {
+      // Si las fechas cambiaron, regenerar rango anterior también
+      if (fechasCambiaron && old.fecha_inicio) {
+        await regenerarAsistencia(request, data.usuario_id, old.fecha_inicio, old.fecha_fin ?? null)
+      }
+      await regenerarAsistencia(request, data.usuario_id, data.fecha_inicio, data.fecha_fin ?? null)
+    }
 
     if (data?.usuario_id && data.usuario_id !== session.id) {
       if (estadoNuevo && estadoNuevo !== old.estado && (estadoNuevo === 'approved' || estadoNuevo === 'rejected')) {
