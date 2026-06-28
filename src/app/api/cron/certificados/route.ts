@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
       usuario_id: id,
       titulo: 'Certificado médico pendiente',
       mensaje: `Tenés una ausencia por salud en ${nombreMes} sin certificado cargado. Subilo antes del ${finMes.getDate()}/${month + 1} o pasará a ausencia injustificada.`,
-      tipo: 'aviso',
+      tipo: 'certificado',
       leida: false,
     }))
   )
