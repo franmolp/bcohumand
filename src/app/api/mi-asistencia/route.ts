@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       .select('fecha_inicio, fecha_fin, tipo, motivo, comentario_admin')
       .eq('usuario_id', session.id)
       .in('estado', ['approved', 'pending'])
-      .gte('fecha_fin', fechaInicio)
+      .or(`fecha_fin.gte.${fechaInicio},fecha_fin.is.null`)
       .lte('fecha_inicio', fechaFin),
   ])
 

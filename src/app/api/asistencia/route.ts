@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
     .in('usuario_id', userIds)
     .in('estado', ['approved', 'pending'])
     .lte('fecha_inicio', maxFecha)
-    .gte('fecha_fin', minFecha)
+    .or(`fecha_fin.gte.${minFecha},fecha_fin.is.null`)
 
   const enriched = records.map(r => {
     const sol = (solicitudes ?? []).find(s =>
