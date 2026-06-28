@@ -214,10 +214,11 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
     <div className="space-y-5">
       <HowToPlay />
       <div className="flex flex-col items-center gap-6 py-8">
-        <div className="flex gap-1.5">
-          {Array.from({ length: largo }, (_, i) => (
-            <div key={i} className="w-12 h-12 rounded-lg bg-gray-200 border-2 border-gray-200" />
-          ))}
+        <div className="flex gap-1.5 justify-center w-full px-2">
+          {Array.from({ length: largo }, (_, i) => {
+            const cellSize = `min(48px, calc((100vw - 40px - ${largo - 1} * 6px) / ${largo}))`
+            return <div key={i} style={{ width: cellSize, height: cellSize }} className="rounded-lg bg-gray-200 border-2 border-gray-200 shrink-0" />
+          })}
         </div>
         <div className="text-center space-y-1">
           <p className="text-[13px] text-[var(--text-muted)]">El cronómetro arranca cuando destapás la palabra</p>
