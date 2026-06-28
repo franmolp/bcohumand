@@ -19,6 +19,8 @@ interface Registro {
   horario_base_entrada: string | null
   horario_base_salida: string | null
   motivo: string | null
+  tipo_ausencia?: string | null
+  comentario_admin?: string | null
 }
 
 function daysInMonth(mes: string): number {
