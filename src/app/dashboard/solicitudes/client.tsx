@@ -199,19 +199,15 @@ function FormFields({
   return (
     <div className="space-y-4">
 
-      {/* Estado — admin en nueva solicitud o edición (no aplica a Feriado que siempre es aprobado) */}
-      {isAdmin && !isFeriado && (
-        <div>
-          <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">Estado</label>
-          <select value={form.estado} onChange={e => setForm({ ...form, estado: e.target.value })}
-            style={{ fontSize: 16 }}
-            className="w-full h-11 px-4 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] lg:text-sm">
-            <option value="pending">Pendiente</option>
-            <option value="approved">Aprobada</option>
-            <option value="rejected">Rechazada</option>
-          </select>
-        </div>
-      )}
+      {/* Tipo */}
+      <div>
+        <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">Tipo de solicitud</label>
+        <select value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value })}
+          style={{ fontSize: 16 }}
+          className="w-full h-11 px-4 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] lg:text-sm">
+          {tipos.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </div>
 
       {/* Empleado — solo admin creando nueva (no en edición, no en Feriado que es masivo) */}
       {isAdmin && !editMode && form.tipo !== 'Feriado/Local cerrado' && (
@@ -231,15 +227,19 @@ function FormFields({
         </div>
       )}
 
-      {/* Tipo */}
-      <div>
-        <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">Tipo de solicitud</label>
-        <select value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value })}
-          style={{ fontSize: 16 }}
-          className="w-full h-11 px-4 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] lg:text-sm">
-          {tipos.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-      </div>
+      {/* Estado — admin en nueva solicitud o edición (no aplica a Feriado que siempre es aprobado) */}
+      {isAdmin && !isFeriado && (
+        <div>
+          <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">Estado</label>
+          <select value={form.estado} onChange={e => setForm({ ...form, estado: e.target.value })}
+            style={{ fontSize: 16 }}
+            className="w-full h-11 px-4 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] lg:text-sm">
+            <option value="pending">Pendiente</option>
+            <option value="approved">Aprobada</option>
+            <option value="rejected">Rechazada</option>
+          </select>
+        </div>
+      )}
 
       {/* Cambio de Horario: selector de subtipo */}
       {isHorario && (
@@ -594,7 +594,7 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
   const [tipoFilter, setTipoFilter]         = useState('')
   const [empleadoFilter, setEmpleadoFilter] = useState('')
   const [empleados, setEmpleados]           = useState<Empleado[]>([])
-  const [subFilter, setSubFilter]           = useState<'en_curso' | 'futuras' | 'archivadas'>('en_curso')
+  const [subFilter, setSubFilter]           = useState<'todas' | 'en_curso' | 'futuras' | 'archivadas'>('todas')
   const [fotosMap, setFotosMap]             = useState<Record<string, string | null>>({})
 
   // Modal nueva / edición
@@ -980,7 +980,7 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
               {tabs.map(s => {
                 const active = estadoFilter === s || (s === 'todos' && !estadoFilter)
                 return (
-                  <button key={s} onClick={() => { setEstadoFilter(s === 'todos' ? '' : s); setSubFilter('en_curso') }}
+                  <button key={s} onClick={() => { setEstadoFilter(s === 'todos' ? '' : s); setSubFilter('todas') }}
                     className={`px-2 lg:px-3 py-2 text-[10px] lg:text-[11px] font-medium rounded-[10px] cursor-pointer transition-all whitespace-nowrap ${active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
                     {tabLabel[s]}
                   </button>
@@ -994,10 +994,10 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
       {/* ─── Sub-filtro período (no aplica a Pendientes ni a empleados) ─── */}
       {isAdminOrHR && estadoFilter !== 'pending' && (
         <div className="flex bg-white border border-gray-200/60 rounded-xl p-0.5 mb-4 w-fit">
-          {(['en_curso', 'futuras', 'archivadas'] as const).map(sf => (
+          {(['todas', 'en_curso', 'futuras', 'archivadas'] as const).map(sf => (
             <button key={sf} onClick={() => setSubFilter(sf)}
               className={`px-3 lg:px-4 py-2 text-[11px] lg:text-[12px] font-medium rounded-[10px] cursor-pointer transition-all whitespace-nowrap ${subFilter === sf ? 'bg-[var(--primary)] text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>
-              {sf === 'en_curso' ? 'En curso' : sf === 'futuras' ? 'Futuras' : 'Archivadas'}
+              {sf === 'todas' ? 'Todas' : sf === 'en_curso' ? 'En curso' : sf === 'futuras' ? 'Futuras' : 'Archivadas'}
             </button>
           ))}
         </div>
@@ -1012,9 +1012,10 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
               ? 'No hay solicitudes'
               : estadoFilter === 'pending'
                 ? 'No hay solicitudes pendientes'
-                : subFilter === 'en_curso' ? 'No hay solicitudes en curso'
-                : subFilter === 'futuras'  ? 'No hay solicitudes futuras'
-                : 'No hay solicitudes archivadas'}
+                : subFilter === 'en_curso'   ? 'No hay solicitudes en curso'
+                : subFilter === 'futuras'    ? 'No hay solicitudes futuras'
+                : subFilter === 'archivadas' ? 'No hay solicitudes archivadas'
+                : 'No hay solicitudes'}
           </p>
         </div>
       ) : (
