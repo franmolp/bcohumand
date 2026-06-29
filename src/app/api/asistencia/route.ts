@@ -56,26 +56,41 @@ export async function GET(req: NextRequest) {
   if (records.length === 0) return NextResponse.json([])
 
   // Enriquecer con tipo, motivo y comentario_admin de solicitudes
-  const userIds = [...new Set(records.map(r => r.usuario_id).filter(Boolean))]
   const fechas = records.map(r => r.fecha).filter(Boolean) as string[]
   const minFecha = fechas.reduce((a, b) => a < b ? a : b)
   const maxFecha = fechas.reduce((a, b) => a > b ? a : b)
 
-  const yearStart = `${minFecha.substring(0, 4)}-01-01`
   const { data: solicitudes } = await supabaseAdmin
     .from('solicitudes')
     .select('usuario_id, tipo, motivo, comentario_admin, fecha_inicio, fecha_fin')
-    .in('usuario_id', userIds)
     .in('estado', ['approved', 'pending'])
-    .gte('fecha_inicio', yearStart)
     .lte('fecha_inicio', maxFecha)
+    .or(`fecha_fin.gte.${minFecha},fecha_fin.is.null`)
+    .limit(10000)
+
+  // Construir mapa uid|fecha igual que regenerar para garantizar matching correcto
+  const solicitudMap = new Map<string, { tipo: string; motivo: string | null; comentario_admin: string | null }>()
+  for (const sol of (solicitudes ?? [])) {
+    const uid = sol.usuario_id
+    if (!uid) continue
+    const inicio = sol.fecha_inicio.substring(0, 10)
+    const fin = (sol.fecha_fin ?? sol.fecha_inicio).substring(0, 10)
+    const d = new Date(inicio + 'T12:00:00')
+    const endD = new Date(fin + 'T12:00:00')
+    while (d <= endD) {
+      const dateStr = d.toISOString().split('T')[0]
+      if (dateStr >= minFecha && dateStr <= maxFecha) {
+        const key = `${uid}|${dateStr}`
+        if (!solicitudMap.has(key)) {
+          solicitudMap.set(key, { tipo: sol.tipo, motivo: sol.motivo ?? null, comentario_admin: sol.comentario_admin ?? null })
+        }
+      }
+      d.setDate(d.getDate() + 1)
+    }
+  }
 
   const enriched = records.map(r => {
-    const sol = (solicitudes ?? []).find(s =>
-      s.usuario_id === r.usuario_id &&
-      r.fecha >= s.fecha_inicio &&
-      r.fecha <= (s.fecha_fin ?? s.fecha_inicio)
-    )
+    const sol = solicitudMap.get(`${r.usuario_id}|${r.fecha}`)
     return {
       ...r,
       tipo_ausencia: sol?.tipo ?? null,

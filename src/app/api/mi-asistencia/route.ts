@@ -30,14 +30,30 @@ export async function GET(request: NextRequest) {
       .select('fecha_inicio, fecha_fin, tipo, motivo, comentario_admin')
       .eq('usuario_id', session.id)
       .in('estado', ['approved', 'pending'])
-      .gte('fecha_inicio', `${y}-01-01`)
-      .lte('fecha_inicio', fechaFin),
+      .lte('fecha_inicio', fechaFin)
+      .or(`fecha_fin.gte.${fechaInicio},fecha_fin.is.null`),
   ])
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // Construir mapa fecha → solicitud igual que regenerar para garantizar matching correcto
+  const solicitudMap = new Map<string, { tipo: string; motivo: string | null; comentario_admin: string | null }>()
+  for (const sol of (solic ?? [])) {
+    const inicio = sol.fecha_inicio.substring(0, 10)
+    const fin = (sol.fecha_fin ?? sol.fecha_inicio).substring(0, 10)
+    const d = new Date(inicio + 'T12:00:00')
+    const endD = new Date(fin + 'T12:00:00')
+    while (d <= endD) {
+      const dateStr = d.toISOString().split('T')[0]
+      if (!solicitudMap.has(dateStr)) {
+        solicitudMap.set(dateStr, { tipo: sol.tipo, motivo: sol.motivo ?? null, comentario_admin: sol.comentario_admin ?? null })
+      }
+      d.setDate(d.getDate() + 1)
+    }
+  }
+
   const records = (data ?? []).map(r => {
-    const sol = (solic ?? []).find(s => r.fecha >= s.fecha_inicio && r.fecha <= (s.fecha_fin ?? s.fecha_inicio))
+    const sol = solicitudMap.get(r.fecha)
     return {
       ...r,
       tipo_ausencia: sol?.tipo ?? null,
