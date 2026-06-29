@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { supabase } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,7 +61,7 @@ export async function GET(req: NextRequest) {
   const minFecha = fechas.reduce((a, b) => a < b ? a : b)
   const maxFecha = fechas.reduce((a, b) => a > b ? a : b)
 
-  const { data: solicitudes } = await supabaseAdmin
+  const { data: solicitudes } = await supabase
     .from('solicitudes')
     .select('usuario_id, tipo, motivo, comentario_admin, fecha_inicio, fecha_fin')
     .in('estado', ['approved', 'pending'])

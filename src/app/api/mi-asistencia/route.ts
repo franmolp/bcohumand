@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { supabase } from '@/lib/supabase'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
       .gte('fecha', fechaInicio)
       .lte('fecha', fechaFin)
       .order('fecha', { ascending: true }),
-    supabaseAdmin
+    supabase
       .from('solicitudes')
       .select('fecha_inicio, fecha_fin, tipo, motivo, comentario_admin')
       .eq('usuario_id', session.id)

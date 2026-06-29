@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { supabase } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,24 +13,17 @@ export async function GET() {
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
   if (!isAdmin) return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
 
-  // 1. Todas las solicitudes sin filtros (limitado a 20)
-  const { data: todas, error: e1 } = await supabaseAdmin
-    .from('solicitudes')
-    .select('id, usuario_id, tipo, estado, fecha_inicio, fecha_fin, motivo, comentario_admin')
-    .order('fecha_inicio', { ascending: false })
-    .limit(20)
-
-  // 2. Solo approved/pending
-  const { data: aprobadas, error: e2 } = await supabaseAdmin
-    .from('solicitudes')
-    .select('id, usuario_id, tipo, estado, fecha_inicio, fecha_fin, motivo, comentario_admin')
-    .in('estado', ['approved', 'pending'])
-    .limit(20)
-
-  // 3. Con el filtro de fecha que usa el enrichment (mes actual)
   const hoy = new Date().toISOString().split('T')[0]
   const mesInicio = hoy.substring(0, 7) + '-01'
-  const { data: conFiltro, error: e3 } = await supabaseAdmin
+
+  // Con supabaseAdmin (service_role) — debería fallar con "permission denied"
+  const { data: adminData, error: adminErr } = await supabaseAdmin
+    .from('solicitudes')
+    .select('id, tipo, estado, fecha_inicio')
+    .limit(5)
+
+  // Con supabase (anon key) — debería funcionar como regenerar
+  const { data: anonData, error: anonErr } = await supabase
     .from('solicitudes')
     .select('id, usuario_id, tipo, estado, fecha_inicio, fecha_fin, motivo, comentario_admin')
     .in('estado', ['approved', 'pending'])
@@ -39,8 +33,8 @@ export async function GET() {
 
   return NextResponse.json({
     session: { id: session.id, rol: session.rol },
-    todasSinFiltro: { count: todas?.length ?? 0, error: e1?.message, data: todas },
-    soloAprobadas: { count: aprobadas?.length ?? 0, error: e2?.message, data: aprobadas },
-    conFiltroFecha: { count: conFiltro?.length ?? 0, error: e3?.message, data: conFiltro, params: { mesInicio, hoy } },
+    serviceRole: { count: adminData?.length ?? 0, error: adminErr?.message },
+    anonKey: { count: anonData?.length ?? 0, error: anonErr?.message, data: anonData },
+    params: { mesInicio, hoy },
   })
 }
