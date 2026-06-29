@@ -245,11 +245,13 @@ export function calcPresentismo(
 
     if (chip.present) {
       laborables++; presentes++
-      // Fallback a horario_base calculado cuando horas_base es null
-      horasReales += r.horas_base
+      const hb = r.horas_base
         ?? (r.horario_base_entrada && r.horario_base_salida
           ? parseFloat(((toMinutes(r.horario_base_salida) - toMinutes(r.horario_base_entrada)) / 60).toFixed(2))
-          : 0)
+          : null)
+        ?? r.horas_fichadas
+        ?? (r.dia_semana ? (dowAvg.get(r.dia_semana) ?? globalAvg) : globalAvg)
+      horasReales += hb ?? 0
       if (estado.startsWith('Llegada tarde')) { tardanzas++; llegadasTardeCount++ }
       if (estado.includes('Salida temprana')) salidaTempranaCount++
     } else if (chip.justificado) {
