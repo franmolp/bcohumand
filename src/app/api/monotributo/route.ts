@@ -61,13 +61,15 @@ export async function POST(req: NextRequest) {
     if (!emp?.monotributo_habilitado) return NextResponse.json({ error: 'No habilitado' }, { status: 403 })
   }
 
-  const { mes, comprobante_url, comprobante_nombre, factura_url, factura_nombre } = await req.json()
+  const { mes, comprobante_url, comprobante_nombre, factura_url, factura_nombre, usuario_id: bodyUsuarioId } = await req.json()
   if (!mes || !comprobante_url) return NextResponse.json({ error: 'El comprobante es obligatorio' }, { status: 400 })
+
+  const targetUsuarioId = (isAdmin && bodyUsuarioId) ? bodyUsuarioId : session.id
 
   const { error } = await supabaseAdmin
     .from('monotributo')
     .upsert({
-      usuario_id: session.id,
+      usuario_id: targetUsuarioId,
       mes,
       comprobante_url,
       comprobante_nombre: comprobante_nombre ?? null,
@@ -81,22 +83,24 @@ export async function POST(req: NextRequest) {
   const { data } = await supabaseAdmin
     .from('monotributo')
     .select('*')
-    .eq('usuario_id', session.id)
+    .eq('usuario_id', targetUsuarioId)
     .eq('mes', mes)
     .single()
 
-  // Notificar admin+HR que el empleado cargó su monotributo
-  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
-  const [yr, mo] = mes.split('-')
-  const nombreMes = meses[parseInt(mo) - 1]
-  const adminHRIds = await getAdminAndHRIds()
-  const recipients = adminHRIds.filter(id => id !== session.id)
-  if (recipients.length) {
-    await crearNotificaciones(recipients, {
-      titulo: `Monotributo cargado`,
-      mensaje: `${session.nombre} subió el comprobante de ${nombreMes} ${yr}.`,
-      tipo: 'monotributo',
-    })
+  // Notificar admin+HR (solo si es el propio empleado quien carga)
+  if (!isAdmin || targetUsuarioId === session.id) {
+    const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+    const [yr, mo] = mes.split('-')
+    const nombreMes = meses[parseInt(mo) - 1]
+    const adminHRIds = await getAdminAndHRIds()
+    const recipients = adminHRIds.filter(id => id !== session.id)
+    if (recipients.length) {
+      await crearNotificaciones(recipients, {
+        titulo: `Monotributo cargado`,
+        mensaje: `${session.nombre} subió el comprobante de ${nombreMes} ${yr}.`,
+        tipo: 'monotributo',
+      })
+    }
   }
 
   return NextResponse.json(data)

@@ -15,11 +15,14 @@ export async function POST(req: NextRequest) {
   if (!file || !tipo || !mes) return NextResponse.json({ error: 'Faltan parámetros' }, { status: 400 })
   if (file.size > 10 * 1024 * 1024) return NextResponse.json({ error: 'El archivo no puede superar 10 MB' }, { status: 400 })
 
+  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+  const targetUsuarioId = (isAdmin && (formData.get('usuario_id') as string | null)) || session.id
+
   const ext   = file.name.split('.').pop()?.toLowerCase() ?? 'pdf'
   const bytes = await file.arrayBuffer()
 
   const uploadToSupabase = async (): Promise<string> => {
-    const path = `${mes}/${session.id}/${tipo}.${ext}`
+    const path = `${mes}/${targetUsuarioId}/${tipo}.${ext}`
     const { error } = await supabaseAdmin.storage.from('monotributo').upload(path, Buffer.from(bytes), {
       contentType: file.type,
       upsert: true,
@@ -35,7 +38,7 @@ export async function POST(req: NextRequest) {
     if (gasReady()) {
       try {
         const [anioStr, mesStr] = mes.split('-')
-        const fileName = `${session.id}_${tipo}.${ext}`
+        const fileName = `${targetUsuarioId}_${tipo}.${ext}`
         url = await gasUpload({
           bytes, mimeType: file.type, fileName,
           folderType: 'monotributo',

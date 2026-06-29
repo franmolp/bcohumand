@@ -107,6 +107,11 @@ function AdminResumen() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [fotosMap, setFotosMap] = useState<Record<string, string | null>>({})
   const [viewer, setViewer] = useState<{ url: string; name: string | null } | null>(null)
+  const [uploadTarget, setUploadTarget] = useState<EmpResumen | null>(null)
+  const [uploadMes, setUploadMes] = useState(currentMes())
+  const [uploadComp, setUploadComp] = useState<File | null>(null)
+  const [uploadFact, setUploadFact] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ visible: true, msg, type })
@@ -159,6 +164,56 @@ function AdminResumen() {
     if (errors.length > 0) parts.push(`${errors.length} error${errors.length !== 1 ? 'es' : ''}: ${errors[0]}`)
     showToast(parts.length ? parts.join(' · ') : 'Sin cambios', imported > 0 ? 'success' : 'error')
     if (imported > 0) load()
+  }
+
+  function openUpload(emp: EmpResumen) {
+    setUploadTarget(emp)
+    setUploadMes(mes)
+    setUploadComp(null)
+    setUploadFact(null)
+  }
+
+  async function adminUpload() {
+    if (!uploadTarget || !uploadComp) return
+    setUploading(true)
+    try {
+      async function uploadFile(file: File, tipo: string) {
+        const { compressImage } = await import('@/lib/compress-image')
+        const toUpload = await compressImage(file)
+        const fd = new FormData()
+        fd.append('file', toUpload)
+        fd.append('tipo', tipo)
+        fd.append('mes', uploadMes)
+        fd.append('usuario_id', uploadTarget!.id)
+        const res = await fetch('/api/monotributo/upload', { method: 'POST', body: fd })
+        if (!res.ok) { const j = await res.json(); throw new Error(j.error ?? 'Error al subir') }
+        return res.json() as Promise<{ url: string; nombre: string }>
+      }
+
+      const comp = await uploadFile(uploadComp, 'comprobante')
+      let fact: { url: string; nombre: string } | null = null
+      if (uploadFact) fact = await uploadFile(uploadFact, 'factura')
+
+      const res = await fetch('/api/monotributo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mes: uploadMes,
+          comprobante_url: comp.url,
+          comprobante_nombre: comp.nombre,
+          factura_url: fact?.url ?? null,
+          factura_nombre: fact?.nombre ?? null,
+          usuario_id: uploadTarget!.id,
+        }),
+      })
+      const json = await res.json()
+      if (json.error) showToast(json.error, 'error')
+      else { showToast('Monotributo cargado'); setUploadTarget(null); load() }
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Error al subir', 'error')
+    } finally {
+      setUploading(false)
+    }
   }
 
   const presentados = data.filter(d => d.record).length
@@ -217,12 +272,19 @@ function AdminResumen() {
                     <td className="px-4 py-3"><FileLink url={emp.record?.factura_url ?? null} nombre={emp.record?.factura_nombre ?? null} label="Ver" onView={(url, name) => setViewer({ url, name })} /></td>
                     <td className="px-4 py-3 text-xs text-[var(--text-muted)]">{emp.record ? fmtFecha(emp.record.fecha_carga) : '—'}</td>
                     <td className="px-4 py-3 text-right">
-                      {emp.record && (
-                        <button onClick={() => setDeleteId(emp.record!.id)}
-                          className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors">
-                          <IconTrash size={14} />
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => openUpload(emp)}
+                          className="p-1.5 rounded-lg text-gray-300 hover:text-[var(--primary)] hover:bg-[var(--primary-light)]/40 transition-colors"
+                          title="Cargar manualmente">
+                          <IconUpload size={14} />
                         </button>
-                      )}
+                        {emp.record && (
+                          <button onClick={() => setDeleteId(emp.record!.id)}
+                            className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors">
+                            <IconTrash size={14} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -244,6 +306,11 @@ function AdminResumen() {
                   }
                   <span className="text-sm font-medium text-[var(--text)] flex-1 truncate">{emp.nombre}</span>
                   <EstadoBadge record={emp.record} />
+                  <button onClick={() => openUpload(emp)}
+                    className="p-1 rounded text-gray-300 hover:text-[var(--primary)] transition-colors"
+                    title="Cargar manualmente">
+                    <IconUpload size={14} />
+                  </button>
                   <button
                     onClick={() => emp.record && setDeleteId(emp.record.id)}
                     disabled={!emp.record}
@@ -273,6 +340,41 @@ function AdminResumen() {
           </>
         }>
         <p className="text-sm text-[var(--text-sub)]">¿Eliminás el monotributo presentado? La empleada deberá volver a cargarlo.</p>
+      </Modal>
+
+      {/* Admin upload modal */}
+      <Modal
+        open={!!uploadTarget}
+        onClose={() => setUploadTarget(null)}
+        title={`Cargar Monotributo — ${uploadTarget?.nombre ?? ''}`}
+        footer={
+          <>
+            <button onClick={() => setUploadTarget(null)}
+              className="flex-1 h-10 rounded-xl border border-[var(--border)] text-sm font-medium text-[var(--text-muted)]">
+              Cancelar
+            </button>
+            <button onClick={adminUpload} disabled={!uploadComp || uploading}
+              className="flex-1 h-10 rounded-xl bg-[image:var(--gradient)] text-white text-sm font-semibold disabled:opacity-40 transition-opacity">
+              {uploading ? 'Subiendo…' : 'Cargar'}
+            </button>
+          </>
+        }>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Mes</label>
+            <input type="month" value={uploadMes} onChange={e => setUploadMes(e.target.value)}
+              className="h-10 w-full px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+              style={{ fontSize: 16 }} />
+          </div>
+          <FileInput label="Comprobante de pago" required onChange={setUploadComp} />
+          <FileInput label="Factura" onChange={setUploadFact} />
+          {uploading && (
+            <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+              <div className="w-4 h-4 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" />
+              Subiendo archivos…
+            </div>
+          )}
+        </div>
       </Modal>
 
       {viewer && <FileViewer url={viewer.url} name={viewer.name} onClose={() => setViewer(null)} />}
