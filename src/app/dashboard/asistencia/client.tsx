@@ -81,6 +81,20 @@ function fmtFecha(f: string): string {
   return `${d}/${m}/${y}`
 }
 
+function countNonSundayRange(from: string, to: string): number {
+  const [fy, fm, fd] = from.split('-').map(Number)
+  const [ty, tm, td] = to.split('-').map(Number)
+  const start = new Date(fy, fm - 1, fd)
+  const end = new Date(ty, tm - 1, td)
+  let count = 0
+  const cur = new Date(start)
+  while (cur <= end) {
+    if (cur.getDay() !== 0) count++
+    cur.setDate(cur.getDate() + 1)
+  }
+  return count
+}
+
 function isoWeekOf(dateStr: string): number {
   const d = new Date(dateStr + 'T12:00:00')
   const dow = d.getDay() || 7
@@ -215,6 +229,9 @@ export default function AsistenciaClient({ user }: Props) {
   const weekData = useMemo(() => {
     if (!weekEmpId) return []
     const [year] = mes.split('-').map(Number)
+    const [my, mm] = mes.split('-').map(Number)
+    const mesStart = `${mes}-01`
+    const mesEnd = `${mes}-${String(new Date(my, mm, 0).getDate()).padStart(2, '0')}`
     const recs = records.filter(r => r.usuario_id === weekEmpId && r.fecha <= ayer)
     const byWeek = new Map<number, typeof recs>()
     for (const r of recs) {
@@ -222,15 +239,18 @@ export default function AsistenciaClient({ user }: Props) {
       if (!byWeek.has(r.semana)) byWeek.set(r.semana, [])
       byWeek.get(r.semana)!.push(r)
     }
-    // Mostrar la semana actual aunque no tenga registros aún
     if (today.substring(0, 7) === mes) {
       const semanaHoy = isoWeekOf(today)
       if (!byWeek.has(semanaHoy)) byWeek.set(semanaHoy, [])
     }
     return Array.from(byWeek.entries()).sort(([a], [b]) => a - b).map(([semana, wr]) => {
       const stats = calcPresentismo(wr as Parameters<typeof calcPresentismo>[0], config, wr.length)
-      const { de, hasta } = weekMonSat(year, semana)
-      return { semana, stats, de, hasta }
+      const { de: fullDe, hasta: fullHasta } = weekMonSat(year, semana)
+      const de = fullDe < mesStart ? mesStart : fullDe
+      const hasta = fullHasta > mesEnd ? mesEnd : fullHasta
+      const diasEnMes = de <= hasta ? countNonSundayRange(de, hasta) : 0
+      const minimoSemana = parseFloat(((diasEnMes / 6) * config.minimoSemanal).toFixed(1))
+      return { semana, stats, de, hasta, minimoSemana }
     })
   }, [records, weekEmpId, config, ayer, mes, today])
 
@@ -1387,7 +1407,7 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
   statsPerEmp: { emp: Empleado; stats: ReturnType<typeof calcPresentismo> }[]
   homeStats: ReturnType<typeof calcPresentismo>
   config: AsistenciaConfig
-  weekData: { semana: number; stats: ReturnType<typeof calcPresentismo>; de: string; hasta: string }[]
+  weekData: { semana: number; stats: ReturnType<typeof calcPresentismo>; de: string; hasta: string; minimoSemana: number }[]
   weekEmp: Empleado | null
   weekEmpId: string | null
   setWeekEmpId: (id: string | null) => void
@@ -1416,21 +1436,27 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
   const empWeekData = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0]
     const [year] = mes.split('-').map(Number)
+    const [my, mm] = mes.split('-').map(Number)
+    const mesStart = `${mes}-01`
+    const mesEnd = `${mes}-${String(new Date(my, mm, 0).getDate()).padStart(2, '0')}`
     const byWeek = new Map<number, { records: typeof homeRecords; semana: number }>()
     for (const r of homeRecords) {
       if (r.semana == null) continue
       if (!byWeek.has(r.semana)) byWeek.set(r.semana, { records: [], semana: r.semana })
       byWeek.get(r.semana)!.records.push(r)
     }
-    // Mostrar la semana actual aunque no tenga registros aún
     if (todayStr.substring(0, 7) === mes) {
       const semanaHoy = isoWeekOf(todayStr)
       if (!byWeek.has(semanaHoy)) byWeek.set(semanaHoy, { records: [], semana: semanaHoy })
     }
     return Array.from(byWeek.values()).sort((a, b) => a.semana - b.semana).map(({ semana, records: wr }) => {
       const stats = calcPresentismo(wr as Parameters<typeof calcPresentismo>[0], config, wr.length)
-      const { de, hasta } = weekMonSat(year, semana)
-      return { semana, stats, de, hasta }
+      const { de: fullDe, hasta: fullHasta } = weekMonSat(year, semana)
+      const de = fullDe < mesStart ? mesStart : fullDe
+      const hasta = fullHasta > mesEnd ? mesEnd : fullHasta
+      const diasEnMes = de <= hasta ? countNonSundayRange(de, hasta) : 0
+      const minimoSemana = parseFloat(((diasEnMes / 6) * config.minimoSemanal).toFixed(1))
+      return { semana, stats, de, hasta, minimoSemana }
     })
   }, [homeRecords, config, mes])
 
@@ -1631,9 +1657,9 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
               <h3 className="text-sm font-semibold text-[var(--text)]">Semanas</h3>
             </div>
             <div className="divide-y divide-[var(--border)]">
-              {empWeekData.map(({ semana, stats, de, hasta }) => {
+              {empWeekData.map(({ semana, stats, de, hasta, minimoSemana }) => {
                 const total = stats.horasReales + stats.horasJustificadas
-                const pct   = config.minimoSemanal > 0 ? Math.round((total / config.minimoSemanal) * 100) : null
+                const pct   = minimoSemana > 0 ? Math.round((total / minimoSemana) * 100) : null
                 const tard  = stats.llegadasTardeCount ?? 0
                 const aus   = stats.ausenciasInjustificadasCount ?? 0
                 return (
@@ -1647,7 +1673,7 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
                       <div className="text-[11px] flex flex-wrap gap-x-1.5">
                         <span className="text-emerald-600 font-medium">{fmtH(stats.horasReales)}</span>
                         {stats.horasJustificadas > 0 && <span className="text-blue-400">+{fmtH(stats.horasJustificadas)}</span>}
-                        <span className="text-[var(--text-muted)]">/ {fmtH(config.minimoSemanal)} mín</span>
+                        <span className="text-[var(--text-muted)]">/ {fmtH(minimoSemana)} mín</span>
                         {(tard > 0 || aus > 0) && (
                           <span className="text-amber-600">
                             {[tard > 0 && `${tard} tard`, aus > 0 && `${aus} aus`].filter(Boolean).join(' · ')}
@@ -1736,9 +1762,9 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
             <div>
               <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">Semanas</h4>
               <div className="space-y-1.5">
-                {weekData.map(({ semana, stats, de, hasta }) => {
+                {weekData.map(({ semana, stats, de, hasta, minimoSemana }) => {
                   const total = stats.horasReales + stats.horasJustificadas
-                  const pct   = config.minimoSemanal > 0 ? Math.round((total / config.minimoSemanal) * 100) : null
+                  const pct   = minimoSemana > 0 ? Math.round((total / minimoSemana) * 100) : null
                   const tard  = stats.llegadasTardeCount ?? 0
                   const aus   = stats.ausenciasInjustificadasCount ?? 0
                   return (
@@ -1752,7 +1778,7 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
                         <div className="text-[11px] flex flex-wrap gap-x-1.5">
                           <span className="text-emerald-600 font-medium">{fmtH(stats.horasReales)}</span>
                           {stats.horasJustificadas > 0 && <span className="text-blue-400">+{fmtH(stats.horasJustificadas)}</span>}
-                          <span className="text-[var(--text-muted)]">/ {fmtH(config.minimoSemanal)} mín</span>
+                          <span className="text-[var(--text-muted)]">/ {fmtH(minimoSemana)} mín</span>
                           {(tard > 0 || aus > 0) && (
                             <span className="text-amber-600">
                               {[tard > 0 && `${tard} tard`, aus > 0 && `${aus} aus`].filter(Boolean).join(' · ')}
