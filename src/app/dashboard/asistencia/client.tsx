@@ -812,9 +812,14 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
                           : null}
                     </div>
                   </div>
-                  {(rec.tipo_ausencia || rec.motivo || rec.comentario_admin) && (
-                    <div className="text-[10px] text-gray-400 mt-0.5 truncate">{[rec.tipo_ausencia, rec.motivo, rec.comentario_admin].filter(Boolean).join(' | ')}</div>
-                  )}
+                  {chip.present
+                    ? (rec.horario_base_entrada || rec.horario_base_salida) && (
+                        <div className="text-[10px] text-gray-400 mt-0.5">Base: {fmtTime(rec.horario_base_entrada)}–{fmtTime(rec.horario_base_salida)}</div>
+                      )
+                    : (rec.tipo_ausencia || rec.motivo || rec.comentario_admin) && (
+                        <div className="text-[10px] text-gray-400 mt-0.5 truncate">{[rec.tipo_ausencia, rec.motivo, rec.comentario_admin].filter(Boolean).join(' | ')}</div>
+                      )
+                  }
                 </div>
                 {isAdmin && (
                   <button onClick={() => openEdit(rec)} className="flex-shrink-0 p-1.5 rounded-lg text-gray-300 hover:text-[var(--primary)] hover:bg-[var(--primary)]/5 transition-colors">
@@ -1271,19 +1276,21 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
                         Base: {fmtTime(base.entrada)}–{fmtTime(base.salida)}
                       </p>
                     )}
-                    {/* Fila fichadas + horas */}
-                    <div className="flex items-center gap-1.5 text-[11px]">
-                      {rec?.fichada_entrada
-                        ? <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium border border-emerald-200">{fmtTime(rec.fichada_entrada)}</span>
-                        : <span className="text-gray-300">—</span>}
-                      {(rec?.fichada_entrada || rec?.fichada_salida) && <span className="text-gray-300">→</span>}
-                      {rec?.fichada_salida
-                        ? <span className="px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 font-medium border border-rose-200">{fmtTime(rec.fichada_salida)}</span>
-                        : rec?.fichada_entrada ? <span className="text-gray-300">—</span> : null}
-                      {rec?.horas_fichadas != null && (
-                        <span className="font-semibold text-[var(--text)] ml-1">{fmtH(rec.horas_fichadas)}</span>
-                      )}
-                    </div>
+                    {/* Fila fichadas + horas — solo si hay alguna fichada */}
+                    {(rec?.fichada_entrada || rec?.fichada_salida) && (
+                      <div className="flex items-center gap-1.5 text-[11px]">
+                        {rec?.fichada_entrada
+                          ? <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium border border-emerald-200">{fmtTime(rec.fichada_entrada)}</span>
+                          : <span className="text-gray-300">—</span>}
+                        <span className="text-gray-300">→</span>
+                        {rec?.fichada_salida
+                          ? <span className="px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 font-medium border border-rose-200">{fmtTime(rec.fichada_salida)}</span>
+                          : <span className="text-gray-300">—</span>}
+                        {rec?.horas_fichadas != null && (
+                          <span className="font-semibold text-[var(--text)] ml-1">{fmtH(rec.horas_fichadas)}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               })}

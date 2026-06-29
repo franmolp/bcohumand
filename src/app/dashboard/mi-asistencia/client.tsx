@@ -211,9 +211,14 @@ export default function MiAsistenciaClient({ user }: { user: SessionUser }) {
                         )}
                       </div>
                     </div>
-                    {(rec.tipo_ausencia || rec.motivo || rec.comentario_admin) && (
-                      <div className="text-[10px] text-gray-400 mt-0.5 truncate">{[rec.tipo_ausencia, rec.motivo, rec.comentario_admin].filter(Boolean).join(' | ')}</div>
-                    )}
+                    {chip.present
+                      ? (rec.horario_base_entrada || rec.horario_base_salida) && (
+                          <div className="text-[10px] text-gray-400 mt-0.5">Base: {fmt5(rec.horario_base_entrada)}–{fmt5(rec.horario_base_salida)}</div>
+                        )
+                      : (rec.tipo_ausencia || rec.motivo || rec.comentario_admin) && (
+                          <div className="text-[10px] text-gray-400 mt-0.5 truncate">{[rec.tipo_ausencia, rec.motivo, rec.comentario_admin].filter(Boolean).join(' | ')}</div>
+                        )
+                    }
                   </div>
                 </div>
               )
