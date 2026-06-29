@@ -474,12 +474,13 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
     return null
   }
 
-  // Promedio por día de semana (usando horas programadas, fallback a fichadas)
+  // Promedio por día de semana usando solo horario base (no fichadas)
+  // para que ausencias justificadas hereden las horas programadas, no las reales
   const dowSums = new Map<string, { sum: number; count: number }>()
   for (const r of homeRecords) {
     if (!CHIP_INFO[r.estado ?? '']?.present || !r.dia_semana) continue
-    const h = getHorasProg(r) ?? r.horas_fichadas
-    if (h == null) continue
+    const h = getHorasProg(r)
+    if (!h) continue // descarta null, undefined y 0 (agenda cerrada por Fresha)
     const e = dowSums.get(r.dia_semana) ?? { sum: 0, count: 0 }
     e.sum += h; e.count++
     dowSums.set(r.dia_semana, e)
