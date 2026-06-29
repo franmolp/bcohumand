@@ -120,6 +120,7 @@ const EMOJIS = ['⭐','🎉','🎂','📢','🏢','🎯','💼','🌟','⚡','�
 
 const BLANK_EVENT = {
   categoria:            'evento' as 'evento' | 'local_cerrado',
+  // Evento especial
   titulo:               '',
   emoji:                '',
   fecha:                '',
@@ -130,6 +131,11 @@ const BLANK_EVENT = {
   tipo_destinatario:    'all',
   valor_destinatario:   '',
   enviar_notificacion:  true,
+  // Local cerrado (solicitud masiva)
+  fecha_inicio:         '',
+  fecha_fin:            '',
+  motivo:               '',
+  comentario_admin_lc:  '',
 }
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
@@ -185,8 +191,33 @@ function buildDayMap(
   }
 
   // ── Solicitudes ──
+  const feriadoDias = new Set<number>()
   for (const s of data.solicitudes) {
     if (!allowed.has(s.usuario_id)) continue
+
+    // Feriado/Local cerrado: deduplicar (N solicitudes → 1 evento por día)
+    if (s.tipo === 'Feriado/Local cerrado') {
+      const start = clampToMonth(s.fecha_inicio, anio, mes, false)
+      const end   = s.fecha_fin
+        ? clampToMonth(s.fecha_fin, anio, mes, true)
+        : clampToMonth(s.fecha_inicio, anio, mes, true)
+      const cur = new Date(start)
+      while (cur <= end) {
+        const day = cur.getDate()
+        if (!feriadoDias.has(day)) {
+          feriadoDias.add(day)
+          add(day, {
+            id: `feriado-${s.fecha_inicio}-${day}`,
+            type: 'local_cerrado',
+            title: 'Local cerrado',
+            color: COLOR_LOCAL_CLOSED,
+            isPending: false,
+          })
+        }
+        cur.setDate(day + 1)
+      }
+      continue
+    }
 
     const color = SOL_COLORS[s.tipo] ?? SOL_COLOR_DEFAULT
     const isPending = s.estado === 'pending'
@@ -418,8 +449,12 @@ function CreateEventModal({
   }
 
   async function submit() {
-    if (!form.titulo.trim() || !form.fecha) return
-    if (!isLocalCerrado && form.tipo_destinatario === 'employee' && selectedEmployees.length === 0) return
+    if (isLocalCerrado) {
+      if (!form.fecha_inicio || !form.fecha_fin) return
+    } else {
+      if (!form.titulo.trim() || !form.fecha) return
+      if (form.tipo_destinatario === 'employee' && selectedEmployees.length === 0) return
+    }
     setSaving(true)
     await onSave({ ...form, selected_employees: form.tipo_destinatario === 'employee' ? selectedEmployees : undefined })
     setSaving(false)
@@ -457,97 +492,156 @@ function CreateEventModal({
           ))}
         </div>
 
-        {/* Emoji picker — solo para eventos especiales */}
+        {/* ── Campos LOCAL CERRADO ── */}
+        {isLocalCerrado && (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Fecha inicio *</label>
+                <input
+                  type="date"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]"
+                  style={{ fontSize: 16 }}
+                  value={form.fecha_inicio}
+                  onChange={e => set('fecha_inicio', e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Fecha fin *</label>
+                <input
+                  type="date"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]"
+                  style={{ fontSize: 16 }}
+                  min={form.fecha_inicio}
+                  value={form.fecha_fin}
+                  onChange={e => set('fecha_fin', e.target.value)}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Motivo / Descripción</label>
+              <input
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16 }}
+                placeholder="Ej: Feriado nacional, aniversario…"
+                value={form.motivo}
+                onChange={e => set('motivo', e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Comentario para empleados</label>
+              <textarea
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] resize-none"
+                rows={2}
+                style={{ fontSize: 16 }}
+                placeholder="Opcional"
+                value={form.comentario_admin_lc}
+                onChange={e => set('comentario_admin_lc', e.target.value)}
+              />
+            </div>
+            <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-xl">
+              <span className="text-blue-500 text-[13px] shrink-0 mt-0.5">ℹ</span>
+              <p className="text-[12px] text-blue-700">
+                Se creará una solicitud aprobada para <strong>todos los empleados activos</strong> y se les notificará.
+              </p>
+            </div>
+          </>
+        )}
+
+        {/* ── Campos EVENTO ESPECIAL ── */}
         {!isLocalCerrado && (
-          <div>
-            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">Emoji</label>
-            <div className="flex flex-wrap gap-1.5">
-              {EMOJIS.map(em => (
-                <button
-                  key={em}
-                  onClick={() => set('emoji', form.emoji === em ? '' : em)}
-                  className={`w-8 h-8 text-lg rounded-lg border transition-all cursor-pointer ${
-                    form.emoji === em ? 'border-[var(--primary)] bg-[var(--primary-light)] scale-110' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  {em}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Título */}
-        <div>
-          <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Título *</label>
-          <input
-            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]"
-            style={{ fontSize: 16 }}
-            placeholder={isLocalCerrado ? 'Ej: Local cerrado, Feriado…' : 'Nombre del evento'}
-            value={form.titulo}
-            onChange={e => set('titulo', e.target.value)}
-          />
-        </div>
-
-        {/* Fecha */}
-        <div>
-          <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Fecha *</label>
-          <input
-            type="date"
-            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]"
-            style={{ fontSize: 16 }}
-            value={form.fecha}
-            onChange={e => set('fecha', e.target.value)}
-          />
-        </div>
-
-        {/* Todo el día */}
-        <label className="flex items-center gap-2.5 cursor-pointer">
-          <div
-            onClick={() => set('todo_el_dia', !form.todo_el_dia)}
-            className={`w-10 h-5 rounded-full transition-colors ${form.todo_el_dia ? 'bg-[var(--primary)]' : 'bg-gray-200'}`}
-          >
-            <div className={`w-4 h-4 bg-white rounded-full shadow m-0.5 transition-transform ${form.todo_el_dia ? 'translate-x-5' : ''}`} />
-          </div>
-          <span className="text-[13px]">Todo el día</span>
-        </label>
-
-        {/* Horario */}
-        {!form.todo_el_dia && (
-          <div className="grid grid-cols-2 gap-3">
+          <>
+            {/* Emoji picker */}
             <div>
-              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Desde</label>
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">Emoji</label>
+              <div className="flex flex-wrap gap-1.5">
+                {EMOJIS.map(em => (
+                  <button
+                    key={em}
+                    onClick={() => set('emoji', form.emoji === em ? '' : em)}
+                    className={`w-8 h-8 text-lg rounded-lg border transition-all cursor-pointer ${
+                      form.emoji === em ? 'border-[var(--primary)] bg-[var(--primary-light)] scale-110' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {em}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Título */}
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Título *</label>
               <input
-                type="time"
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]"
-                value={form.hora_desde}
-                onChange={e => set('hora_desde', e.target.value)}
+                style={{ fontSize: 16 }}
+                placeholder="Nombre del evento"
+                value={form.titulo}
+                onChange={e => set('titulo', e.target.value)}
               />
             </div>
+
+            {/* Fecha */}
             <div>
-              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Hasta</label>
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Fecha *</label>
               <input
-                type="time"
+                type="date"
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]"
-                value={form.hora_hasta}
-                onChange={e => set('hora_hasta', e.target.value)}
+                style={{ fontSize: 16 }}
+                value={form.fecha}
+                onChange={e => set('fecha', e.target.value)}
               />
             </div>
-          </div>
-        )}
 
-        {/* Descripción */}
-        <div>
-          <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Descripción</label>
-          <textarea
-            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] resize-none"
-            rows={2}
-            style={{ fontSize: 16 }}
-            placeholder="Opcional"
-            value={form.descripcion}
-            onChange={e => set('descripcion', e.target.value)}
-          />
-        </div>
+            {/* Todo el día */}
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <div
+                onClick={() => set('todo_el_dia', !form.todo_el_dia)}
+                className={`w-10 h-5 rounded-full transition-colors ${form.todo_el_dia ? 'bg-[var(--primary)]' : 'bg-gray-200'}`}
+              >
+                <div className={`w-4 h-4 bg-white rounded-full shadow m-0.5 transition-transform ${form.todo_el_dia ? 'translate-x-5' : ''}`} />
+              </div>
+              <span className="text-[13px]">Todo el día</span>
+            </label>
+
+            {/* Horario */}
+            {!form.todo_el_dia && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Desde</label>
+                  <input
+                    type="time"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]"
+                    value={form.hora_desde}
+                    onChange={e => set('hora_desde', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Hasta</label>
+                  <input
+                    type="time"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]"
+                    value={form.hora_hasta}
+                    onChange={e => set('hora_hasta', e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Descripción */}
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Descripción</label>
+              <textarea
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] resize-none"
+                rows={2}
+                style={{ fontSize: 16 }}
+                placeholder="Opcional"
+                value={form.descripcion}
+                onChange={e => set('descripcion', e.target.value)}
+              />
+            </div>
+          </>
+        )}
 
         {/* Destinatario — solo para eventos especiales */}
         {!isLocalCerrado && (
@@ -638,7 +732,10 @@ function CreateEventModal({
           </button>
           <button
             onClick={submit}
-            disabled={saving || !form.titulo.trim() || !form.fecha || (!isLocalCerrado && form.tipo_destinatario === 'employee' && selectedEmployees.length === 0)}
+            disabled={saving || (isLocalCerrado
+              ? (!form.fecha_inicio || !form.fecha_fin)
+              : (!form.titulo.trim() || !form.fecha || (form.tipo_destinatario === 'employee' && selectedEmployees.length === 0))
+            )}
             className="flex-1 py-2.5 rounded-xl bg-[var(--primary)] text-white text-[14px] font-semibold disabled:opacity-50 cursor-pointer"
           >
             {saving ? <Spinner size={16} inline /> : 'Guardar'}
@@ -743,6 +840,27 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
   }, [data, anio, mes, canViewAll, user, filterUid, filterTeam, filterRole])
 
   async function handleCreateEvent(payload: typeof BLANK_EVENT & { selected_employees?: string[] }) {
+    // Local cerrado → solicitud masiva para todos los empleados activos
+    if (payload.categoria === 'local_cerrado') {
+      const r = await fetch('/api/solicitudes/masiva', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fecha_inicio:     payload.fecha_inicio,
+          fecha_fin:        payload.fecha_fin || payload.fecha_inicio,
+          motivo:           payload.motivo           || null,
+          comentario_admin: payload.comentario_admin_lc || null,
+        }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) { showToast(d.error ?? 'Error al crear'); return }
+      setCreateModal(false)
+      showToast(`Local cerrado creado para ${d.count} empleado${d.count !== 1 ? 's' : ''}`)
+      loadData(anio, mes)
+      return
+    }
+
+    // Evento especial → API calendario
     const { selected_employees, ...rest } = payload
     const requests = (rest.tipo_destinatario === 'employee' && selected_employees && selected_employees.length > 0)
       ? selected_employees.map(id => fetch('/api/calendario', {

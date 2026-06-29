@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getSession } from '@/lib/auth'
+import { crearNotificaciones } from '@/lib/notificaciones'
 
 // POST — crea Feriado/Local cerrado para todos los empleados activos
 export async function POST(request: NextRequest) {
@@ -50,6 +51,23 @@ export async function POST(request: NextRequest) {
 
     const { error } = await supabase.from('solicitudes').insert(inserts)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // Notificar a todos los empleados (excepto el admin que lo creó)
+    try {
+      const ids = empleados.map(e => e.id).filter(id => id !== session.id)
+      if (ids.length) {
+        const [fi, ff] = [fecha_inicio, fecha_fin].map(f => {
+          const [y, m, d] = f.split('-').map(Number)
+          return `${d}/${m}/${y}`
+        })
+        const rango = fecha_fin !== fecha_inicio ? `${fi} → ${ff}` : fi
+        await crearNotificaciones(ids, {
+          titulo: '🔒 Local cerrado',
+          mensaje: rango + (motivo ? ` — ${motivo}` : ''),
+          tipo: 'feriado',
+        })
+      }
+    } catch { /* silently ignore */ }
 
     return NextResponse.json({ ok: true, count: inserts.length }, { status: 201 })
   } catch {
