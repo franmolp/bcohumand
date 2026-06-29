@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Button, Spinner, Modal, Toast, Confirm } from '@/components/ui'
-import { IconPlus, IconCheck, IconX, IconTrash, IconCalendar, IconEdit, IconAlertCircle, IconPaperclip, IconFileText, IconUpload, IconClock, IconSettings } from '@/components/ui/Icons'
+import { IconPlus, IconCheck, IconX, IconTrash, IconCalendar, IconEdit, IconAlertCircle, IconPaperclip, IconFileText, IconUpload, IconClock, IconSettings, IconChevronLeft, IconChevronRight } from '@/components/ui/Icons'
 import type { SessionUser, Solicitud } from '@/types'
 import { compressImage } from '@/lib/compress-image'
 import FileViewer from '@/components/FileViewer'
@@ -595,6 +595,7 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
   const [empleadoFilter, setEmpleadoFilter] = useState('')
   const [empleados, setEmpleados]           = useState<Empleado[]>([])
   const [subFilter, setSubFilter]           = useState<'todas' | 'en_curso' | 'futuras' | 'archivadas'>('todas')
+  const [mesFilter, setMesFilter]           = useState<{ anio: number; mes: number } | null>(null)
   const [fotosMap, setFotosMap]             = useState<Record<string, string | null>>({})
 
   // Modal nueva / edición
@@ -901,11 +902,29 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
   // Use local date (not UTC) to avoid timezone issues in Argentina (UTC-3)
   const _d = new Date()
   const TODAY = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`
+
+  const MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+  const prevMes = () => {
+    const base = mesFilter ?? { anio: _d.getFullYear(), mes: _d.getMonth() + 1 }
+    setMesFilter(base.mes === 1 ? { anio: base.anio - 1, mes: 12 } : { anio: base.anio, mes: base.mes - 1 })
+  }
+  const nextMes = () => {
+    const base = mesFilter ?? { anio: _d.getFullYear(), mes: _d.getMonth() + 1 }
+    setMesFilter(base.mes === 12 ? { anio: base.anio + 1, mes: 1 } : { anio: base.anio, mes: base.mes + 1 })
+  }
+
   const displayList = !isAdminOrHR
     ? list
     : estadoFilter === 'pending' ? list : list.filter(sol => {
         const ini = sol.fecha_inicio || ''
         const fin = sol.fecha_fin || sol.fecha_inicio || ''
+        if (mesFilter) {
+          const mm = String(mesFilter.mes).padStart(2, '0')
+          const firstOfMonth = `${mesFilter.anio}-${mm}-01`
+          const lastDayNum = new Date(mesFilter.anio, mesFilter.mes, 0).getDate()
+          const lastOfMonth = `${mesFilter.anio}-${mm}-${String(lastDayNum).padStart(2,'0')}`
+          if (ini > lastOfMonth || fin < firstOfMonth) return false
+        }
         if (subFilter === 'en_curso')    return ini <= TODAY && fin >= TODAY
         if (subFilter === 'futuras')     return ini > TODAY
         if (subFilter === 'archivadas')  return fin < TODAY
@@ -991,15 +1010,35 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
         </div>
       </div>
 
-      {/* ─── Sub-filtro período (no aplica a Pendientes ni a empleados) ─── */}
+      {/* ─── Sub-filtro período + filtro mes ─── */}
       {isAdminOrHR && estadoFilter !== 'pending' && (
-        <div className="flex bg-white border border-gray-200/60 rounded-xl p-0.5 mb-4 w-fit">
-          {(['todas', 'en_curso', 'futuras', 'archivadas'] as const).map(sf => (
-            <button key={sf} onClick={() => setSubFilter(sf)}
-              className={`px-3 lg:px-4 py-2 text-[11px] lg:text-[12px] font-medium rounded-[10px] cursor-pointer transition-all whitespace-nowrap ${subFilter === sf ? 'bg-[var(--primary)] text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>
-              {sf === 'todas' ? 'Todas' : sf === 'en_curso' ? 'En curso' : sf === 'futuras' ? 'Futuras' : 'Archivadas'}
+        <div className="flex items-center justify-between mb-4 gap-2">
+          {/* Tabs período */}
+          <div className="flex bg-white border border-gray-200/60 rounded-xl p-0.5">
+            {(['todas', 'en_curso', 'futuras', 'archivadas'] as const).map(sf => (
+              <button key={sf} onClick={() => setSubFilter(sf)}
+                className={`px-3 lg:px-4 py-2 text-[11px] lg:text-[12px] font-medium rounded-[10px] cursor-pointer transition-all whitespace-nowrap ${subFilter === sf ? 'bg-[var(--primary)] text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>
+                {sf === 'todas' ? 'Todas' : sf === 'en_curso' ? 'En curso' : sf === 'futuras' ? 'Futuras' : 'Archivadas'}
+              </button>
+            ))}
+          </div>
+          {/* Navegador de mes */}
+          <div className="flex items-center bg-white border border-gray-200/60 rounded-xl p-0.5 shrink-0">
+            <button onClick={prevMes} className="p-1.5 rounded-[8px] cursor-pointer text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+              <IconChevronLeft size={13} />
             </button>
-          ))}
+            <span className="px-1 text-[11px] lg:text-[12px] font-medium text-gray-700 min-w-[72px] text-center select-none">
+              {mesFilter ? `${MESES_CORTO[mesFilter.mes - 1]} ${mesFilter.anio}` : 'Todos'}
+            </span>
+            <button onClick={nextMes} className="p-1.5 rounded-[8px] cursor-pointer text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+              <IconChevronRight size={13} />
+            </button>
+            {mesFilter && (
+              <button onClick={() => setMesFilter(null)} className="p-1.5 rounded-[8px] cursor-pointer text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+                <IconX size={11} />
+              </button>
+            )}
+          </div>
         </div>
       )}
 
