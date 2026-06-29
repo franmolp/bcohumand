@@ -210,7 +210,7 @@ export interface PresentismoResult {
 }
 
 export function calcPresentismo(
-  records: { estado: string | null; horas_fichadas: number | null; horas_base: number | null; dia_semana?: string | null; horario_base_entrada?: string | null; horario_base_salida?: string | null }[],
+  records: { estado: string | null; horas_fichadas: number | null; horas_base: number | null; dia_semana?: string | null; horario_base_entrada?: string | null; horario_base_salida?: string | null; semana?: number | null }[],
   config: AsistenciaConfig,
   diasNoFestivos: number,
 ): PresentismoResult {
@@ -245,7 +245,11 @@ export function calcPresentismo(
 
     if (chip.present) {
       laborables++; presentes++
-      horasReales += r.horas_base ?? 0
+      // Fallback a horario_base calculado cuando horas_base es null
+      horasReales += r.horas_base
+        ?? (r.horario_base_entrada && r.horario_base_salida
+          ? parseFloat(((toMinutes(r.horario_base_salida) - toMinutes(r.horario_base_entrada)) / 60).toFixed(2))
+          : 0)
       if (estado.startsWith('Llegada tarde')) { tardanzas++; llegadasTardeCount++ }
       if (estado.includes('Salida temprana')) salidaTempranaCount++
     } else if (chip.justificado) {
@@ -258,7 +262,11 @@ export function calcPresentismo(
     }
   }
 
-  const minimoMensual = parseFloat(((diasNoFestivos / 6) * config.minimoSemanal).toFixed(1))
+  // Mínimo mensual basado en semanas distintas del período (más preciso que días/6)
+  const numSemanas = new Set(records.map(r => r.semana).filter(v => v != null)).size
+  const minimoMensual = numSemanas > 0
+    ? parseFloat((numSemanas * config.minimoSemanal).toFixed(1))
+    : parseFloat(((diasNoFestivos / 6) * config.minimoSemanal).toFixed(1))
   const total = horasReales + horasJustificadas
   const pct = minimoMensual > 0 ? Math.round((total / minimoMensual) * 100) : null
 
