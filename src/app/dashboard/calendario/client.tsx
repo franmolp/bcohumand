@@ -95,18 +95,18 @@ const DIAS  = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom']
 
 // Solicitudes: Solicitud de Días + Ausencia Injustificada comparten naranja
 const SOL_COLORS: Record<string, string> = {
-  'Vacaciones':            '#3b82f6',
+  'Vacaciones':            '#f97316',
   'Ausencia por Salud':    '#dc2626',
-  'Solicitud de Días':     '#f97316',
-  'Ausencia Injustificada':'#f97316',
-  'Cambio de Horario':     '#8b5cf6',
-  'Cambio de horario/día': '#8b5cf6',
+  'Solicitud de Días':     '#ca8a04',
+  'Ausencia Injustificada':'#ca8a04',
+  'Cambio de Horario':     '#16a34a',
+  'Cambio de horario/día': '#16a34a',
 }
 const SOL_COLOR_DEFAULT  = '#6b7280'
-const COLOR_EFEMERIDE    = '#0891b2'
-const COLOR_LOCAL_CLOSED = '#4f46e5'
+const COLOR_EFEMERIDE    = '#0ea5e9'
+const COLOR_LOCAL_CLOSED = '#374151'
 const COLOR_BIRTHDAY     = '#ec4899'
-const COLOR_SPECIAL      = '#a78bfa'
+const COLOR_SPECIAL      = '#7c3aed'
 
 const PRIORITY: Record<CalEventType, number> = {
   local_cerrado: 0,
@@ -639,14 +639,14 @@ function CreateEventModal({
 
 function Legend() {
   const items = [
-    { label: 'Vacaciones',      color: '#3b82f6' },
-    { label: 'Ausencias',       color: '#f97316' },
+    { label: 'Vacaciones',      color: '#f97316' },
+    { label: 'Ausencias',       color: '#ca8a04' },
     { label: 'Aus. Salud',      color: '#dc2626' },
-    { label: 'Cambio Horario',  color: '#8b5cf6' },
-    { label: 'Local cerrado',   color: '#4f46e5' },
-    { label: 'Efemérides',      color: '#0891b2' },
+    { label: 'Cambio Horario',  color: '#16a34a' },
+    { label: 'Local cerrado',   color: '#374151' },
+    { label: 'Efemérides',      color: '#0ea5e9' },
     { label: 'Cumpleaños',      color: '#ec4899' },
-    { label: 'Evento Especial', color: '#a78bfa' },
+    { label: 'Evento Especial', color: '#7c3aed' },
   ]
 
   return (
