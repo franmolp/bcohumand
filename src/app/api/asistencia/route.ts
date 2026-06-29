@@ -61,13 +61,14 @@ export async function GET(req: NextRequest) {
   const minFecha = fechas.reduce((a, b) => a < b ? a : b)
   const maxFecha = fechas.reduce((a, b) => a > b ? a : b)
 
+  const yearStart = `${minFecha.substring(0, 4)}-01-01`
   const { data: solicitudes } = await supabaseAdmin
     .from('solicitudes')
     .select('usuario_id, tipo, motivo, comentario_admin, fecha_inicio, fecha_fin')
     .in('usuario_id', userIds)
     .in('estado', ['approved', 'pending'])
+    .gte('fecha_inicio', yearStart)
     .lte('fecha_inicio', maxFecha)
-    .or(`fecha_fin.gte.${minFecha},fecha_fin.is.null`)
 
   const enriched = records.map(r => {
     const sol = (solicitudes ?? []).find(s =>
