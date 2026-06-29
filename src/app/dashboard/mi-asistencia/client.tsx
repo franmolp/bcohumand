@@ -194,18 +194,10 @@ export default function MiAsistenciaClient({ user }: { user: SessionUser }) {
                   </div>
                   {/* Contenido */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${chip.bg} ${chip.text}`}>
+                    <div className="flex items-center gap-1.5 text-[11px]">
+                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold flex-shrink-0 ${chip.bg} ${chip.text}`}>
                         {rec.estado}
                       </span>
-                    </div>
-                    {(rec.tipo_ausencia || rec.motivo || rec.comentario_admin) && (
-                      <div className="text-[10px] text-gray-400 mb-0.5 truncate">{[rec.tipo_ausencia, rec.motivo, rec.comentario_admin].filter(Boolean).join(' | ')}</div>
-                    )}
-                    <div className="flex items-center gap-1.5 text-[11px]">
-                      {(rec.horario_base_entrada || rec.horario_base_salida) && (
-                        <span className="text-gray-400 shrink-0">Base: {fmt5(rec.horario_base_entrada)}–{fmt5(rec.horario_base_salida)}</span>
-                      )}
                       <div className="ml-auto flex items-center gap-1.5">
                         <span className={`px-1.5 py-0.5 rounded-full font-medium border min-w-[44px] text-center inline-block ${rec.fichada_entrada ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'invisible'}`}>
                           {fmt5(rec.fichada_entrada) ?? ''}
@@ -219,6 +211,9 @@ export default function MiAsistenciaClient({ user }: { user: SessionUser }) {
                         )}
                       </div>
                     </div>
+                    {(rec.tipo_ausencia || rec.motivo || rec.comentario_admin) && (
+                      <div className="text-[10px] text-gray-400 mt-0.5 truncate">{[rec.tipo_ausencia, rec.motivo, rec.comentario_admin].filter(Boolean).join(' | ')}</div>
+                    )}
                   </div>
                 </div>
               )

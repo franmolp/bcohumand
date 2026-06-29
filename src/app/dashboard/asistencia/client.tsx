@@ -794,17 +794,9 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
                 </div>
                 {/* Contenido */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${chip.bg} ${chip.text}`}>{rec.estado}</span>
-                    {isManual && <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0" />}
-                  </div>
-                  {(rec.tipo_ausencia || rec.motivo || rec.comentario_admin) && (
-                    <div className="text-[10px] text-gray-400 mb-0.5 truncate">{[rec.tipo_ausencia, rec.motivo, rec.comentario_admin].filter(Boolean).join(' | ')}</div>
-                  )}
                   <div className="flex items-center gap-1.5 text-[11px]">
-                    {(rec.horario_base_entrada || rec.horario_base_salida) && (
-                      <span className="text-gray-400 shrink-0">Base: {fmtTime(rec.horario_base_entrada)}–{fmtTime(rec.horario_base_salida)}</span>
-                    )}
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold flex-shrink-0 ${chip.bg} ${chip.text}`}>{rec.estado}</span>
+                    {isManual && <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0" />}
                     <div className="ml-auto flex items-center gap-1.5">
                       <span className={`px-1.5 py-0.5 rounded-full font-medium border min-w-[44px] text-center inline-block ${rec.fichada_entrada ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'invisible'}`}>
                         {fmtTime(rec.fichada_entrada) ?? ''}
@@ -820,6 +812,9 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
                           : null}
                     </div>
                   </div>
+                  {(rec.tipo_ausencia || rec.motivo || rec.comentario_admin) && (
+                    <div className="text-[10px] text-gray-400 mt-0.5 truncate">{[rec.tipo_ausencia, rec.motivo, rec.comentario_admin].filter(Boolean).join(' | ')}</div>
+                  )}
                 </div>
                 {isAdmin && (
                   <button onClick={() => openEdit(rec)} className="flex-shrink-0 p-1.5 rounded-lg text-gray-300 hover:text-[var(--primary)] hover:bg-[var(--primary)]/5 transition-colors">
