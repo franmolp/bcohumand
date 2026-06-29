@@ -199,11 +199,9 @@ export default function MiAsistenciaClient({ user }: { user: SessionUser }) {
                         {rec.estado}
                       </span>
                     </div>
-                    {rec.tipo_ausencia && <div className="text-[10px] text-gray-400 mb-0.5">{rec.tipo_ausencia}</div>}
-                    {rec.motivo && (
-                      <div className="text-[10px] text-gray-400 italic mb-0.5 truncate">"{rec.motivo}"</div>
+                    {(rec.tipo_ausencia || rec.motivo || rec.comentario_admin) && (
+                      <div className="text-[10px] text-gray-400 mb-0.5 truncate">{[rec.tipo_ausencia, rec.motivo, rec.comentario_admin].filter(Boolean).join(' | ')}</div>
                     )}
-                    {rec.comentario_admin && <div className="text-[10px] text-indigo-500 mb-0.5 truncate">Admin: {rec.comentario_admin}</div>}
                     <div className="flex items-center gap-1.5 text-[11px]">
                       {(rec.horario_base_entrada || rec.horario_base_salida) && (
                         <span className="text-gray-400 shrink-0">Base: {fmt5(rec.horario_base_entrada)}–{fmt5(rec.horario_base_salida)}</span>
@@ -270,9 +268,9 @@ export default function MiAsistenciaClient({ user }: { user: SessionUser }) {
                               Base: {fmt5(rec.horario_base_entrada)} – {fmt5(rec.horario_base_salida)}
                             </div>
                           )}
-                          {rec.tipo_ausencia && <div className="text-xs text-gray-400 mt-0.5">{rec.tipo_ausencia}</div>}
-                          {rec.motivo && <div className="text-xs text-gray-400 italic mt-0.5">"{rec.motivo}"</div>}
-                          {rec.comentario_admin && <div className="text-xs text-indigo-500 mt-0.5">Admin: {rec.comentario_admin}</div>}
+                          {(rec.tipo_ausencia || rec.motivo || rec.comentario_admin) && (
+                            <div className="text-xs text-gray-400 mt-0.5">{[rec.tipo_ausencia, rec.motivo, rec.comentario_admin].filter(Boolean).join(' | ')}</div>
+                          )}
                         </td>
                         <td className="px-4 py-3.5">
                           {rec.fichada_entrada
