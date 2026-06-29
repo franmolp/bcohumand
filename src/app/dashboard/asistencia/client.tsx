@@ -81,6 +81,15 @@ function fmtFecha(f: string): string {
   return `${d}/${m}/${y}`
 }
 
+function isoWeekOf(dateStr: string): number {
+  const d = new Date(dateStr + 'T12:00:00')
+  const dow = d.getDay() || 7
+  const thursday = new Date(d)
+  thursday.setDate(d.getDate() + (4 - dow))
+  const yearStart = new Date(thursday.getFullYear(), 0, 1)
+  return Math.ceil(((thursday.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
+}
+
 function weekMonSat(isoYear: number, isoWeek: number): { de: string; hasta: string } {
   const jan4 = new Date(isoYear, 0, 4)
   const dow = jan4.getDay() || 7
@@ -172,7 +181,7 @@ export default function AsistenciaClient({ user }: Props) {
 
   // ── memos ──────────────────────────────────────────────────────────────────
 
-  const diasNF = useMemo(() => countNonSunday(mes), [mes])
+  const diasNF = useMemo(() => countNonSunday(mes, mes >= defaultMes ? ayer : undefined), [mes, ayer, defaultMes])
 
   const homeRecords = useMemo(
     () => records.filter(r => r.usuario_id === homeEmpId && r.fecha <= ayer),
@@ -213,12 +222,17 @@ export default function AsistenciaClient({ user }: Props) {
       if (!byWeek.has(r.semana)) byWeek.set(r.semana, [])
       byWeek.get(r.semana)!.push(r)
     }
+    // Mostrar la semana actual aunque no tenga registros aún
+    if (today.substring(0, 7) === mes) {
+      const semanaHoy = isoWeekOf(today)
+      if (!byWeek.has(semanaHoy)) byWeek.set(semanaHoy, [])
+    }
     return Array.from(byWeek.entries()).sort(([a], [b]) => a - b).map(([semana, wr]) => {
       const stats = calcPresentismo(wr as Parameters<typeof calcPresentismo>[0], config, wr.length)
       const { de, hasta } = weekMonSat(year, semana)
       return { semana, stats, de, hasta }
     })
-  }, [records, weekEmpId, config, ayer, mes])
+  }, [records, weekEmpId, config, ayer, mes, today])
 
   // ── actions ────────────────────────────────────────────────────────────────
 
@@ -1407,12 +1421,17 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
       if (!byWeek.has(r.semana)) byWeek.set(r.semana, { records: [], semana: r.semana })
       byWeek.get(r.semana)!.records.push(r)
     }
+    // Mostrar la semana actual aunque no tenga registros aún
+    if (today.substring(0, 7) === mes) {
+      const semanaHoy = isoWeekOf(today)
+      if (!byWeek.has(semanaHoy)) byWeek.set(semanaHoy, { records: [], semana: semanaHoy })
+    }
     return Array.from(byWeek.values()).sort((a, b) => a.semana - b.semana).map(({ semana, records: wr }) => {
       const stats = calcPresentismo(wr as Parameters<typeof calcPresentismo>[0], config, wr.length)
       const { de, hasta } = weekMonSat(year, semana)
       return { semana, stats, de, hasta }
     })
-  }, [homeRecords, config, mes])
+  }, [homeRecords, config, mes, today])
 
   // Employees sorted by sortBy preference
   const sortedEmps = useMemo(() => {
