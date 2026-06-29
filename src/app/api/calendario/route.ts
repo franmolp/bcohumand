@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
   if (!isAdmin) return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
 
   const body = await request.json()
-  const { titulo, emoji, fecha, todo_el_dia, hora_desde, hora_hasta, descripcion, tipo_destinatario, valor_destinatario, categoria } = body
+  const { titulo, emoji, fecha, todo_el_dia, hora_desde, hora_hasta, descripcion, tipo_destinatario, valor_destinatario, categoria, enviar_notificacion } = body
 
   if (!titulo || !fecha) {
     return NextResponse.json({ error: 'Campos requeridos: titulo, fecha' }, { status: 400 })
@@ -142,8 +142,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // Notificar solo para eventos especiales (no local_cerrado)
-  if (finalCategoria === 'evento') {
+  // Notificar solo si el admin lo eligió y es evento especial (no local_cerrado)
+  if (finalCategoria === 'evento' && enviar_notificacion !== false) {
     try {
       let targetIds: string[] = []
       if (finalDestinatario === 'all') {

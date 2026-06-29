@@ -119,16 +119,17 @@ const PRIORITY: Record<CalEventType, number> = {
 const EMOJIS = ['⭐','🎉','🎂','📢','🏢','🎯','💼','🌟','⚡','🎊','🎈','🎁','📅','🎤','🏆','🎵','🌸','🔔','📌','✨','🎪','🎨','🍰','🥳','💡']
 
 const BLANK_EVENT = {
-  categoria:          'evento' as 'evento' | 'local_cerrado',
-  titulo:             '',
-  emoji:              '',
-  fecha:              '',
-  todo_el_dia:        true,
-  hora_desde:         '',
-  hora_hasta:         '',
-  descripcion:        '',
-  tipo_destinatario:  'all',
-  valor_destinatario: '',
+  categoria:            'evento' as 'evento' | 'local_cerrado',
+  titulo:               '',
+  emoji:                '',
+  fecha:                '',
+  todo_el_dia:          true,
+  hora_desde:           '',
+  hora_hasta:           '',
+  descripcion:          '',
+  tipo_destinatario:    'all',
+  valor_destinatario:   '',
+  enviar_notificacion:  true,
 }
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
@@ -612,6 +613,19 @@ function CreateEventModal({
               </div>
             )}
           </>
+        )}
+
+        {/* Notificación — solo para eventos especiales */}
+        {!isLocalCerrado && (
+          <label className="flex items-center gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.enviar_notificacion}
+              onChange={e => set('enviar_notificacion', e.target.checked)}
+              className="w-4 h-4 accent-[var(--primary)]"
+            />
+            <span className="text-[13px] text-gray-600">Enviar notificación</span>
+          </label>
         )}
 
         {/* Actions */}
