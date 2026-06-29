@@ -43,6 +43,16 @@ interface EventoEspecial {
   descripcion: string | null
   tipo_destinatario: string
   valor_destinatario: string | null
+  categoria: string
+}
+
+interface EfemerideCal {
+  id: number
+  titulo: string
+  mes: number
+  dia: number
+  anio: number | null
+  tipo: string
 }
 
 interface EmpleadoOption {
@@ -56,15 +66,18 @@ interface CalendarData {
   solicitudes: SolicitudCal[]
   cumpleanos: CumpleanosUser[]
   eventos: EventoEspecial[]
+  efemerides: EfemerideCal[]
   empleados: EmpleadoOption[]
   equipos: string[]
   roles: string[]
 }
 
+type CalEventType = 'birthday' | 'efemeride' | 'local_cerrado' | 'special' | 'request'
+
 interface CalEvent {
   id: string
   sourceId?: string
-  type: 'special' | 'birthday' | 'request'
+  type: CalEventType
   title: string
   subtitle?: string
   descripcion?: string
@@ -80,32 +93,41 @@ interface CalEvent {
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 const DIAS  = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom']
 
+// Solicitudes: Solicitud de Días + Ausencia Injustificada comparten naranja
 const SOL_COLORS: Record<string, string> = {
-  'Vacaciones': '#3b82f6',
-  'Ausencia por Salud': '#dc2626',
-  'Solicitud de Días': '#fbbf24',
-  'Ausencia Injustificada': '#fb923c',
-  'Cambio de Horario':    '#8b5cf6',
-  'Cambio de horario/día':'#8b5cf6',
-  'Feriado/Local cerrado': '#6366f1',
+  'Vacaciones':            '#3b82f6',
+  'Ausencia por Salud':    '#dc2626',
+  'Solicitud de Días':     '#f97316',
+  'Ausencia Injustificada':'#f97316',
+  'Cambio de Horario':     '#8b5cf6',
+  'Cambio de horario/día': '#8b5cf6',
 }
-const SOL_COLOR_DEFAULT = '#6b7280'
-const COLOR_BIRTHDAY = '#ec4899'
-const COLOR_SPECIAL  = '#a78bfa'
+const SOL_COLOR_DEFAULT  = '#6b7280'
+const COLOR_EFEMERIDE    = '#0891b2'
+const COLOR_LOCAL_CLOSED = '#4f46e5'
+const COLOR_BIRTHDAY     = '#ec4899'
+const COLOR_SPECIAL      = '#a78bfa'
 
-const PRIORITY: Record<CalEvent['type'], number> = { special: 0, birthday: 1, request: 2 }
+const PRIORITY: Record<CalEventType, number> = {
+  local_cerrado: 0,
+  efemeride:     1,
+  special:       2,
+  birthday:      3,
+  request:       4,
+}
 
 const EMOJIS = ['⭐','🎉','🎂','📢','🏢','🎯','💼','🌟','⚡','🎊','🎈','🎁','📅','🎤','🏆','🎵','🌸','🔔','📌','✨','🎪','🎨','🍰','🥳','💡']
 
 const BLANK_EVENT = {
-  titulo: '',
-  emoji: '',
-  fecha: '',
-  todo_el_dia: true,
-  hora_desde: '',
-  hora_hasta: '',
-  descripcion: '',
-  tipo_destinatario: 'all',
+  categoria:          'evento' as 'evento' | 'local_cerrado',
+  titulo:             '',
+  emoji:              '',
+  fecha:              '',
+  todo_el_dia:        true,
+  hora_desde:         '',
+  hora_hasta:         '',
+  descripcion:        '',
+  tipo_destinatario:  'all',
   valor_destinatario: '',
 }
 
@@ -142,16 +164,15 @@ function buildDayMap(
     map[day].push(ev)
   }
 
-  // Determine visible user set
   const isFiltered = !!(filterUid || filterTeam || filterRole)
   const allowed = new Set<string>()
 
   if (canViewAll) {
     if (isFiltered) {
       for (const emp of data.empleados) {
-        if (filterUid  && emp.id === filterUid)                       { allowed.add(emp.id); continue }
-        if (filterTeam && emp.equipo_nombre === filterTeam)           { allowed.add(emp.id); continue }
-        if (filterRole && emp.rol_nombre   === filterRole)            { allowed.add(emp.id) }
+        if (filterUid  && emp.id === filterUid)             { allowed.add(emp.id); continue }
+        if (filterTeam && emp.equipo_nombre === filterTeam) { allowed.add(emp.id); continue }
+        if (filterRole && emp.rol_nombre   === filterRole)  { allowed.add(emp.id) }
       }
     } else {
       for (const emp of data.empleados) allowed.add(emp.id)
@@ -161,10 +182,6 @@ function buildDayMap(
   } else {
     allowed.add(session.id)
   }
-
-  const firstDay = `${anio}-${String(mes).padStart(2,'0')}-01`
-  const lastDayNum = new Date(anio, mes, 0).getDate()
-  const lastDay  = `${anio}-${String(mes).padStart(2,'0')}-${String(lastDayNum).padStart(2,'0')}`
 
   // ── Solicitudes ──
   for (const s of data.solicitudes) {
@@ -221,7 +238,6 @@ function buildDayMap(
       id: `bd-${b.usuario_id}`,
       type: 'birthday',
       title: `${b.nombre} 🎂`,
-      subtitle: undefined,
       color: COLOR_BIRTHDAY,
       isPending: false,
       usuarioId: b.usuario_id,
@@ -229,12 +245,14 @@ function buildDayMap(
     })
   }
 
-  // ── Eventos especiales ──
+  // ── Eventos especiales y Local cerrado ──
   for (const ev of data.eventos) {
     const day = dateInMonth(ev.fecha, anio, mes)
     if (!day) continue
 
-    if (canViewAll && isFiltered) {
+    const isLocalCerrado = ev.categoria === 'local_cerrado'
+
+    if (!isLocalCerrado && canViewAll && isFiltered) {
       const matches =
         ev.tipo_destinatario === 'all' ||
         (filterTeam && ev.tipo_destinatario === 'team'     && ev.valor_destinatario === filterTeam) ||
@@ -243,23 +261,32 @@ function buildDayMap(
       if (!matches) continue
     }
 
-    const hora = !ev.todo_el_dia && ev.hora_desde
-      ? ev.hora_desde.slice(0, 5)
-      : undefined
+    const hora = !ev.todo_el_dia && ev.hora_desde ? ev.hora_desde.slice(0, 5) : undefined
 
     add(day, {
       id: `ev-${ev.id}`,
       sourceId: ev.id,
-      type: 'special',
-      title: `${ev.emoji ? ev.emoji + ' ' : ''}${ev.titulo}`,
+      type: isLocalCerrado ? 'local_cerrado' : 'special',
+      title: isLocalCerrado ? ev.titulo : `${ev.emoji ? ev.emoji + ' ' : ''}${ev.titulo}`,
       descripcion: ev.descripcion ?? undefined,
-      color: COLOR_SPECIAL,
+      color: isLocalCerrado ? COLOR_LOCAL_CLOSED : COLOR_SPECIAL,
       isPending: false,
       hora,
     })
   }
 
-  // Sort by priority
+  // ── Efemérides ──
+  for (const ef of data.efemerides) {
+    add(ef.dia, {
+      id: `ef-${ef.id}`,
+      sourceId: String(ef.id),
+      type: 'efemeride',
+      title: ef.titulo,
+      color: COLOR_EFEMERIDE,
+      isPending: false,
+    })
+  }
+
   for (const day of Object.keys(map)) {
     map[parseInt(day)].sort((a, b) => PRIORITY[a.type] - PRIORITY[b.type])
   }
@@ -295,13 +322,18 @@ function DayModal({
   day: number; mes: number; anio: number
   events: CalEvent[]; isAdmin: boolean
   onClose: () => void
-  onDelete: (sourceId: string) => void
+  onDelete: (sourceId: string, type: CalEventType) => void
 }) {
-  const typeLabel: Record<CalEvent['type'], string> = {
-    special: 'Evento especial',
-    birthday: 'Cumpleaños',
-    request: 'Solicitud',
+  const typeLabel: Record<CalEventType, string> = {
+    local_cerrado: 'Local cerrado',
+    efemeride:     'Efeméride',
+    special:       'Evento especial',
+    birthday:      'Cumpleaños',
+    request:       'Solicitud',
   }
+
+  const canDelete = (ev: CalEvent) =>
+    isAdmin && ev.sourceId && (ev.type === 'special' || ev.type === 'local_cerrado' || ev.type === 'efemeride')
 
   return (
     <Modal open onClose={onClose} title={`${day} de ${MESES[mes - 1]} ${anio}`}>
@@ -313,35 +345,35 @@ function DayModal({
           const bdName = ev.type === 'birthday' ? ev.title.replace(/\s*🎂\s*$/, '') : ''
           const bdIni  = bdName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
           return (
-          <div
-            key={ev.id}
-            className="flex items-start gap-3 p-3 rounded-xl"
-            style={{ borderLeft: `4px solid ${ev.color}`, backgroundColor: `${ev.color}18` }}
-          >
-            {ev.type === 'birthday' && (
-              ev.fotoUrl
-                ? <img src={ev.fotoUrl} alt="" className="w-10 h-10 rounded-full object-cover shrink-0 shadow-sm" />
-                : <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-sm text-white font-bold text-[13px]" style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)' }}>{bdIni}</div>
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-semibold leading-snug">{ev.title}</p>
-              {ev.subtitle && <p className="text-[12px] text-gray-500 mt-0.5">{ev.subtitle}</p>}
-              {ev.hora    && <p className="text-[11px] text-gray-400 mt-0.5">{ev.hora}</p>}
-              {ev.descripcion && <p className="text-[12px] text-gray-600 mt-1">{ev.descripcion}</p>}
-              <span className="text-[10px] font-medium uppercase tracking-wide mt-1 block" style={{ color: ev.color }}>
-                {typeLabel[ev.type]}
-                {ev.isPending && ' · Pendiente'}
-              </span>
+            <div
+              key={ev.id}
+              className="flex items-start gap-3 p-3 rounded-xl"
+              style={{ borderLeft: `4px solid ${ev.color}`, backgroundColor: `${ev.color}18` }}
+            >
+              {ev.type === 'birthday' && (
+                ev.fotoUrl
+                  ? <img src={ev.fotoUrl} alt="" className="w-10 h-10 rounded-full object-cover shrink-0 shadow-sm" />
+                  : <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-sm text-white font-bold text-[13px]" style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)' }}>{bdIni}</div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-semibold leading-snug">{ev.title}</p>
+                {ev.subtitle    && <p className="text-[12px] text-gray-500 mt-0.5">{ev.subtitle}</p>}
+                {ev.hora        && <p className="text-[11px] text-gray-400 mt-0.5">{ev.hora}</p>}
+                {ev.descripcion && <p className="text-[12px] text-gray-600 mt-1">{ev.descripcion}</p>}
+                <span className="text-[10px] font-medium uppercase tracking-wide mt-1 block" style={{ color: ev.color }}>
+                  {typeLabel[ev.type]}
+                  {ev.isPending && ' · Pendiente'}
+                </span>
+              </div>
+              {canDelete(ev) && (
+                <button
+                  onClick={() => onDelete(ev.sourceId!, ev.type)}
+                  className="p-1.5 text-gray-300 hover:text-red-500 transition-colors cursor-pointer flex-shrink-0"
+                >
+                  <IconTrash size={14} />
+                </button>
+              )}
             </div>
-            {isAdmin && ev.type === 'special' && ev.sourceId && (
-              <button
-                onClick={() => onDelete(ev.sourceId!)}
-                className="p-1.5 text-gray-300 hover:text-red-500 transition-colors cursor-pointer flex-shrink-0"
-              >
-                <IconTrash size={14} />
-              </button>
-            )}
-          </div>
           )
         })}
       </div>
@@ -367,13 +399,26 @@ function CreateEventModal({
 
   const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }))
 
+  const isLocalCerrado = form.categoria === 'local_cerrado'
+
+  function setCategoria(cat: 'evento' | 'local_cerrado') {
+    setForm(f => ({
+      ...f,
+      categoria: cat,
+      titulo: cat === 'local_cerrado' && !f.titulo ? 'Local cerrado' : f.titulo,
+      tipo_destinatario: 'all',
+      valor_destinatario: '',
+    }))
+    setSelectedEmployees([])
+  }
+
   function toggleEmployee(id: string) {
     setSelectedEmployees(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
   async function submit() {
     if (!form.titulo.trim() || !form.fecha) return
-    if (form.tipo_destinatario === 'employee' && selectedEmployees.length === 0) return
+    if (!isLocalCerrado && form.tipo_destinatario === 'employee' && selectedEmployees.length === 0) return
     setSaving(true)
     await onSave({ ...form, selected_employees: form.tipo_destinatario === 'employee' ? selectedEmployees : undefined })
     setSaving(false)
@@ -392,26 +437,44 @@ function CreateEventModal({
     return []
   }, [form.tipo_destinatario, equipos, roles])
 
+  const modalTitle = isLocalCerrado ? 'Local cerrado' : 'Nuevo evento especial'
+
   return (
-    <Modal open onClose={onClose} title="Nuevo evento especial">
+    <Modal open onClose={onClose} title={modalTitle}>
       <div className="space-y-4">
-        {/* Emoji picker */}
-        <div>
-          <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">Emoji</label>
-          <div className="flex flex-wrap gap-1.5">
-            {EMOJIS.map(em => (
-              <button
-                key={em}
-                onClick={() => set('emoji', form.emoji === em ? '' : em)}
-                className={`w-8 h-8 text-lg rounded-lg border transition-all cursor-pointer ${
-                  form.emoji === em ? 'border-[var(--primary)] bg-[var(--primary-light)] scale-110' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                {em}
-              </button>
-            ))}
-          </div>
+
+        {/* Tipo selector */}
+        <div className="flex rounded-xl border border-gray-200 overflow-hidden">
+          {(['evento', 'local_cerrado'] as const).map(cat => (
+            <button
+              key={cat}
+              onClick={() => setCategoria(cat)}
+              className={`flex-1 py-2 text-[13px] font-medium transition-colors cursor-pointer ${form.categoria === cat ? 'bg-[var(--primary)] text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+            >
+              {cat === 'evento' ? 'Evento especial' : 'Local cerrado'}
+            </button>
+          ))}
         </div>
+
+        {/* Emoji picker — solo para eventos especiales */}
+        {!isLocalCerrado && (
+          <div>
+            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">Emoji</label>
+            <div className="flex flex-wrap gap-1.5">
+              {EMOJIS.map(em => (
+                <button
+                  key={em}
+                  onClick={() => set('emoji', form.emoji === em ? '' : em)}
+                  className={`w-8 h-8 text-lg rounded-lg border transition-all cursor-pointer ${
+                    form.emoji === em ? 'border-[var(--primary)] bg-[var(--primary-light)] scale-110' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {em}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Título */}
         <div>
@@ -419,7 +482,7 @@ function CreateEventModal({
           <input
             className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]"
             style={{ fontSize: 16 }}
-            placeholder="Nombre del evento"
+            placeholder={isLocalCerrado ? 'Ej: Local cerrado, Feriado…' : 'Nombre del evento'}
             value={form.titulo}
             onChange={e => set('titulo', e.target.value)}
           />
@@ -448,7 +511,7 @@ function CreateEventModal({
           <span className="text-[13px]">Todo el día</span>
         </label>
 
-        {/* Horario (si no es todo el día) */}
+        {/* Horario */}
         {!form.todo_el_dia && (
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -485,68 +548,70 @@ function CreateEventModal({
           />
         </div>
 
-        {/* Destinatario */}
-        <div>
-          <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Visible para</label>
-          <select
-            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] bg-white"
-            style={{ fontSize: 16 }}
-            value={form.tipo_destinatario}
-            onChange={e => { set('tipo_destinatario', e.target.value); set('valor_destinatario', ''); setSelectedEmployees([]) }}
-          >
-            <option value="all">Todos</option>
-            <option value="team">Equipo</option>
-            <option value="role">Rol</option>
-            <option value="employee">Empleadas específicas</option>
-          </select>
-        </div>
-
-        {/* Equipo o Rol — select simple */}
-        {valOptions.length > 0 && (
-          <div>
-            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">
-              {form.tipo_destinatario === 'team' ? 'Equipo' : 'Rol'}
-            </label>
-            <select
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] bg-white"
-              style={{ fontSize: 16 }}
-              value={form.valor_destinatario}
-              onChange={e => set('valor_destinatario', e.target.value)}
-            >
-              <option value="">Seleccionar…</option>
-              {valOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-            </select>
-          </div>
-        )}
-
-        {/* Empleadas — checkboxes con buscador */}
-        {form.tipo_destinatario === 'employee' && (
-          <div>
-            <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">
-              Empleadas {selectedEmployees.length > 0 && <span className="text-[var(--primary)]">({selectedEmployees.length} seleccionadas)</span>}
-            </label>
-            <input
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] outline-none focus:border-[var(--primary)] mb-2"
-              style={{ fontSize: 16 }}
-              placeholder="Buscar…"
-              value={empSearch}
-              onChange={e => setEmpSearch(e.target.value)}
-            />
-            <div className="border border-gray-200 rounded-xl overflow-y-auto max-h-44">
-              {filteredEmpleados.map(e => (
-                <label key={e.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0">
-                  <input
-                    type="checkbox"
-                    checked={selectedEmployees.includes(e.id)}
-                    onChange={() => toggleEmployee(e.id)}
-                    className="w-4 h-4 accent-[var(--primary)]"
-                  />
-                  <span className="text-[13px] text-gray-700">{e.nombre}</span>
-                </label>
-              ))}
-              {filteredEmpleados.length === 0 && <p className="text-[13px] text-gray-400 text-center py-4">Sin resultados</p>}
+        {/* Destinatario — solo para eventos especiales */}
+        {!isLocalCerrado && (
+          <>
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Visible para</label>
+              <select
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] bg-white"
+                style={{ fontSize: 16 }}
+                value={form.tipo_destinatario}
+                onChange={e => { set('tipo_destinatario', e.target.value); set('valor_destinatario', ''); setSelectedEmployees([]) }}
+              >
+                <option value="all">Todos</option>
+                <option value="team">Equipo</option>
+                <option value="role">Rol</option>
+                <option value="employee">Empleadas específicas</option>
+              </select>
             </div>
-          </div>
+
+            {valOptions.length > 0 && (
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">
+                  {form.tipo_destinatario === 'team' ? 'Equipo' : 'Rol'}
+                </label>
+                <select
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] bg-white"
+                  style={{ fontSize: 16 }}
+                  value={form.valor_destinatario}
+                  onChange={e => set('valor_destinatario', e.target.value)}
+                >
+                  <option value="">Seleccionar…</option>
+                  {valOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                </select>
+              </div>
+            )}
+
+            {form.tipo_destinatario === 'employee' && (
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">
+                  Empleadas {selectedEmployees.length > 0 && <span className="text-[var(--primary)]">({selectedEmployees.length} seleccionadas)</span>}
+                </label>
+                <input
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] outline-none focus:border-[var(--primary)] mb-2"
+                  style={{ fontSize: 16 }}
+                  placeholder="Buscar…"
+                  value={empSearch}
+                  onChange={e => setEmpSearch(e.target.value)}
+                />
+                <div className="border border-gray-200 rounded-xl overflow-y-auto max-h-44">
+                  {filteredEmpleados.map(e => (
+                    <label key={e.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0">
+                      <input
+                        type="checkbox"
+                        checked={selectedEmployees.includes(e.id)}
+                        onChange={() => toggleEmployee(e.id)}
+                        className="w-4 h-4 accent-[var(--primary)]"
+                      />
+                      <span className="text-[13px] text-gray-700">{e.nombre}</span>
+                    </label>
+                  ))}
+                  {filteredEmpleados.length === 0 && <p className="text-[13px] text-gray-400 text-center py-4">Sin resultados</p>}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {/* Actions */}
@@ -559,7 +624,7 @@ function CreateEventModal({
           </button>
           <button
             onClick={submit}
-            disabled={saving || !form.titulo.trim() || !form.fecha || (form.tipo_destinatario === 'employee' && selectedEmployees.length === 0)}
+            disabled={saving || !form.titulo.trim() || !form.fecha || (!isLocalCerrado && form.tipo_destinatario === 'employee' && selectedEmployees.length === 0)}
             className="flex-1 py-2.5 rounded-xl bg-[var(--primary)] text-white text-[14px] font-semibold disabled:opacity-50 cursor-pointer"
           >
             {saving ? <Spinner size={16} inline /> : 'Guardar'}
@@ -574,14 +639,14 @@ function CreateEventModal({
 
 function Legend() {
   const items = [
-    { label: 'Vacaciones',          color: '#3b82f6' },
-    { label: 'Ausencia Salud',      color: '#dc2626' },
-    { label: 'Solicitud Días',      color: '#fbbf24' },
-    { label: 'Aus. Injustificada',  color: '#fb923c' },
-    { label: 'Cambio Horario',      color: '#8b5cf6' },
-    { label: 'Feriado/Cerrado',     color: '#6366f1' },
-    { label: 'Cumpleaños',          color: '#ec4899' },
-    { label: 'Evento Especial',     color: '#a78bfa' },
+    { label: 'Vacaciones',      color: '#3b82f6' },
+    { label: 'Ausencias',       color: '#f97316' },
+    { label: 'Aus. Salud',      color: '#dc2626' },
+    { label: 'Cambio Horario',  color: '#8b5cf6' },
+    { label: 'Local cerrado',   color: '#4f46e5' },
+    { label: 'Efemérides',      color: '#0891b2' },
+    { label: 'Cumpleaños',      color: '#ec4899' },
+    { label: 'Evento Especial', color: '#a78bfa' },
   ]
 
   return (
@@ -618,13 +683,11 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
   const [dayModal,    setDayModal]    = useState<{ day: number; events: CalEvent[] } | null>(null)
   const [createModal, setCreateModal] = useState(false)
 
-  // ── Toast helper ──
   function showToast(msg: string) {
     setToastMsg(msg); setToastVisible(true)
     setTimeout(() => setToastVisible(false), 3000)
   }
 
-  // ── Load data ──
   const loadData = useCallback(async (y: number, m: number) => {
     setLoading(true)
     try {
@@ -637,7 +700,6 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
 
   useEffect(() => { loadData(anio, mes) }, [anio, mes, loadData])
 
-  // ── Month navigation ──
   function prevMonth() {
     if (mes === 1) { setAnio(a => a - 1); setMes(12) }
     else setMes(m => m - 1)
@@ -649,10 +711,9 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
     setFilterUid(''); setFilterTeam(''); setFilterRole('')
   }
 
-  // ── Calendar grid ──
   const cells = useMemo(() => {
     const firstDate = new Date(anio, mes - 1, 1)
-    const dow = (firstDate.getDay() + 6) % 7   // Mon=0
+    const dow = (firstDate.getDay() + 6) % 7
     const numDays = new Date(anio, mes, 0).getDate()
     const arr: (number | null)[] = []
     for (let i = 0; i < dow; i++) arr.push(null)
@@ -662,17 +723,14 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
     return arr
   }, [anio, mes])
 
-  // ── Day events map ──
   const dayEventsMap = useMemo<Record<number, CalEvent[]>>(() => {
     if (!data) return {}
     return buildDayMap(data, anio, mes, canViewAll, user, filterUid, filterTeam, filterRole)
   }, [data, anio, mes, canViewAll, user, filterUid, filterTeam, filterRole])
 
-  // ── Create event ──
   async function handleCreateEvent(payload: typeof BLANK_EVENT & { selected_employees?: string[] }) {
     const { selected_employees, ...rest } = payload
-    // Si hay múltiples empleadas, crear un evento por cada una
-    const requests = (selected_employees && selected_employees.length > 0)
+    const requests = (rest.tipo_destinatario === 'employee' && selected_employees && selected_employees.length > 0)
       ? selected_employees.map(id => fetch('/api/calendario', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -691,20 +749,22 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
       return
     }
     setCreateModal(false)
-    showToast('Evento creado')
+    showToast('Guardado')
     loadData(anio, mes)
   }
 
-  // ── Delete event ──
-  async function handleDeleteEvent(sourceId: string) {
-    const r = await fetch(`/api/calendario/${sourceId}`, { method: 'DELETE' })
+  async function handleDeleteEvent(sourceId: string, evType: CalEventType) {
+    const url = evType === 'efemeride'
+      ? `/api/calendario/${sourceId}?type=efemeride`
+      : `/api/calendario/${sourceId}`
+    const r = await fetch(url, { method: 'DELETE' })
     if (!r.ok) {
       const body = await r.json().catch(() => ({}))
       showToast(body.error ?? 'Error al eliminar')
       return
     }
     setDayModal(null)
-    showToast('Evento eliminado')
+    showToast('Eliminado')
     loadData(anio, mes)
   }
 
@@ -714,162 +774,157 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
   return (
     <div className="py-4 fade-in">
 
-        {/* ── Header ── */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
-              <IconCalendar size={18} className="text-white" />
-            </div>
-            <h1 className="text-[17px] font-bold text-[var(--text)]">Calendario</h1>
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
+            <IconCalendar size={18} className="text-white" />
           </div>
-          {isAdmin && (
-            <button
-              onClick={() => setCreateModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[var(--primary)] text-white text-[13px] font-semibold cursor-pointer"
-            >
-              <IconPlus size={16} /> Evento
-            </button>
-          )}
+          <h1 className="text-[17px] font-bold text-[var(--text)]">Calendario</h1>
+        </div>
+        {isAdmin && (
+          <button
+            onClick={() => setCreateModal(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[var(--primary)] text-white text-[13px] font-semibold cursor-pointer"
+          >
+            <IconPlus size={16} /> Evento
+          </button>
+        )}
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+
+        {/* ── Month nav ── */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+          <button onClick={prevMonth} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 cursor-pointer">
+            <IconChevronLeft size={18} />
+          </button>
+          <h2 className="text-[16px] lg:text-[18px] font-bold text-[var(--text)]">
+            {MESES[mes - 1]} {anio}
+          </h2>
+          <button onClick={nextMonth} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 cursor-pointer">
+            <IconChevronRight size={18} />
+          </button>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        {/* ── Admin filters ── */}
+        {canViewAll && data && (
+          <div className="flex flex-wrap gap-2 px-4 py-2.5 border-b border-gray-100 bg-gray-50/50">
+            <select
+              className="text-[12px] border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-[var(--primary)] cursor-pointer"
+              value={filterTeam}
+              onChange={e => { setFilterTeam(e.target.value); setFilterUid(''); setFilterRole('') }}
+            >
+              <option value="">Todos los equipos</option>
+              {[...data.equipos].sort((a, b) => a.localeCompare(b, 'es')).map(eq => <option key={eq} value={eq}>{eq}</option>)}
+            </select>
 
-          {/* ── Month nav ── */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <button onClick={prevMonth} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 cursor-pointer">
-              <IconChevronLeft size={18} />
-            </button>
-            <div className="text-center">
-              <h2 className="text-[16px] lg:text-[18px] font-bold text-[var(--text)]">
-                {MESES[mes - 1]} {anio}
-              </h2>
-            </div>
-            <button onClick={nextMonth} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 cursor-pointer">
-              <IconChevronRight size={18} />
-            </button>
+            <select
+              className="text-[12px] border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-[var(--primary)] cursor-pointer"
+              value={filterRole}
+              onChange={e => { setFilterRole(e.target.value); setFilterUid(''); setFilterTeam('') }}
+            >
+              <option value="">Todos los roles</option>
+              {[...data.roles].sort((a, b) => a.localeCompare(b, 'es')).map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+
+            <select
+              className="text-[12px] border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-[var(--primary)] cursor-pointer"
+              value={filterUid}
+              onChange={e => { setFilterUid(e.target.value); setFilterTeam(''); setFilterRole('') }}
+            >
+              <option value="">Todos los empleados</option>
+              {[...data.empleados].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map(em => <option key={em.id} value={em.id}>{em.nombre}</option>)}
+            </select>
+
+            {(filterUid || filterTeam || filterRole) && (
+              <button
+                onClick={() => { setFilterUid(''); setFilterTeam(''); setFilterRole('') }}
+                className="flex items-center gap-1 text-[12px] text-gray-400 hover:text-gray-600 px-2 cursor-pointer"
+              >
+                <IconX size={13} /> Limpiar
+              </button>
+            )}
           </div>
+        )}
 
-          {/* ── Admin filters ── */}
-          {canViewAll && data && (
-            <div className="flex flex-wrap gap-2 px-4 py-2.5 border-b border-gray-100 bg-gray-50/50">
-              <select
-                className="text-[12px] border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-[var(--primary)] cursor-pointer"
-                value={filterTeam}
-                onChange={e => { setFilterTeam(e.target.value); setFilterUid(''); setFilterRole('') }}
-              >
-                <option value="">Todos los equipos</option>
-                {[...data.equipos].sort((a, b) => a.localeCompare(b, 'es')).map(eq => <option key={eq} value={eq}>{eq}</option>)}
-              </select>
+        {/* ── Grid ── */}
+        {loading ? (
+          <div className="flex items-center justify-center py-24">
+            <Spinner size={32} />
+          </div>
+        ) : (
+          <div className="grid grid-cols-7 border-t border-l border-gray-100">
+            {DIAS.map(d => (
+              <div key={d} className="border-r border-b border-gray-100 py-2 text-center text-[10px] lg:text-[12px] font-semibold text-gray-400 bg-gray-50/60 select-none">
+                {d}
+              </div>
+            ))}
 
-              <select
-                className="text-[12px] border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-[var(--primary)] cursor-pointer"
-                value={filterRole}
-                onChange={e => { setFilterRole(e.target.value); setFilterUid(''); setFilterTeam('') }}
-              >
-                <option value="">Todos los roles</option>
-                {[...data.roles].sort((a, b) => a.localeCompare(b, 'es')).map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
+            {cells.map((day, i) => {
+              const events = day ? (dayEventsMap[day] ?? []) : []
+              const isToday = isCurrentMonth && day === todayDay
+              const hasMore = events.length > 4
 
-              <select
-                className="text-[12px] border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white outline-none focus:border-[var(--primary)] cursor-pointer"
-                value={filterUid}
-                onChange={e => { setFilterUid(e.target.value); setFilterTeam(''); setFilterRole('') }}
-              >
-                <option value="">Todos los empleados</option>
-                {[...data.empleados].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map(em => <option key={em.id} value={em.id}>{em.nombre}</option>)}
-              </select>
-
-              {(filterUid || filterTeam || filterRole) && (
-                <button
-                  onClick={() => { setFilterUid(''); setFilterTeam(''); setFilterRole('') }}
-                  className="flex items-center gap-1 text-[12px] text-gray-400 hover:text-gray-600 px-2 cursor-pointer"
+              return (
+                <div
+                  key={i}
+                  className={`
+                    border-r border-b border-gray-100
+                    h-14 lg:min-h-[140px] overflow-hidden
+                    ${day ? 'cursor-pointer hover:bg-gray-50/70 transition-colors' : 'bg-gray-50/30'}
+                  `}
+                  onClick={() => day && setDayModal({ day, events })}
                 >
-                  <IconX size={13} /> Limpiar
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* ── Grid ── */}
-          {loading ? (
-            <div className="flex items-center justify-center py-24">
-              <Spinner size={32} />
-            </div>
-          ) : (
-            <div className="grid grid-cols-7 border-t border-l border-gray-100">
-              {/* Day-of-week headers */}
-              {DIAS.map(d => (
-                <div key={d} className="border-r border-b border-gray-100 py-2 text-center text-[10px] lg:text-[12px] font-semibold text-gray-400 bg-gray-50/60 select-none">
-                  {d}
-                </div>
-              ))}
-
-              {/* Cells */}
-              {cells.map((day, i) => {
-                const events = day ? (dayEventsMap[day] ?? []) : []
-                const isToday = isCurrentMonth && day === todayDay
-                const hasMore = events.length > 4
-
-                return (
-                  <div
-                    key={i}
-                    className={`
-                      border-r border-b border-gray-100
-                      h-14 lg:min-h-[140px] overflow-hidden
-                      ${day ? 'cursor-pointer hover:bg-gray-50/70 transition-colors' : 'bg-gray-50/30'}
-                    `}
-                    onClick={() => day && setDayModal({ day, events })}
-                  >
-                    {day && (
-                      <div className="h-full flex flex-col">
-                        {/* Day number */}
-                        <div className="flex items-start justify-between px-1 pt-1 pb-0.5">
-                          <div className={`
-                            w-6 h-6 rounded-full flex items-center justify-center text-[11px] lg:text-[12px] font-semibold select-none
-                            ${isToday ? 'bg-[var(--primary)] text-white' : 'text-gray-600'}
-                          `}>
-                            {day}
-                          </div>
-                        </div>
-
-                        {/* Mobile: colored dots */}
-                        {events.length > 0 && (
-                          <div className="lg:hidden flex flex-wrap gap-0.5 px-1.5 pb-1">
-                            {events.slice(0, 5).map(ev => (
-                              <div
-                                key={ev.id}
-                                className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                                style={{ backgroundColor: ev.color }}
-                              />
-                            ))}
-                            {events.length > 5 && (
-                              <span className="text-[8px] text-gray-400 leading-none">+{events.length - 5}</span>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Desktop: text chips */}
-                        <div className="hidden lg:flex flex-col gap-px px-1 pb-1 flex-1 overflow-hidden">
-                          {events.slice(0, 4).map(ev => (
-                            <EventChip key={ev.id} ev={ev} />
-                          ))}
-                          {hasMore && (
-                            <span className="text-[10px] text-gray-400 px-1">+{events.length - 4} más</span>
-                          )}
+                  {day && (
+                    <div className="h-full flex flex-col">
+                      <div className="flex items-start justify-between px-1 pt-1 pb-0.5">
+                        <div className={`
+                          w-6 h-6 rounded-full flex items-center justify-center text-[11px] lg:text-[12px] font-semibold select-none
+                          ${isToday ? 'bg-[var(--primary)] text-white' : 'text-gray-600'}
+                        `}>
+                          {day}
                         </div>
                       </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
 
-          {/* ── Legend ── */}
-          <div className="px-4">
-            <Legend />
+                      {/* Mobile: puntos de colores */}
+                      {events.length > 0 && (
+                        <div className="lg:hidden flex flex-wrap gap-0.5 px-1.5 pb-1">
+                          {events.slice(0, 5).map(ev => (
+                            <div
+                              key={ev.id}
+                              className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: ev.color }}
+                            />
+                          ))}
+                          {events.length > 5 && (
+                            <span className="text-[8px] text-gray-400 leading-none">+{events.length - 5}</span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Desktop: chips con texto */}
+                      <div className="hidden lg:flex flex-col gap-px px-1 pb-1 flex-1 overflow-hidden">
+                        {events.slice(0, 4).map(ev => (
+                          <EventChip key={ev.id} ev={ev} />
+                        ))}
+                        {hasMore && (
+                          <span className="text-[10px] text-gray-400 px-1">+{events.length - 4} más</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
+        )}
+
+        {/* ── Legend ── */}
+        <div className="px-4">
+          <Legend />
         </div>
+      </div>
 
       {/* ── Day modal ── */}
       {dayModal && (
@@ -895,7 +950,6 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
         />
       )}
 
-      {/* ── Toast ── */}
       <Toast message={toastMsg} visible={toastVisible} />
     </div>
   )
