@@ -262,11 +262,7 @@ export function calcPresentismo(
     }
   }
 
-  // Mínimo mensual basado en semanas distintas del período (más preciso que días/6)
-  const numSemanas = new Set(records.map(r => r.semana).filter(v => v != null)).size
-  const minimoMensual = numSemanas > 0
-    ? parseFloat((numSemanas * config.minimoSemanal).toFixed(1))
-    : parseFloat(((diasNoFestivos / 6) * config.minimoSemanal).toFixed(1))
+  const minimoMensual = parseFloat(((diasNoFestivos / 6) * config.minimoSemanal).toFixed(1))
   const total = horasReales + horasJustificadas
   const pct = minimoMensual > 0 ? Math.round((total / minimoMensual) * 100) : null
 

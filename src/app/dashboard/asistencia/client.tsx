@@ -172,8 +172,7 @@ export default function AsistenciaClient({ user }: Props) {
 
   // ── memos ──────────────────────────────────────────────────────────────────
 
-  // Para el mes en curso (o futuro), solo contamos hasta ayer — proporcional
-  const diasNF = useMemo(() => countNonSunday(mes, mes >= defaultMes ? ayer : undefined), [mes, ayer, defaultMes])
+  const diasNF = useMemo(() => countNonSunday(mes), [mes])
 
   const homeRecords = useMemo(
     () => records.filter(r => r.usuario_id === homeEmpId && r.fecha <= ayer),
