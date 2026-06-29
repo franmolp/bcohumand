@@ -87,11 +87,19 @@ export async function POST(req: NextRequest) {
     .eq('mes', mes)
     .single()
 
-  // Notificar admin+HR (solo si es el propio empleado quien carga)
-  if (!isAdmin || targetUsuarioId === session.id) {
-    const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
-    const [yr, mo] = mes.split('-')
-    const nombreMes = meses[parseInt(mo) - 1]
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+  const [yr, mo] = mes.split('-')
+  const nombreMes = meses[parseInt(mo) - 1]
+
+  if (isAdmin && targetUsuarioId !== session.id) {
+    // Admin cargó en nombre del empleado → notificar al empleado
+    await crearNotificaciones([targetUsuarioId], {
+      titulo: 'Monotributo cargado',
+      mensaje: `Tu comprobante de ${nombreMes} ${yr} fue cargado por el administrador.`,
+      tipo: 'monotributo',
+    })
+  } else {
+    // El propio empleado cargó → notificar admin+HR
     const adminHRIds = await getAdminAndHRIds()
     const recipients = adminHRIds.filter(id => id !== session.id)
     if (recipients.length) {
