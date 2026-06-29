@@ -1016,14 +1016,14 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
           {/* Tabs período */}
           <div className="flex bg-white border border-gray-200/60 rounded-xl p-0.5">
             {(['todas', 'en_curso', 'futuras', 'archivadas'] as const).map(sf => (
-              <button key={sf} onClick={() => setSubFilter(sf)}
+              <button key={sf} onClick={() => { setSubFilter(sf); setMesFilter(null) }}
                 className={`px-3 lg:px-4 py-2 text-[11px] lg:text-[12px] font-medium rounded-[10px] cursor-pointer transition-all whitespace-nowrap ${subFilter === sf ? 'bg-[var(--primary)] text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>
                 {sf === 'todas' ? 'Todas' : sf === 'en_curso' ? 'En curso' : sf === 'futuras' ? 'Futuras' : 'Archivadas'}
               </button>
             ))}
           </div>
-          {/* Navegador de mes */}
-          <div className="flex items-center bg-white border border-gray-200/60 rounded-xl p-0.5 shrink-0">
+          {/* Navegador de mes — no aplica a en_curso */}
+          <div className={`flex items-center bg-white border border-gray-200/60 rounded-xl p-0.5 shrink-0 transition-opacity ${subFilter === 'en_curso' ? 'opacity-0 pointer-events-none' : ''}`}>
             <button onClick={prevMes} className="p-1.5 rounded-[8px] cursor-pointer text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
               <IconChevronLeft size={13} />
             </button>
