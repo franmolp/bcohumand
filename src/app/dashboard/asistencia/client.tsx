@@ -1414,6 +1414,7 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
 
   // Weekly breakdown in employee view
   const empWeekData = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0]
     const [year] = mes.split('-').map(Number)
     const byWeek = new Map<number, { records: typeof homeRecords; semana: number }>()
     for (const r of homeRecords) {
@@ -1422,8 +1423,8 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
       byWeek.get(r.semana)!.records.push(r)
     }
     // Mostrar la semana actual aunque no tenga registros aún
-    if (today.substring(0, 7) === mes) {
-      const semanaHoy = isoWeekOf(today)
+    if (todayStr.substring(0, 7) === mes) {
+      const semanaHoy = isoWeekOf(todayStr)
       if (!byWeek.has(semanaHoy)) byWeek.set(semanaHoy, { records: [], semana: semanaHoy })
     }
     return Array.from(byWeek.values()).sort((a, b) => a.semana - b.semana).map(({ semana, records: wr }) => {
@@ -1431,7 +1432,7 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
       const { de, hasta } = weekMonSat(year, semana)
       return { semana, stats, de, hasta }
     })
-  }, [homeRecords, config, mes, today])
+  }, [homeRecords, config, mes])
 
   // Employees sorted by sortBy preference
   const sortedEmps = useMemo(() => {
