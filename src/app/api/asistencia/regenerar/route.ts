@@ -152,9 +152,12 @@ export async function POST(req: NextRequest) {
   const DOW = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
   function getSemana(dateStr: string): number {
-    const dt = new Date(dateStr + 'T12:00:00')
-    const soy = new Date(dt.getFullYear(), 0, 1)
-    return Math.ceil(((dt.getTime() - soy.getTime()) / 86400000 + soy.getDay() + 1) / 7)
+    const d = new Date(dateStr + 'T12:00:00')
+    const dow = d.getDay() || 7  // 1=Lun … 7=Dom
+    const thursday = new Date(d)
+    thursday.setDate(d.getDate() + (4 - dow))
+    const yearStart = new Date(thursday.getFullYear(), 0, 1)
+    return Math.ceil(((thursday.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
   }
 
   const records: Record<string, unknown>[] = []
