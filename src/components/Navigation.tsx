@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { SessionUser } from '@/types'
-import { IconHome, IconUsers, IconClipboard, IconLogout, IconBell, IconShoppingBag, IconWall, IconDollar, IconSettings, IconX, IconMore, IconCalendar, IconReceipt, IconShield, IconCamera, IconCalendarCheck, IconWrench, IconStar } from '@/components/ui/Icons'
+import { IconHome, IconUsers, IconClipboard, IconLogout, IconBell, IconShoppingBag, IconWall, IconDollar, IconSettings, IconX, IconMore, IconCalendar, IconReceipt, IconShield, IconCamera, IconCalendarCheck, IconWrench, IconStar, IconLayoutGrid } from '@/components/ui/Icons'
 import PhotoCropModal from '@/components/PhotoCropModal'
 
 const allNav = [
@@ -16,6 +16,7 @@ const allNav = [
   { href: '/dashboard/liquidador',   label: 'Liquidaciones',  labelEmp: 'Mi Liquidación', icon: IconDollar },
   { href: '/dashboard/adelantos',    label: 'Adelantos',      labelEmp: 'Mis Adelantos', icon: IconDollar },
   { href: '/dashboard/mi-asistencia', label: 'Mi Asistencia', icon: IconClipboard, notAdmin: true, mobile: true },
+  { href: '/dashboard/espacio-trabajo', label: 'Espacio de trabajo', icon: IconLayoutGrid, roles: ['Admin', 'admin', 'HR', 'Encargada'] },
   { href: '/dashboard/compras',      label: 'Compras',        icon: IconShoppingBag, roles: ['Admin', 'admin', 'Compras', 'Encargada'] },
   { href: '/dashboard/monotributo',  label: 'Monotributo',    icon: IconReceipt },
   { href: '/dashboard/calendario',   label: 'Calendario',     icon: IconCalendar,    mobile: true },

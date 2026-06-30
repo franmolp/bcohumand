@@ -45,5 +45,9 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  await supabaseAdmin
+    .from('configuracion')
+    .upsert({ clave: 'ultima_importacion_turnos', valor: { fecha: new Date().toISOString() } }, { onConflict: 'clave' })
+
   return NextResponse.json({ ok: records.length, noEncontrados: [...noEncontrados], total: rows.length })
 }
