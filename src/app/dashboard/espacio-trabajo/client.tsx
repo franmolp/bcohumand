@@ -47,7 +47,7 @@ function getWeekDates(year: number, week: number): string[] {
   const mon = new Date(year, 0, jan4.getDate() - dow + 1 + (week - 1) * 7)
   return Array.from({ length: 6 }, (_, i) => {
     const d = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i)
-    return d.toLocaleDateString('sv')  // YYYY-MM-DD in local timezone
+    return d.toLocaleDateString('sv')  // YYYY-MM-DD en timezone local
   })
 }
 
@@ -85,6 +85,42 @@ function assignLanes(shifts: Turno[]): (Turno & { lane: number })[] {
 function peakConcurrent(shifts: Turno[]): number {
   if (!shifts.length) return 0
   return Math.max(...assignLanes(shifts).map(s => s.lane)) + 1
+}
+
+// ── Available slots (huecos ≥ 3h) ────────────────────────────────────────────
+const MIN_GAP = 3 * 60
+
+function minToStr(m: number): string {
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+}
+
+function findGaps(shifts: Turno[], capacity: number): { lane: number; gaps: { start: number; end: number }[] }[] {
+  const withLanes = assignLanes(shifts)
+  const usedLanes = withLanes.length > 0 ? Math.max(...withLanes.map(t => t.lane)) + 1 : 0
+  const totalLanes = Math.max(capacity > 0 ? capacity : 0, usedLanes)
+
+  const result: { lane: number; gaps: { start: number; end: number }[] }[] = []
+
+  for (let lane = 0; lane < totalLanes; lane++) {
+    const laneShifts = withLanes
+      .filter(t => t.lane === lane)
+      .sort((a, b) => toMin(a.inicio) - toMin(b.inicio))
+
+    const gaps: { start: number; end: number }[] = []
+    let cursor = GANTT_START
+
+    for (const shift of laneShifts) {
+      const s = toMin(shift.inicio)
+      const e = toMin(shift.fin)
+      if (s - cursor >= MIN_GAP) gaps.push({ start: cursor, end: s })
+      cursor = Math.max(cursor, e)
+    }
+    if (GANTT_END - cursor >= MIN_GAP) gaps.push({ start: cursor, end: GANTT_END })
+
+    if (gaps.length > 0) result.push({ lane, gaps })
+  }
+
+  return result
 }
 
 // ── Colors ────────────────────────────────────────────────────────────────────
@@ -182,9 +218,10 @@ function GanttSection({ equipo, capacity, shifts, selectedDate }: {
       <div className="overflow-x-auto">
         <div style={{ minWidth: LABEL_W + GANTT_MIN_W }}>
           {/* Time axis */}
-          <div className="flex border-b border-gray-100 bg-gray-50/60">
-            <div style={{ width: LABEL_W, flexShrink: 0 }} />
-            <div className="flex-1 relative" style={{ minWidth: GANTT_MIN_W, height: 22 }}>
+          <div className="flex border-b border-gray-100">
+            {/* sticky placeholder so the hour labels don't scroll under the label column */}
+            <div style={{ width: LABEL_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 10, background: '#F9FAFB' }} />
+            <div className="flex-1 relative bg-gray-50/60" style={{ minWidth: GANTT_MIN_W, height: 22 }}>
               {HOURS.map(h => (
                 <div key={h}
                   className="absolute top-0 bottom-0 border-l border-gray-200 flex items-end"
@@ -206,7 +243,15 @@ function GanttSection({ equipo, capacity, shifts, selectedDate }: {
                 <div key={lane}
                   className={`flex border-t border-gray-50 ${isOverflow ? 'bg-red-50/40' : ''}`}
                   style={{ height: ROW_H }}>
-                  <div style={{ width: LABEL_W, flexShrink: 0 }}
+                  {/* Sticky lane label */}
+                  <div style={{
+                    width: LABEL_W,
+                    flexShrink: 0,
+                    position: 'sticky',
+                    left: 0,
+                    zIndex: 10,
+                    background: isOverflow ? '#FEF2F2' : '#FFFFFF',
+                  }}
                     className={`flex items-center px-2 text-[11px] font-medium border-r border-gray-100 ${
                       isOverflow ? 'text-red-400' : 'text-gray-400'
                     }`}>
@@ -243,6 +288,41 @@ function GanttSection({ equipo, capacity, shifts, selectedDate }: {
   )
 }
 
+// ── Available slots section ───────────────────────────────────────────────────
+function AvailableSection({ equipo, capacity, shifts, selectedDate }: {
+  equipo: string
+  capacity: number
+  shifts: Turno[]
+  selectedDate: string
+}) {
+  const dayShifts = shifts.filter(t => t.fecha === selectedDate)
+  const laneGaps = findGaps(dayShifts, capacity)
+
+  if (laneGaps.length === 0) return null
+
+  return (
+    <div className="bg-white rounded-2xl border border-[var(--border)] p-4">
+      <h3 className="text-sm font-semibold text-[var(--text)] mb-3">{equipo}</h3>
+      <div className="space-y-2.5">
+        {laneGaps.map(({ lane, gaps }) => (
+          <div key={lane} className="flex items-start gap-3">
+            <span className="text-[11px] font-medium text-gray-400 pt-1 flex-shrink-0" style={{ width: LABEL_W - 8 }}>
+              {laneLabel(equipo, lane)}
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {gaps.map((g, i) => (
+                <span key={i} className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg px-2.5 py-1 font-medium">
+                  {minToStr(g.start)} – {minToStr(g.end)}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Week overview chips ────────────────────────────────────────────────────────
 function WeekOverview({ dates, turnos, capacidades, selectedDate, onSelect }: {
   dates: string[]
@@ -252,46 +332,60 @@ function WeekOverview({ dates, turnos, capacidades, selectedDate, onSelect }: {
   onSelect: (d: string) => void
 }) {
   return (
-    <div className="grid grid-cols-6 gap-1.5">
-      {dates.map(date => {
-        const { dia, num, mes } = dayLabel(date)
-        const dayTurnos = turnos.filter(t => t.fecha === date)
-        const isSelected = date === selectedDate
+    <div className="space-y-2">
+      <div className="grid grid-cols-6 gap-1.5">
+        {dates.map(date => {
+          const { dia, num, mes } = dayLabel(date)
+          const dayTurnos = turnos.filter(t => t.fecha === date)
+          const isSelected = date === selectedDate
 
-        // Find worst occupancy ratio across all sections (excluye recepción)
-        const equipos = [...new Set(dayTurnos.map(t => t.equipo).filter(Boolean))].filter(e => !isRecepcion(e))
-        let dotColor = ''
-        for (const eq of equipos) {
-          const cap = capacidades[eq] ?? 8
-          if (cap <= 0) continue
-          const pk = peakConcurrent(dayTurnos.filter(t => t.equipo === eq))
-          if (pk > cap) { dotColor = 'bg-red-400'; break }
-          if (pk >= cap) dotColor = dotColor || 'bg-amber-400'
-          else if (pk > 0) dotColor = dotColor || 'bg-emerald-400'
-        }
+          // Peor ratio de ocupación entre todas las secciones (sin recepción)
+          const equipos = [...new Set(dayTurnos.map(t => t.equipo).filter(Boolean))].filter(e => !isRecepcion(e))
+          let dotColor = ''
+          for (const eq of equipos) {
+            const cap = capacidades[eq] ?? 8
+            if (cap <= 0) continue
+            const pk = peakConcurrent(dayTurnos.filter(t => t.equipo === eq))
+            if (pk > cap) { dotColor = 'bg-red-400'; break }
+            if (pk >= cap) dotColor = dotColor || 'bg-amber-400'
+            else if (pk > 0) dotColor = dotColor || 'bg-emerald-400'
+          }
 
-        return (
-          <button key={date} onClick={() => onSelect(date)}
-            className={`flex flex-col items-center gap-1 py-2 px-1 rounded-xl border transition-all cursor-pointer ${
-              isSelected
-                ? 'border-[var(--primary)] bg-[var(--primary-light)]/60 text-[var(--primary)]'
-                : 'border-[var(--border)] bg-white text-[var(--text-sub)] hover:border-[var(--primary)]/40 hover:bg-gray-50'
-            }`}>
-            <span className={`text-[10px] font-medium uppercase tracking-wide ${isSelected ? 'text-[var(--primary)]' : 'text-[var(--text-muted)]'}`}>
-              {dia}
-            </span>
-            <span className={`text-[15px] font-bold leading-none ${isSelected ? 'text-[var(--primary)]' : ''}`}>
-              {num}
-            </span>
-            <span className={`text-[9px] ${isSelected ? 'text-[var(--primary)]/70' : 'text-[var(--text-muted)]'}`}>
-              {mes}
-            </span>
-            <div className="h-2 flex items-center">
-              {dotColor && <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />}
-            </div>
-          </button>
-        )
-      })}
+          return (
+            <button key={date} onClick={() => onSelect(date)}
+              className={`flex flex-col items-center gap-1 py-2 px-1 rounded-xl border transition-all cursor-pointer ${
+                isSelected
+                  ? 'border-[var(--primary)] bg-[var(--primary-light)]/60 text-[var(--primary)]'
+                  : 'border-[var(--border)] bg-white text-[var(--text-sub)] hover:border-[var(--primary)]/40 hover:bg-gray-50'
+              }`}>
+              <span className={`text-[10px] font-medium uppercase tracking-wide ${isSelected ? 'text-[var(--primary)]' : 'text-[var(--text-muted)]'}`}>
+                {dia}
+              </span>
+              <span className={`text-[15px] font-bold leading-none ${isSelected ? 'text-[var(--primary)]' : ''}`}>
+                {num}
+              </span>
+              <span className={`text-[9px] ${isSelected ? 'text-[var(--primary)]/70' : 'text-[var(--text-muted)]'}`}>
+                {mes}
+              </span>
+              <div className="h-2 flex items-center">
+                {dotColor && <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />}
+              </div>
+            </button>
+          )
+        })}
+      </div>
+      {/* Leyenda de puntos */}
+      <div className="flex items-center gap-3 px-0.5">
+        <span className="flex items-center gap-1 text-[10px] text-gray-400">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />Con turnos
+        </span>
+        <span className="flex items-center gap-1 text-[10px] text-gray-400">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />Completo
+        </span>
+        <span className="flex items-center gap-1 text-[10px] text-gray-400">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" />Excedido
+        </span>
+      </div>
     </div>
   )
 }
@@ -306,12 +400,13 @@ function sectionOrder(equipoNombre: string): number {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function EspacioTrabajoClient({ user: _user }: { user: SessionUser }) {
-  const todayStr = new Date().toLocaleDateString('sv')  // 'sv' locale gives YYYY-MM-DD in local tz
+  const todayStr = new Date().toLocaleDateString('sv')  // YYYY-MM-DD en timezone local
   const initIso = isoWeekOf(todayStr)
 
   const [weekYear, setWeekYear] = useState(initIso.year)
   const [weekNum, setWeekNum] = useState(initIso.week)
   const [selectedDate, setSelectedDate] = useState(todayStr)
+  const [tab, setTab] = useState<'ocupacion' | 'disponibles'>('ocupacion')
   const [apiData, setApiData] = useState<ApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -348,6 +443,14 @@ export default function EspacioTrabajoClient({ user: _user }: { user: SessionUse
       .sort((a, b) => sectionOrder(a) - sectionOrder(b) || a.localeCompare(b, 'es'))
   }, [apiData])
 
+  const hasAvailable = useMemo(() => {
+    if (!apiData) return false
+    return groups.some(eq => {
+      const dayShifts = apiData.turnos.filter(t => t.equipo === eq && t.fecha === selectedDate)
+      return findGaps(dayShifts, apiData.capacidades[eq] ?? 8).length > 0
+    })
+  }, [apiData, groups, selectedDate])
+
   return (
     <div className="py-4 space-y-4">
       {/* Header */}
@@ -368,7 +471,7 @@ export default function EspacioTrabajoClient({ user: _user }: { user: SessionUse
         </div>
         {apiData && !apiData.ultimaImportacion && (
           <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
-            Sin importación registrada
+            Importación de Fresha pendiente
           </span>
         )}
       </div>
@@ -388,7 +491,7 @@ export default function EspacioTrabajoClient({ user: _user }: { user: SessionUse
         </button>
       </div>
 
-      {/* Day chips */}
+      {/* Day chips + legend */}
       {apiData && (
         <WeekOverview
           dates={dates}
@@ -399,7 +502,34 @@ export default function EspacioTrabajoClient({ user: _user }: { user: SessionUse
         />
       )}
 
-      {/* Gantt sections */}
+      {/* Tabs */}
+      {apiData && groups.length > 0 && (
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+          <button
+            onClick={() => setTab('ocupacion')}
+            className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all cursor-pointer ${
+              tab === 'ocupacion'
+                ? 'bg-white text-[var(--text)] shadow-sm'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-sub)]'
+            }`}>
+            Ocupación
+          </button>
+          <button
+            onClick={() => setTab('disponibles')}
+            className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all cursor-pointer ${
+              tab === 'disponibles'
+                ? 'bg-white text-[var(--text)] shadow-sm'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-sub)]'
+            }`}>
+            Disponibles
+            {hasAvailable && tab !== 'disponibles' && (
+              <span className="ml-1.5 inline-flex items-center justify-center w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Content */}
       {loading ? (
         <div className="py-16"><Spinner /></div>
       ) : error ? (
@@ -409,7 +539,7 @@ export default function EspacioTrabajoClient({ user: _user }: { user: SessionUse
           <p className="text-sm text-[var(--text-muted)]">Sin turnos cargados para esta semana</p>
           <p className="text-xs text-[var(--text-muted)] mt-1">Importá los horarios desde Fresha para ver la ocupación</p>
         </div>
-      ) : (
+      ) : tab === 'ocupacion' ? (
         <div className="space-y-3">
           {groups.map(equipo => (
             <GanttSection
@@ -420,6 +550,23 @@ export default function EspacioTrabajoClient({ user: _user }: { user: SessionUse
               selectedDate={selectedDate}
             />
           ))}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {groups.map(equipo => (
+            <AvailableSection
+              key={equipo}
+              equipo={equipo}
+              capacity={apiData.capacidades[equipo] ?? 8}
+              shifts={apiData.turnos.filter(t => t.equipo === equipo)}
+              selectedDate={selectedDate}
+            />
+          ))}
+          {!hasAvailable && (
+            <div className="bg-white rounded-2xl border border-[var(--border)] py-10 text-center">
+              <p className="text-sm text-[var(--text-muted)]">Sin huecos de +3h disponibles este día</p>
+            </div>
+          )}
         </div>
       )}
     </div>
