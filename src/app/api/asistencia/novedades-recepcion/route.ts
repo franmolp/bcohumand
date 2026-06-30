@@ -125,7 +125,7 @@ export async function GET(req: NextRequest) {
     m.set(sol.tipo, (m.get(sol.tipo) ?? 0) + dias)
   }
 
-  // 6. Horas base semanales (semana representativa = la de mayor carga del mes)
+  // 6. Horas base semanales (moda de las semanas del mes; en empate, el valor menor)
   const { data: horarios } = await supabaseAdmin
     .from('horarios_base')
     .select('usuario_id, fecha, horas_base')
@@ -144,7 +144,17 @@ export async function GET(req: NextRequest) {
   function horasBaseSemanal(usuarioId: string): number {
     const semanas = semanasPorUsuario.get(usuarioId)
     if (!semanas || semanas.size === 0) return 0
-    return Math.max(...Array.from(semanas.values()))
+    // Moda de los totales semanales; empate → el menor (el valor "base", sin extras)
+    const freq = new Map<number, number>()
+    for (const v of semanas.values()) {
+      const rounded = Math.round(v * 2) / 2 // redondear a 0,5hs para agrupar variaciones mínimas
+      freq.set(rounded, (freq.get(rounded) ?? 0) + 1)
+    }
+    let moda = 0, maxFreq = 0
+    for (const [v, f] of freq) {
+      if (f > maxFreq || (f === maxFreq && v < moda)) { moda = v; maxFreq = f }
+    }
+    return moda
   }
 
   // 7. Armar resultado por empleado
