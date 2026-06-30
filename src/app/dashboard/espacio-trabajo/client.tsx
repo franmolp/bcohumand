@@ -44,12 +44,10 @@ function isoWeeksInYear(year: number): number {
 function getWeekDates(year: number, week: number): string[] {
   const jan4 = new Date(year, 0, 4)
   const dow = jan4.getDay() || 7
-  const mon = new Date(jan4)
-  mon.setDate(jan4.getDate() - dow + 1 + (week - 1) * 7)
+  const mon = new Date(year, 0, jan4.getDate() - dow + 1 + (week - 1) * 7)
   return Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(mon)
-    d.setDate(mon.getDate() + i)
-    return d.toISOString().split('T')[0]
+    const d = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i)
+    return d.toLocaleDateString('sv')  // YYYY-MM-DD in local timezone
   })
 }
 
@@ -134,12 +132,15 @@ function weekLabel(week: number, dates: string[]): string {
   return `S${week} · ${range}`
 }
 
+function isRecepcion(equipo: string): boolean {
+  return equipo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes('recep')
+}
+
 // ── Lane label per section ─────────────────────────────────────────────────────
 function laneLabel(equipo: string, lane: number): string {
   const n = equipo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   if (n.includes('peluq')) return `Est ${lane + 1}`
   if (n.includes('masaj') || n.includes('depilac')) return `Box ${lane + 1}`
-  if (n.includes('recep')) return `Rec ${lane + 1}`
   return `Man ${lane + 1}`
 }
 
@@ -227,7 +228,7 @@ function GanttSection({ equipo, capacity, shifts, selectedDate }: {
                         }}
                         title={`${shift.nombre} · ${shift.inicio}–${shift.fin}`}>
                         <span className="text-white text-[11px] font-semibold truncate leading-none">
-                          {shift.nombre.split(' ')[0]}
+                          {shift.nombre} | {shift.inicio}–{shift.fin}
                         </span>
                       </div>
                     ))}
@@ -257,8 +258,8 @@ function WeekOverview({ dates, turnos, capacidades, selectedDate, onSelect }: {
         const dayTurnos = turnos.filter(t => t.fecha === date)
         const isSelected = date === selectedDate
 
-        // Find worst occupancy ratio across all sections
-        const equipos = [...new Set(dayTurnos.map(t => t.equipo).filter(Boolean))]
+        // Find worst occupancy ratio across all sections (excluye recepción)
+        const equipos = [...new Set(dayTurnos.map(t => t.equipo).filter(Boolean))].filter(e => !isRecepcion(e))
         let dotColor = ''
         for (const eq of equipos) {
           const cap = capacidades[eq] ?? 8
@@ -300,13 +301,12 @@ function sectionOrder(equipoNombre: string): number {
   const n = equipoNombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   if (n.includes('peluq')) return 2
   if (n.includes('masaj') || n.includes('depilac')) return 1
-  if (n.includes('recep')) return 3
   return 0  // manicura-like first
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function EspacioTrabajoClient({ user: _user }: { user: SessionUser }) {
-  const todayStr = new Date().toISOString().split('T')[0]
+  const todayStr = new Date().toLocaleDateString('sv')  // 'sv' locale gives YYYY-MM-DD in local tz
   const initIso = isoWeekOf(todayStr)
 
   const [weekYear, setWeekYear] = useState(initIso.year)
@@ -317,12 +317,6 @@ export default function EspacioTrabajoClient({ user: _user }: { user: SessionUse
   const [error, setError] = useState<string | null>(null)
 
   const dates = useMemo(() => getWeekDates(weekYear, weekNum), [weekYear, weekNum])
-
-  useEffect(() => {
-    if (!dates.includes(selectedDate)) {
-      setSelectedDate(dates.find(d => d === todayStr) ?? dates[0])
-    }
-  }, [dates, todayStr])  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setLoading(true); setError(null)
@@ -336,17 +330,20 @@ export default function EspacioTrabajoClient({ user: _user }: { user: SessionUse
     let w = weekNum - 1, y = weekYear
     if (w < 1) { y--; w = isoWeeksInYear(y) }
     setWeekYear(y); setWeekNum(w)
+    setSelectedDate(getWeekDates(y, w)[0])
   }
   function nextWeek() {
     let w = weekNum + 1, y = weekYear
     if (w > isoWeeksInYear(y)) { y++; w = 1 }
     setWeekYear(y); setWeekNum(w)
+    setSelectedDate(getWeekDates(y, w)[0])
   }
 
   // Groups: one per distinct equipo, sorted by section order then alphabetically
   const groups = useMemo(() => {
     if (!apiData) return []
     const equipoNames = [...new Set(apiData.turnos.map(t => t.equipo).filter(Boolean))]
+      .filter(e => !isRecepcion(e))
     return equipoNames
       .sort((a, b) => sectionOrder(a) - sectionOrder(b) || a.localeCompare(b, 'es'))
   }, [apiData])
