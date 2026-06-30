@@ -1415,6 +1415,11 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
   onVerFicha: (empId: string) => void
 }) {
   const [sortBy, setSortBy] = useState<'alpha' | 'estado'>('alpha')
+  const [novedadesLoading, setNovedadesLoading] = useState(false)
+  const [novedadesError, setNovedadesError] = useState<string | null>(null)
+  const [novedadesText, setNovedadesText] = useState<string | null>(null)
+  const [novedadesAviso, setNovedadesAviso] = useState<string | null>(null)
+  const [novedadesCopiado, setNovedadesCopiado] = useState(false)
   const ESTADO_INFO: Record<string, { label: string; textCls: string; bgCls: string }> = {
     ok:         { label: 'Cumple',     textCls: 'text-emerald-700', bgCls: 'bg-emerald-50'  },
     bajo:       { label: 'Bajo',       textCls: 'text-amber-700',   bgCls: 'bg-amber-50'    },
@@ -1473,6 +1478,52 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
     for (const { stats } of statsPerEmp) m.set(stats.estado, (m.get(stats.estado) ?? 0) + 1)
     return m
   }, [statsPerEmp])
+
+  async function exportarNovedades() {
+    setNovedadesLoading(true)
+    setNovedadesError(null)
+    setNovedadesText(null)
+    setNovedadesAviso(null)
+    try {
+      const res = await fetch(`/api/asistencia/novedades-recepcion?mes=${mes}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al generar el reporte')
+      type NovedadEmpleado = {
+        nombre: string; horasBaseSemanal: number
+        feriadosTrabajados: { fecha: string; horas: number | null }[]
+        diasSalud: number
+        otrasAusencias: { label: string; dias: number }[]
+      }
+      const empleados = data.empleados as NovedadEmpleado[]
+      if (empleados.length === 0) {
+        setNovedadesText('No se encontraron empleados del equipo Recepción.')
+      } else {
+        const lineas = empleados.map(emp => {
+          const apellido = emp.nombre.trim().split(/\s+/).slice(-1)[0] || emp.nombre
+          const partes: string[] = []
+          if (emp.feriadosTrabajados.length > 0) {
+            const fechas = emp.feriadosTrabajados.map(f => {
+              const [, m, d] = f.fecha.split('-').map(Number)
+              return `${d}/${m}`
+            }).join(', ')
+            partes.push(`trabajó feriado${emp.feriadosTrabajados.length > 1 ? 's' : ''} ${fechas}`)
+          }
+          if (emp.diasSalud > 0) partes.push(`${emp.diasSalud} dias lic. salud`)
+          for (const otra of emp.otrasAusencias) partes.push(`${otra.dias} dias ${otra.label}`)
+          const novedades = partes.length > 0 ? partes.join(', ') : 'sin novedades'
+          return `-${apellido}: ${novedades}. Base de ${emp.horasBaseSemanal}hs semanales.`
+        })
+        setNovedadesText(lineas.join('\n'))
+      }
+      if (!data.efemeridesDisponible) {
+        setNovedadesAviso('No se pudo leer el calendario de feriados — revisá si la migración de efemérides está aplicada en Supabase. Los feriados trabajados no se calcularon.')
+      }
+    } catch (e) {
+      setNovedadesError(e instanceof Error ? e.message : 'Error desconocido')
+    } finally {
+      setNovedadesLoading(false)
+    }
+  }
 
   return (
     <div className="py-4 space-y-4">
@@ -1586,6 +1637,49 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
               <div className="text-center py-12 text-[var(--text-muted)] text-sm">Sin datos para {mesLabel(mes)}</div>
             )}
           </div>
+
+          {/* Exportar novedades recepcionistas */}
+          <div className="pt-2">
+            <button
+              onClick={exportarNovedades}
+              disabled={novedadesLoading}
+              className="w-full flex items-center justify-center gap-2 h-11 rounded-xl border border-[var(--border)] bg-white text-sm font-medium text-[var(--text)] hover:bg-gray-50 disabled:opacity-50"
+            >
+              <IconClipboard size={16} />
+              {novedadesLoading ? 'Generando…' : 'Exportar novedades recepcionistas'}
+            </button>
+            {novedadesError && <p className="text-xs text-red-500 mt-2">{novedadesError}</p>}
+          </div>
+
+          {novedadesText !== null && (
+            <div className="bg-white rounded-xl border border-[var(--border)] p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">
+                  Novedades recepcionistas — {mesLabel(mes)}
+                </span>
+                <button onClick={() => setNovedadesText(null)} className="text-[var(--text-muted)] hover:text-[var(--text)]">
+                  <IconX size={16} />
+                </button>
+              </div>
+              <textarea
+                readOnly value={novedadesText}
+                rows={Math.min(12, novedadesText.split('\n').length + 1)}
+                className="w-full text-sm font-mono p-2 border border-[var(--border)] rounded-lg bg-gray-50 resize-none"
+                onFocus={e => e.target.select()}
+              />
+              <button
+                onClick={async () => {
+                  await navigator.clipboard.writeText(novedadesText)
+                  setNovedadesCopiado(true)
+                  setTimeout(() => setNovedadesCopiado(false), 2000)
+                }}
+                className="w-full h-9 rounded-lg bg-[var(--primary)] text-white text-sm font-medium flex items-center justify-center gap-1.5"
+              >
+                <IconClipboard size={14} /> {novedadesCopiado ? 'Copiado ✓' : 'Copiar al portapapeles'}
+              </button>
+              {novedadesAviso && <p className="text-[11px] text-amber-600">⚠ {novedadesAviso}</p>}
+            </div>
+          )}
         </div>
       ) : (
         /* Vista empleada */
