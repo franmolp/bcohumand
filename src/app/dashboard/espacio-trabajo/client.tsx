@@ -52,10 +52,10 @@ function getWeekDates(year: number, week: number): string[] {
 }
 
 // ── Gantt helpers ─────────────────────────────────────────────────────────────
-const GANTT_START = 8 * 60
-const GANTT_END = 21 * 60
+const GANTT_START = 9 * 60
+const GANTT_END = 20 * 60
 const GANTT_SPAN = GANTT_END - GANTT_START
-const HOURS = Array.from({ length: 14 }, (_, i) => 8 + i)
+const HOURS = Array.from({ length: 12 }, (_, i) => 9 + i)
 
 function toMin(t: string): number {
   const [h, m] = t.split(':').map(Number)
