@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import type { SessionUser } from '@/types'
 import { Spinner } from '@/components/ui'
 import { IconLayoutGrid, IconChevronLeft, IconChevronRight, IconClock } from '@/components/ui/Icons'
@@ -18,7 +18,7 @@ interface Turno {
 interface ApiResponse {
   turnos: Turno[]
   ultimaImportacion: string | null
-  capacidades: Record<string, number>   // equipo_nombre → capacity
+  capacidades: Record<string, number>
 }
 
 // ── ISO week helpers ──────────────────────────────────────────────────────────
@@ -47,7 +47,7 @@ function getWeekDates(year: number, week: number): string[] {
   const mon = new Date(year, 0, jan4.getDate() - dow + 1 + (week - 1) * 7)
   return Array.from({ length: 6 }, (_, i) => {
     const d = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i)
-    return d.toLocaleDateString('sv')  // YYYY-MM-DD en timezone local
+    return d.toLocaleDateString('sv')
   })
 }
 
@@ -223,7 +223,6 @@ function GanttSection({ equipo, capacity, shifts, selectedDate }: {
         <div style={{ minWidth: LABEL_W + GANTT_MIN_W }}>
           {/* Time axis */}
           <div className="flex border-b border-gray-100">
-            {/* sticky placeholder so the hour labels don't scroll under the label column */}
             <div style={{ width: LABEL_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 10, background: '#F9FAFB' }} />
             <div className="flex-1 relative bg-gray-50/60" style={{ minWidth: GANTT_MIN_W, height: 22 }}>
               {HOURS.map(h => (
@@ -247,7 +246,6 @@ function GanttSection({ equipo, capacity, shifts, selectedDate }: {
                 <div key={lane}
                   className={`flex border-t border-gray-50 ${isOverflow ? 'bg-red-50/40' : ''}`}
                   style={{ height: ROW_H }}>
-                  {/* Sticky lane label */}
                   <div style={{
                     width: LABEL_W,
                     flexShrink: 0,
@@ -327,65 +325,113 @@ function AvailableSection({ equipo, capacity, shifts, selectedDate }: {
   )
 }
 
-// ── Week overview chips ────────────────────────────────────────────────────────
-function WeekOverview({ dates, turnos, capacidades, selectedDate, onSelect }: {
-  dates: string[]
+// ── Day strip (scrollable) ────────────────────────────────────────────────────
+function DayStrip({ stripDates, loadedDates, selectedDate, todayStr, onSelect, turnos, capacidades }: {
+  stripDates: Array<{ date: string; year: number; week: number }>
+  loadedDates: string[]
+  selectedDate: string
+  todayStr: string
+  onSelect: (date: string, year: number, week: number) => void
   turnos: Turno[]
   capacidades: Record<string, number>
-  selectedDate: string
-  onSelect: (d: string) => void
 }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Scroll to selected date (smooth on change, instant on first mount)
+  const isFirstMount = useRef(true)
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const el = container.querySelector(`[data-date="${selectedDate}"]`) as HTMLElement | null
+    if (!el) return
+    el.scrollIntoView({
+      behavior: isFirstMount.current ? 'instant' : 'smooth',
+      block: 'nearest',
+      inline: 'center',
+    })
+    isFirstMount.current = false
+  }, [selectedDate])
+
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-6 gap-1.5">
-        {dates.map(date => {
-          const { dia, num, mes } = dayLabel(date)
-          const dayTurnos = turnos.filter(t => t.fecha === date)
-          const isSelected = date === selectedDate
+      <div ref={containerRef} className="overflow-x-auto -mx-4 px-4 pb-1">
+        <div className="flex gap-1.5" style={{ width: 'max-content' }}>
+          {stripDates.map(({ date, year, week }) => {
+            const { dia, num, mes } = dayLabel(date)
+            const isSelected = date === selectedDate
+            const isToday = date === todayStr
+            const isLoaded = loadedDates.includes(date)
 
-          // Solo manicura y box (sin peluquería ni recepción)
-          const equipos = [...new Set(dayTurnos.map(t => t.equipo).filter(Boolean))]
-            .filter(e => !isRecepcion(e) && !isPeluqueria(e))
-          let isExcedido = false
-          let isLibre = false
-          for (const eq of equipos) {
-            const cap = capacidades[eq] ?? 8
-            const eqShifts = dayTurnos.filter(t => t.equipo === eq)
-            if (!eqShifts.length) continue
-            if (peakConcurrent(eqShifts) > cap) isExcedido = true
-            if (findGaps(eqShifts, cap).length > 0) isLibre = true
-          }
-          const hasTurnos = equipos.some(eq => dayTurnos.some(t => t.equipo === eq))
-          const dotColor = !hasTurnos ? '' : isExcedido ? 'bg-red-500' : isLibre ? 'bg-emerald-400' : 'bg-red-400'
-          const dotPing = isExcedido
+            // Dot logic (only for loaded week, only manicura+box)
+            let dotColor = '', dotPing = false
+            if (isLoaded) {
+              const dayTurnos = turnos.filter(t => t.fecha === date)
+              const equipos = [...new Set(dayTurnos.map(t => t.equipo).filter(Boolean))]
+                .filter(e => !isRecepcion(e) && !isPeluqueria(e))
+              let isExcedido = false, isLibre = false
+              for (const eq of equipos) {
+                const cap = capacidades[eq] ?? 8
+                const eqShifts = dayTurnos.filter(t => t.equipo === eq)
+                if (!eqShifts.length) continue
+                if (peakConcurrent(eqShifts) > cap) isExcedido = true
+                if (findGaps(eqShifts, cap).length > 0) isLibre = true
+              }
+              const hasTurnos = equipos.some(eq => dayTurnos.some(t => t.equipo === eq))
+              dotColor = !hasTurnos ? '' : isExcedido ? 'bg-red-500' : isLibre ? 'bg-emerald-400' : 'bg-red-400'
+              dotPing = isExcedido
+            }
 
-          return (
-            <button key={date} onClick={() => onSelect(date)}
-              className={`flex flex-col items-center gap-1 py-2 px-1 rounded-xl border transition-all cursor-pointer ${
-                isSelected
-                  ? 'border-[var(--primary)] bg-[var(--primary-light)]/60 text-[var(--primary)]'
-                  : 'border-[var(--border)] bg-white text-[var(--text-sub)] hover:border-[var(--primary)]/40 hover:bg-gray-50'
-              }`}>
-              <span className={`text-[10px] font-medium uppercase tracking-wide ${isSelected ? 'text-[var(--primary)]' : 'text-[var(--text-muted)]'}`}>
-                {dia}
-              </span>
-              <span className={`text-[15px] font-bold leading-none ${isSelected ? 'text-[var(--primary)]' : ''}`}>
-                {num}
-              </span>
-              <span className={`text-[9px] ${isSelected ? 'text-[var(--primary)]/70' : 'text-[var(--text-muted)]'}`}>
-                {mes}
-              </span>
-              <div className="h-2 flex items-center justify-center relative">
-                {dotColor && dotPing && (
-                  <span className={`absolute w-2.5 h-2.5 rounded-full ${dotColor} opacity-75 animate-ping`} />
-                )}
-                {dotColor && <span className={`w-1.5 h-1.5 rounded-full ${dotColor} relative`} />}
-              </div>
-            </button>
-          )
-        })}
+            return (
+              <button
+                key={date}
+                data-date={date}
+                onClick={() => onSelect(date, year, week)}
+                className={`flex flex-col items-center py-2 rounded-xl border transition-all cursor-pointer flex-shrink-0 ${
+                  isSelected
+                    ? 'border-[var(--primary)] bg-[var(--primary-light)]/60'
+                    : 'border-[var(--border)] bg-white hover:border-[var(--primary)]/40 hover:bg-gray-50'
+                }`}
+                style={{ width: 50, gap: 3 }}>
+                <span className={`text-[10px] font-medium uppercase tracking-wide ${
+                  isSelected ? 'text-[var(--primary)]' : 'text-[var(--text-muted)]'
+                }`}>
+                  {dia}
+                </span>
+
+                {/* Date number — circle for today */}
+                <div className={`w-7 h-7 flex items-center justify-center rounded-full ${
+                  isToday && isSelected ? 'bg-[var(--primary)]' :
+                  isToday ? 'border-2 border-[var(--primary)]' : ''
+                }`}>
+                  <span className={`text-[14px] font-bold leading-none ${
+                    isToday && isSelected ? 'text-white' :
+                    isSelected ? 'text-[var(--primary)]' :
+                    isToday ? 'text-[var(--primary)]' : ''
+                  }`}>
+                    {num}
+                  </span>
+                </div>
+
+                <span className={`text-[9px] ${
+                  isSelected ? 'text-[var(--primary)]/70' : 'text-[var(--text-muted)]'
+                }`}>
+                  {mes}
+                </span>
+
+                {/* Dot */}
+                <div className="h-2 flex items-center justify-center relative">
+                  {dotColor && dotPing && (
+                    <span className={`absolute w-2.5 h-2.5 rounded-full ${dotColor} opacity-75 animate-ping`} />
+                  )}
+                  {dotColor && <span className={`w-1.5 h-1.5 rounded-full ${dotColor} relative`} />}
+                </div>
+              </button>
+            )
+          })}
+        </div>
       </div>
-      {/* Leyenda de puntos */}
+
+      {/* Legend */}
       <div className="flex items-center gap-3 px-0.5">
         <span className="flex items-center gap-1 text-[10px] text-gray-400">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />Lugares libres
@@ -407,12 +453,12 @@ function sectionOrder(equipoNombre: string): number {
   const n = equipoNombre.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   if (n.includes('peluq')) return 2
   if (n.includes('masaj') || n.includes('depilac')) return 1
-  return 0  // manicura-like first
+  return 0
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function EspacioTrabajoClient({ user: _user }: { user: SessionUser }) {
-  const todayStr = new Date().toLocaleDateString('sv')  // YYYY-MM-DD en timezone local
+  const todayStr = new Date().toLocaleDateString('sv')
   const initIso = isoWeekOf(todayStr)
 
   const [weekYear, setWeekYear] = useState(initIso.year)
@@ -423,7 +469,21 @@ export default function EspacioTrabajoClient({ user: _user }: { user: SessionUse
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Loaded week's dates
   const dates = useMemo(() => getWeekDates(weekYear, weekNum), [weekYear, weekNum])
+
+  // Scrollable strip: today-2w … today+12w (fixed window)
+  const stripDates = useMemo(() => {
+    const result: Array<{ date: string; year: number; week: number }> = []
+    const { year: ty, week: tw } = isoWeekOf(todayStr)
+    for (let offset = -2; offset <= 12; offset++) {
+      let w = tw + offset, y = ty
+      while (w < 1) { y--; w += isoWeeksInYear(y) }
+      while (w > isoWeeksInYear(y)) { w -= isoWeeksInYear(y); y++ }
+      getWeekDates(y, w).forEach(d => result.push({ date: d, year: y, week: w }))
+    }
+    return result
+  }, [todayStr])
 
   useEffect(() => {
     setLoading(true); setError(null)
@@ -446,7 +506,14 @@ export default function EspacioTrabajoClient({ user: _user }: { user: SessionUse
     setSelectedDate(getWeekDates(y, w)[0])
   }
 
-  // Groups: one per distinct equipo, sorted by section order then alphabetically
+  function handleStripSelect(date: string, year: number, week: number) {
+    setSelectedDate(date)
+    if (year !== weekYear || week !== weekNum) {
+      setWeekYear(year)
+      setWeekNum(week)
+    }
+  }
+
   const groups = useMemo(() => {
     if (!apiData) return []
     const equipoNames = [...new Set(apiData.turnos.map(t => t.equipo).filter(Boolean))]
@@ -488,7 +555,7 @@ export default function EspacioTrabajoClient({ user: _user }: { user: SessionUse
         )}
       </div>
 
-      {/* Week nav */}
+      {/* Week nav (keeps broad navigation for beyond the strip window) */}
       <div className="flex items-center gap-2">
         <button onClick={prevWeek}
           className="w-8 h-8 rounded-lg border border-[var(--border)] bg-white flex items-center justify-center hover:bg-gray-50 transition-colors cursor-pointer">
@@ -503,16 +570,16 @@ export default function EspacioTrabajoClient({ user: _user }: { user: SessionUse
         </button>
       </div>
 
-      {/* Day chips + legend */}
-      {apiData && (
-        <WeekOverview
-          dates={dates}
-          turnos={apiData.turnos}
-          capacidades={apiData.capacidades}
-          selectedDate={selectedDate}
-          onSelect={setSelectedDate}
-        />
-      )}
+      {/* Scrollable day strip */}
+      <DayStrip
+        stripDates={stripDates}
+        loadedDates={dates}
+        selectedDate={selectedDate}
+        todayStr={todayStr}
+        onSelect={handleStripSelect}
+        turnos={apiData?.turnos ?? []}
+        capacidades={apiData?.capacidades ?? {}}
+      />
 
       {/* Tabs */}
       {apiData && groups.length > 0 && (
