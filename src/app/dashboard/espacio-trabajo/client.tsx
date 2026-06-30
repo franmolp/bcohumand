@@ -172,6 +172,10 @@ function isRecepcion(equipo: string): boolean {
   return equipo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes('recep')
 }
 
+function isPeluqueria(equipo: string): boolean {
+  return equipo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes('peluq')
+}
+
 // ── Lane label per section ─────────────────────────────────────────────────────
 function laneLabel(equipo: string, lane: number): string {
   const n = equipo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -339,17 +343,21 @@ function WeekOverview({ dates, turnos, capacidades, selectedDate, onSelect }: {
           const dayTurnos = turnos.filter(t => t.fecha === date)
           const isSelected = date === selectedDate
 
-          // Peor ratio de ocupación entre todas las secciones (sin recepción)
-          const equipos = [...new Set(dayTurnos.map(t => t.equipo).filter(Boolean))].filter(e => !isRecepcion(e))
-          let dotColor = ''
+          // Solo manicura y box (sin peluquería ni recepción)
+          const equipos = [...new Set(dayTurnos.map(t => t.equipo).filter(Boolean))]
+            .filter(e => !isRecepcion(e) && !isPeluqueria(e))
+          let isExcedido = false
+          let isLibre = false
           for (const eq of equipos) {
             const cap = capacidades[eq] ?? 8
-            if (cap <= 0) continue
-            const pk = peakConcurrent(dayTurnos.filter(t => t.equipo === eq))
-            if (pk > cap) { dotColor = 'bg-red-400'; break }
-            if (pk >= cap) dotColor = dotColor || 'bg-amber-400'
-            else if (pk > 0) dotColor = dotColor || 'bg-emerald-400'
+            const eqShifts = dayTurnos.filter(t => t.equipo === eq)
+            if (!eqShifts.length) continue
+            if (peakConcurrent(eqShifts) > cap) isExcedido = true
+            if (findGaps(eqShifts, cap).length > 0) isLibre = true
           }
+          const hasTurnos = equipos.some(eq => dayTurnos.some(t => t.equipo === eq))
+          const dotColor = !hasTurnos ? '' : isExcedido ? 'bg-red-500' : isLibre ? 'bg-emerald-400' : 'bg-red-400'
+          const dotPing = isExcedido
 
           return (
             <button key={date} onClick={() => onSelect(date)}
@@ -367,8 +375,11 @@ function WeekOverview({ dates, turnos, capacidades, selectedDate, onSelect }: {
               <span className={`text-[9px] ${isSelected ? 'text-[var(--primary)]/70' : 'text-[var(--text-muted)]'}`}>
                 {mes}
               </span>
-              <div className="h-2 flex items-center">
-                {dotColor && <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />}
+              <div className="h-2 flex items-center justify-center relative">
+                {dotColor && dotPing && (
+                  <span className={`absolute w-2.5 h-2.5 rounded-full ${dotColor} opacity-75 animate-ping`} />
+                )}
+                {dotColor && <span className={`w-1.5 h-1.5 rounded-full ${dotColor} relative`} />}
               </div>
             </button>
           )
