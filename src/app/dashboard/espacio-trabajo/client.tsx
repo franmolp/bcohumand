@@ -388,13 +388,14 @@ function WeekOverview({ dates, turnos, capacidades, selectedDate, onSelect }: {
       {/* Leyenda de puntos */}
       <div className="flex items-center gap-3 px-0.5">
         <span className="flex items-center gap-1 text-[10px] text-gray-400">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />Con turnos
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />Lugares libres
         </span>
         <span className="flex items-center gap-1 text-[10px] text-gray-400">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />Completo
+          <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" />Todo lleno
         </span>
-        <span className="flex items-center gap-1 text-[10px] text-gray-400">
-          <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" />Excedido
+        <span className="flex items-center gap-1 text-[10px] text-gray-400 relative">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block animate-ping opacity-75 absolute" />
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block relative" />Excedido
         </span>
       </div>
     </div>
