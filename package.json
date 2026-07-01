@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.0",
+    "xlsx": "^0.18.5",
     "@types/web-push": "^3.6.4",
     "bcryptjs": "^3.0.3",
     "jose": "^6.2.3",
@@ -25,7 +26,6 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "playwright": "^1.50.0",
-    "xlsx": "^0.18.5",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/react": "^19",

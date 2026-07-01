@@ -188,14 +188,17 @@ async function descargarReporte(page, url, label) {
 
   const filePath = await download.path()
   const buf = fs.readFileSync(filePath)
+  const magic = buf.slice(0, 4).toString('hex')
+  console.log(`[${label}] Tipo archivo: ${magic} (${magic === '504b0304' ? 'XLSX' : 'texto/otro'})`)
   let content
-  if (buf[0] === 0x50 && buf[1] === 0x4B) {
-    // XLSX (archivo ZIP de Office): convertir a CSV
+  try {
     const XLSX = require('xlsx')
     const wb = XLSX.read(buf, { type: 'buffer' })
     const ws = wb.Sheets[wb.SheetNames[0]]
     content = XLSX.utils.sheet_to_csv(ws)
-  } else {
+    console.log(`[${label}] Parseado como XLSX`)
+  } catch (e) {
+    console.warn(`[${label}] xlsx parse error: ${e.message} — leyendo como texto`)
     content = buf.toString('utf8')
   }
   const lineas = content.trim().split('\n').length
