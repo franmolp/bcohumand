@@ -196,7 +196,7 @@ export default function AsistenciaClient({ user }: Props) {
   }, [mes])
 
   useEffect(() => {
-    fetch('/api/espacio-trabajo').then(r => r.json()).then(d => setUltimaImportacion(d.ultimaImportacion ?? null)).catch(() => {})
+    fetch('/api/espacio-trabajo?fechaInicio=2020-01-01&fechaFin=2020-01-01').then(r => r.json()).then(d => setUltimaImportacion(d.ultimaImportacion ?? null)).catch(() => {})
   }, [])
   useEffect(() => { if (isAdmin || isHR || isEncargada) loadEmpList() }, [isAdmin, isHR, isEncargada, loadEmpList])
   useEffect(() => { loadConfig() }, [loadConfig])
