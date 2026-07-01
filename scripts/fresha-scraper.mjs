@@ -158,37 +158,30 @@ async function descargarReporte(page, url, label) {
   await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
   await page.waitForTimeout(2000)
 
-  // Buscar botón de exportación con varios selectores posibles
-  const candidatos = [
-    'button:has-text("Export")',
-    'button:has-text("Exportar")',
-    '[aria-label*="Export" i]',
-    '[aria-label*="export" i]',
-    '[data-testid*="export" i]',
-    'button:has-text("CSV")',
-    'button:has-text("Download")',
-    'button:has-text("Descargar")',
-    'a[download]',
-  ]
-
-  let btn = null
-  for (const sel of candidatos) {
-    const el = page.locator(sel).first()
-    if (await el.count() > 0) { btn = el; break }
-  }
-
-  if (!btn) {
+  // Abrir menú "Opciones" y luego hacer click en "CSV"
+  const opcionesBtn = page.locator('button:has-text("Opciones"), button:has-text("Options")').first()
+  if (await opcionesBtn.count() === 0) {
     await page.screenshot({ path: `/tmp/fresha-${label}-debug.png` })
     throw new Error(
-      `[${label}] No se encontró botón de exportación.\n` +
-      `Screenshot guardado en /tmp/fresha-${label}-debug.png\n` +
-      `Revisá que el reporte cargó correctamente y ajustá el selector.`
+      `[${label}] No se encontró el botón "Opciones".\n` +
+      `Screenshot guardado en /tmp/fresha-${label}-debug.png`
+    )
+  }
+  await opcionesBtn.click()
+  await page.waitForTimeout(800)
+
+  const csvItem = page.locator('[role="menuitem"]:has-text("CSV"), li:has-text("CSV"), button:has-text("CSV"), a:has-text("CSV")').first()
+  if (await csvItem.count() === 0) {
+    await page.screenshot({ path: `/tmp/fresha-${label}-debug.png` })
+    throw new Error(
+      `[${label}] No se encontró la opción CSV en el menú.\n` +
+      `Screenshot guardado en /tmp/fresha-${label}-debug.png`
     )
   }
 
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 25000 }),
-    btn.click(),
+    csvItem.click(),
   ])
 
   const filePath = await download.path()
