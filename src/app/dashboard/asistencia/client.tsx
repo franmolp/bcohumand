@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Button, Spinner, Toast, Modal } from '@/components/ui'
-import { IconRefresh, IconChevronRight, IconChevronLeft, IconUpload, IconCheck, IconEdit, IconFileText, IconPlus, IconTrash, IconX, IconClipboard } from '@/components/ui/Icons'
+import { IconRefresh, IconChevronRight, IconChevronLeft, IconUpload, IconCheck, IconEdit, IconFileText, IconPlus, IconTrash, IconX, IconClipboard, IconClock } from '@/components/ui/Icons'
 import { CHIP_INFO, calcPresentismo, DEFAULT_CONFIG, AsistenciaConfig, toMinutes } from '@/lib/asistencia'
 import { AsistenciaProcesada, SessionUser } from '@/types'
 
@@ -38,6 +38,15 @@ function fmtH(h: number | null): string {
   const hh = Math.floor(m / 60), mm = m % 60
   const s = mm === 0 ? `${hh}h` : `${hh}h${String(mm).padStart(2, '0')}m`
   return neg ? `-${s}` : s
+}
+
+function relTime(iso: string): string {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (mins < 60) return `hace ${mins} min`
+  const hs = Math.floor(mins / 60)
+  if (hs < 24) return `hace ${hs}h`
+  const ds = Math.floor(hs / 24)
+  return ds === 1 ? 'ayer' : `hace ${ds} días`
 }
 
 function mesLabel(mes: string): string {
@@ -141,6 +150,7 @@ export default function AsistenciaClient({ user }: Props) {
   const ayer = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0] })()
 
   const [tab, setTab] = useState<Tab>('home')
+  const [ultimaImportacion, setUltimaImportacion] = useState<string | null>(null)
   const [mes, setMes] = useState(defaultMes)
   const [records, setRecords] = useState<AsistenciaProcesada[]>([])
   const [primerTurnos, setPrimerTurnos] = useState<PrimerTurnoDia[]>([])
@@ -185,6 +195,9 @@ export default function AsistenciaClient({ user }: Props) {
     setPrimerTurnos(Array.isArray(data) ? data : [])
   }, [mes])
 
+  useEffect(() => {
+    fetch('/api/espacio-trabajo').then(r => r.json()).then(d => setUltimaImportacion(d.ultimaImportacion ?? null)).catch(() => {})
+  }, [])
   useEffect(() => { if (isAdmin || isHR || isEncargada) loadEmpList() }, [isAdmin, isHR, isEncargada, loadEmpList])
   useEffect(() => { loadConfig() }, [loadConfig])
   useEffect(() => { loadRecords() }, [loadRecords])
@@ -322,14 +335,22 @@ export default function AsistenciaClient({ user }: Props) {
     <div className="pt-[100px] lg:pt-0">
 
       {/* Header + Tabs — fixed on mobile (sticky doesn't work inside overflow-y-auto on iOS Safari), sticky on desktop */}
-      <div className="fixed top-12 left-0 right-0 z-20 bg-white border-b border-[var(--border)] lg:sticky lg:top-14 lg:left-auto lg:right-auto">
+      <div className="fixed top-12 left-0 right-0 z-20 lg:sticky lg:top-14 lg:left-auto lg:right-auto">
         {/* Header row */}
-        <div className="px-4 lg:px-0 pt-4 pb-2 flex items-center justify-between">
+        <div className="px-4 lg:px-0 pt-4 pb-2 flex items-center justify-between bg-[var(--background)]">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
               <IconClipboard size={18} className="text-white" />
             </div>
-            <h1 className="text-[17px] font-bold text-[var(--text)]">Asistencia</h1>
+            <div>
+              <h1 className="text-[17px] font-bold text-[var(--text)] leading-tight">Asistencia</h1>
+              {ultimaImportacion && (
+                <p className="text-[11px] text-[var(--text-muted)] flex items-center gap-1 mt-0.5">
+                  <IconClock size={11} />
+                  Actualizado {relTime(ultimaImportacion)}
+                </p>
+              )}
+            </div>
           </div>
           {isAdmin && (
             <div className="flex items-center gap-3">
@@ -353,7 +374,7 @@ export default function AsistenciaClient({ user }: Props) {
           )}
         </div>
         {/* Tabs row */}
-        <div className="px-4 lg:px-0 flex gap-0 -mb-px overflow-x-auto scrollbar-none" style={{ touchAction: 'pan-x' }}>
+        <div className="px-4 lg:px-0 flex gap-0 -mb-px overflow-x-auto scrollbar-none bg-white border-b border-[var(--border)]" style={{ touchAction: 'pan-x' }}>
           {TABS.map(t => (
             <button
               key={t.key}
