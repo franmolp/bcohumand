@@ -171,8 +171,12 @@ async function descargarReporte(page, url, label) {
   await opcionesBtn.click()
   await page.waitForTimeout(800)
 
-  const csvItem = page.locator(':text-is("CSV")').first()
-  if (await csvItem.count() === 0) {
+  // Buscar el item CSV en el menú — priorizamos li/button/a que contengan exactamente "CSV"
+  const csvItem = page.locator('li, button, a, [role="menuitem"]').filter({ hasText: /^CSV$/ }).first()
+  const fallbackItem = page.locator('li:has-text("CSV"), button:has-text("CSV"), a:has-text("CSV"), [role="menuitem"]:has-text("CSV")').first()
+  const itemToClick = (await csvItem.count() > 0) ? csvItem : fallbackItem
+
+  if (await itemToClick.count() === 0) {
     await page.screenshot({ path: `/tmp/fresha-${label}-debug.png` })
     throw new Error(
       `[${label}] No se encontró la opción CSV en el menú.\n` +
@@ -181,8 +185,8 @@ async function descargarReporte(page, url, label) {
   }
 
   const [download] = await Promise.all([
-    page.waitForEvent('download', { timeout: 25000 }),
-    csvItem.click(),
+    page.waitForEvent('download', { timeout: 40000 }),
+    itemToClick.click(),
   ])
 
   const filePath = await download.path()
