@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "fresha:setup": "node scripts/fresha-setup.mjs",
+    "fresha:import": "node scripts/fresha-scraper.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.0",
@@ -22,6 +24,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "playwright": "^1.50.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/react": "^19",

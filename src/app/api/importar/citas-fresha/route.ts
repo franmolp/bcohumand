@@ -6,9 +6,14 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 interface Row { nombre: string; fecha: string; primer_turno: string; ultimo_turno: string; cant_citas: number }
 
 export async function POST(req: NextRequest) {
-  const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  if (session.rol !== 'admin' && session.rol !== 'Admin') return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
+  const auth = req.headers.get('authorization')
+  const cronSecret = process.env.CRON_SECRET
+  const viaCron = cronSecret && auth === `Bearer ${cronSecret}`
+  if (!viaCron) {
+    const session = await getSession()
+    if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+    if (session.rol !== 'admin' && session.rol !== 'Admin') return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
+  }
 
   const body = await req.json().catch(() => ({})) as { rows?: Row[] }
   const rows = body.rows
