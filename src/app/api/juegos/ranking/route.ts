@@ -144,5 +144,48 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ranking, totalPalabras: totalPalabras ?? 0 })
   }
 
+  if (tipo === 'historial') {
+    const now = new Date()
+    const meses: { inicio: string; fin: string; label: string }[] = []
+    for (let i = 1; i <= 10; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const y = d.getFullYear()
+      const m = d.getMonth() + 1
+      const inicio = `${y}-${String(m).padStart(2, '0')}-01`
+      const fin = `${y}-${String(m).padStart(2, '0')}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`
+      const mesStr = d.toLocaleString('es', { month: 'long' })
+      meses.push({ inicio, fin, label: `${mesStr.charAt(0).toUpperCase() + mesStr.slice(1)} ${y}` })
+    }
+
+    const { data: todasPartidas } = await supabaseAdmin
+      .from('juegos_partidas')
+      .select('usuario_id, intentos, resuelta, fecha')
+      .eq('juego', 'wordle')
+      .eq('resuelta', true)
+      .gte('fecha', meses[meses.length - 1].inicio)
+      .lte('fecha', meses[0].fin)
+
+    if (!todasPartidas?.length) return NextResponse.json({ historial: [] })
+
+    const ids = [...new Set(todasPartidas.map(p => p.usuario_id))]
+    const { data: usuarios } = await supabaseAdmin.from('usuarios').select('id, nombre').in('id', ids)
+    const nombreMap = new Map((usuarios ?? []).map(u => [u.id, u.nombre]))
+
+    const historial = meses.map(({ inicio, fin, label }) => {
+      const partidasMes = todasPartidas.filter(p => p.fecha >= inicio && p.fecha <= fin)
+      if (!partidasMes.length) return null
+      const acum = new Map<string, { nombre: string; puntos: number }>()
+      for (const p of partidasMes) {
+        const nombre = nombreMap.get(p.usuario_id) ?? '—'
+        const prev = acum.get(p.usuario_id) ?? { nombre, puntos: 0 }
+        acum.set(p.usuario_id, { nombre, puntos: prev.puntos + puntosPorIntentos(p.intentos, p.resuelta) })
+      }
+      const sorted = [...acum.values()].sort((a, b) => b.puntos - a.puntos)
+      return { mes: label, ganador: sorted[0].nombre, puntos: sorted[0].puntos }
+    }).filter((e): e is { mes: string; ganador: string; puntos: number } => e !== null)
+
+    return NextResponse.json({ historial })
+  }
+
   return NextResponse.json({ error: 'tipo inválido' }, { status: 400 })
 }

@@ -9,6 +9,7 @@ type FilaIntento = { palabra: string; resultado: Estado[] }
 type RankingEntry = { nombre: string; intentos: number; tiempo_seg: number; resuelta: boolean }
 type RankingMesEntry = { nombre: string; puntos: number; partidas: number; resueltas: number }
 type RankingMesData = { ranking: RankingMesEntry[]; totalPalabras: number }
+type HistorialEntry = { mes: string; ganador: string; puntos: number }
 type PalabraAdmin = { id: string; palabra: string; fecha: string; pista?: string | null }
 
 const COLORES: Record<Estado, string> = {
@@ -102,18 +103,21 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
   const [rankingHoy, setRankingHoy] = useState<{ ranking: RankingEntry[]; jugando: number } | null>(null)
   const [rankingAyer, setRankingAyer] = useState<{ ranking: RankingEntry[]; palabra: string | null } | null>(null)
   const [rankingMes, setRankingMes] = useState<RankingMesData | null>(null)
+  const [historial, setHistorial] = useState<HistorialEntry[]>([])
 
   const startTimeRef = useRef<number | null>(null)
 
   const cargarRankings = useCallback(async (jugoHoy: boolean) => {
-    const [hoy, ayer, mes] = await Promise.all([
+    const [hoy, ayer, mes, hist] = await Promise.all([
       jugoHoy ? fetch('/api/juegos/ranking?tipo=hoy').then(r => r.json()) : Promise.resolve(null),
       fetch('/api/juegos/ranking?tipo=ayer').then(r => r.json()),
       fetch('/api/juegos/ranking?tipo=mes').then(r => r.json()),
+      fetch('/api/juegos/ranking?tipo=historial').then(r => r.json()),
     ])
     if (hoy) setRankingHoy(hoy)
     setRankingAyer(ayer)
     setRankingMes(mes)
+    setHistorial(hist.historial ?? [])
   }, [])
 
   useEffect(() => {
@@ -241,6 +245,7 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
       {isAdmin && <RankingHoy data={rankingHoy} />}
       <RankingAyer data={rankingAyer} />
       <RankingMes data={rankingMes} />
+      <GanadoresMeses data={historial} />
     </div>
   )
 
@@ -349,6 +354,7 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
           <RankingHoy data={rankingHoy} />
           <RankingAyer data={rankingAyer} />
           <RankingMes data={rankingMes} />
+          <GanadoresMeses data={historial} />
         </div>
       )}
 
@@ -358,6 +364,7 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
           {isAdmin && <RankingHoy data={rankingHoy} />}
           <RankingAyer data={rankingAyer} />
           <RankingMes data={rankingMes} />
+          <GanadoresMeses data={historial} />
         </div>
       )}
     </div>
@@ -473,6 +480,32 @@ function RankingMes({ data }: { data: RankingMesData | null }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Ganadoras por mes ────────────────────────────────────────────────────────
+
+function GanadoresMeses({ data }: { data: HistorialEntry[] }) {
+  if (!data.length) return null
+  return (
+    <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+        <IconTrophy size={15} className="text-amber-400" />
+        <span className="text-[14px] font-semibold">Ganadoras por mes</span>
+      </div>
+      <div className="divide-y divide-gray-50">
+        {data.map((e, i) => (
+          <div key={i} className="flex items-center gap-3 px-4 py-2.5">
+            <span className="w-6 h-6 flex items-center justify-center rounded-full bg-amber-400 shrink-0">
+              <IconTrophy size={11} className="text-white" />
+            </span>
+            <span className="text-[12px] text-gray-400 w-20 shrink-0">{e.mes}</span>
+            <span className="flex-1 text-[13px] font-medium text-[var(--text)] truncate">{e.ganador}</span>
+            <span className="text-[12px] font-bold text-[var(--primary)]">{e.puntos} pts</span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
