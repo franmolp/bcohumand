@@ -172,7 +172,7 @@ async function descargarReporte(page, url, label) {
   await opcionesBtn.click()
   await page.waitForTimeout(800)
 
-  const csvItem = page.locator('[role="menuitem"]:has-text("CSV"), li:has-text("CSV"), button:has-text("CSV"), a:has-text("CSV")').first()
+  const csvItem = page.locator(':text-is("CSV")').first()
   if (await csvItem.count() === 0) {
     await page.screenshot({ path: `/tmp/fresha-${label}-debug.png` })
     throw new Error(
