@@ -13,8 +13,7 @@
 
 import { chromium } from 'playwright'
 import fs from 'fs'
-import { createRequire } from 'module'
-const require = createRequire(import.meta.url)
+import { execSync } from 'child_process'
 
 const APP_URL = process.env.APP_URL?.replace(/\/$/, '')
 const CRON_SECRET = process.env.CRON_SECRET
@@ -189,16 +188,47 @@ async function descargarReporte(page, url, label) {
   const filePath = await download.path()
   const buf = fs.readFileSync(filePath)
   const magic = buf.slice(0, 4).toString('hex')
-  console.log(`[${label}] Tipo archivo: ${magic} (${magic === '504b0304' ? 'XLSX' : 'texto/otro'})`)
+  console.log(`[${label}] Tipo archivo: ${magic}`)
   let content
-  try {
-    const XLSX = require('xlsx')
-    const wb = XLSX.read(buf, { type: 'buffer' })
-    const ws = wb.Sheets[wb.SheetNames[0]]
-    content = XLSX.utils.sheet_to_csv(ws)
-    console.log(`[${label}] Parseado como XLSX`)
-  } catch (e) {
-    console.warn(`[${label}] xlsx parse error: ${e.message} — leyendo como texto`)
+  if (magic === '504b0304') {
+    // XLSX: convertir a CSV con Python 3 (disponible en GitHub Actions ubuntu)
+    const pyScript = `
+import zipfile, xml.etree.ElementTree as ET, csv, io, sys, os
+path = sys.argv[1]
+ns = '{http://schemas.openxmlformats.org/spreadsheetml/2006/main}'
+with zipfile.ZipFile(path) as z:
+    names = z.namelist()
+    strings = []
+    if 'xl/sharedStrings.xml' in names:
+        with z.open('xl/sharedStrings.xml') as f:
+            tree = ET.parse(f)
+            for si in tree.findall(f'.//{ns}si'):
+                t = si.find(f'.//{ns}t')
+                strings.append(t.text if t is not None and t.text else '')
+    sheet = next((n for n in names if n.startswith('xl/worksheets/sheet') and n.endswith('.xml')), None)
+    if not sheet:
+        sys.exit('No sheet found')
+    with z.open(sheet) as f:
+        tree = ET.parse(f)
+    out = io.StringIO()
+    w = csv.writer(out)
+    for row in tree.findall(f'.//{ns}row'):
+        cells = []
+        for c in row.findall(f'{ns}c'):
+            t = c.get('t','')
+            v = c.find(f'{ns}v')
+            if t == 's' and v is not None:
+                cells.append(strings[int(v.text)] if v.text else '')
+            elif v is not None:
+                cells.append(v.text or '')
+            else:
+                cells.append('')
+        w.writerow(cells)
+    print(out.getvalue(), end='')
+`.trim()
+    content = execSync(`python3 -c ${JSON.stringify(pyScript)} "${filePath}"`, { encoding: 'utf8' })
+    console.log(`[${label}] Parseado como XLSX via Python`)
+  } else {
     content = buf.toString('utf8')
   }
   const lineas = content.trim().split('\n').length
