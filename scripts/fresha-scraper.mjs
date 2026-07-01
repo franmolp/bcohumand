@@ -13,6 +13,8 @@
 
 import { chromium } from 'playwright'
 import fs from 'fs'
+import { createRequire } from 'module'
+const require = createRequire(import.meta.url)
 
 const APP_URL = process.env.APP_URL?.replace(/\/$/, '')
 const CRON_SECRET = process.env.CRON_SECRET
@@ -185,7 +187,17 @@ async function descargarReporte(page, url, label) {
   ])
 
   const filePath = await download.path()
-  const content = fs.readFileSync(filePath, 'utf8')
+  const buf = fs.readFileSync(filePath)
+  let content
+  if (buf[0] === 0x50 && buf[1] === 0x4B) {
+    // XLSX (archivo ZIP de Office): convertir a CSV
+    const XLSX = require('xlsx')
+    const wb = XLSX.read(buf, { type: 'buffer' })
+    const ws = wb.Sheets[wb.SheetNames[0]]
+    content = XLSX.utils.sheet_to_csv(ws)
+  } else {
+    content = buf.toString('utf8')
+  }
   const lineas = content.trim().split('\n').length
   console.log(`[${label}] ✓ Descarga OK (${lineas} líneas)`)
   return content
