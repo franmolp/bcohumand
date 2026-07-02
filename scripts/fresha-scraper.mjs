@@ -100,6 +100,46 @@ function parseTurnos(text) {
   return out
 }
 
+function parseCitasDetalle(text) {
+  const rows = csvParse(text)
+  if (rows.length < 2) return []
+  const hdr = rows[0].map(h => h.toLowerCase().trim())
+  const iN   = hdr.findIndex(h => h.includes('miembro'))
+  const iE   = hdr.findIndex(h => h === 'estado')
+  const iF   = hdr.findIndex(h => h.includes('programada'))
+  const iFr  = hdr.findIndex(h => h.includes('franja'))
+  const iCat = hdr.findIndex(h => h.includes('categor'))
+  const iSrv = hdr.findIndex(h => h.includes('servicio'))
+  const iDur = hdr.findIndex(h => h.includes('duraci'))
+  const iVnt = hdr.findIndex(h => h.includes('ventas'))
+  if (iN < 0 || iF < 0) {
+    console.error('[citas-detalle] Columnas no encontradas. Headers:', rows[0])
+    return []
+  }
+  const out = []
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i]
+    const nombre = r[iN]?.trim() ?? ''
+    const fecha  = freshaDate(r[iF] ?? '')
+    if (!nombre || !fecha) continue
+    const estado = iE >= 0 ? (r[iE] ?? '').trim().toLowerCase() : 'confirmada'
+    const franja = iFr >= 0 ? (r[iFr] ?? '').trim() : ''
+    const categoria   = iCat >= 0 ? (r[iCat] ?? '').trim() : ''
+    const servicio    = iSrv >= 0 ? (r[iSrv] ?? '').trim() : ''
+    const duracion_min = iDur >= 0 ? (parseInt(r[iDur] ?? '0') || 0) : 0
+    const ventaRaw    = iVnt >= 0 ? (r[iVnt] ?? '').replace(/[^0-9.,-]/g, '').replace(',', '.') : '0'
+    const venta_neta  = parseFloat(ventaRaw) || 0
+    let franja_inicio = null, franja_fin = null
+    if (franja.includes('-')) {
+      const parts = franja.split('-')
+      franja_inicio = (parts[0] ?? '').substring(0, 5) || null
+      franja_fin    = (parts[1] ?? '').substring(0, 5) || null
+    }
+    out.push({ nombre, fecha, estado, categoria, servicio, duracion_min, franja_inicio, franja_fin, venta_neta })
+  }
+  return out
+}
+
 function parseCitas(text) {
   const rows = csvParse(text)
   if (rows.length < 2) return []
@@ -301,6 +341,15 @@ async function main() {
       await postAPI('/api/importar/citas-fresha', citasRows, 'citas')
     } else {
       console.warn('[citas] Sin registros — ¿el CSV tiene el formato esperado?')
+    }
+
+    // 3. Detalle de citas (para informes: categorías, duración, ocupación)
+    const detalleRows = parseCitasDetalle(citasCsv)
+    console.log(`[citas-detalle] Parseados: ${detalleRows.length} registros`)
+    if (detalleRows.length > 0) {
+      await postAPI('/api/importar/citas-detalle-fresha', detalleRows, 'citas-detalle')
+    } else {
+      console.warn('[citas-detalle] Sin registros')
     }
 
     console.log('\n✓ Importación completada correctamente.\n')
