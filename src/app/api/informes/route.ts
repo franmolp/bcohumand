@@ -36,8 +36,8 @@ export async function GET(request: NextRequest) {
     supabaseAdmin
       .from('liquidacion_atenciones')
       .select('usuario_id, venta_neta, comision')
-      .gte('fecha', inicio)
-      .lte('fecha', fin),
+      .eq('anio', y)
+      .eq('mes', m),
     supabaseAdmin
       .from('asistencia_procesada')
       .select('usuario_id, estado, horas_fichadas, minutos_tarde')
