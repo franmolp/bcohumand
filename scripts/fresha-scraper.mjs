@@ -26,6 +26,9 @@ if (!FRESHA_SESSION) throw new Error('Falta FRESHA_SESSION')
 // ─── Rango de fechas: lunes de la semana actual → último día del mes siguiente ──
 
 function getDateRange() {
+  if (process.env.FROM && process.env.TO) {
+    return { from: process.env.FROM, to: process.env.TO }
+  }
   const now = new Date()
   const dow = now.getDay() === 0 ? 7 : now.getDay()
   const monday = new Date(now)
