@@ -23,7 +23,6 @@ interface EmpleadaRow {
   nombre: string
   citas: number
   ventaNeta: number
-  comision: number
   diasPresente: number
   tardanzas: number
   duracionMin: number
@@ -229,7 +228,6 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                       <th className="text-left px-4 py-2.5 font-medium">Empleada</th>
                       <th className="text-right px-3 py-2.5 font-medium">Citas</th>
                       <th className="text-right px-3 py-2.5 font-medium">Ventas</th>
-                      <th className="text-right px-3 py-2.5 font-medium">Comisión</th>
                       <th className="text-right px-3 py-2.5 font-medium">Asist.</th>
                       <th className="text-right px-4 py-2.5 font-medium">Ocup.</th>
                     </tr>
@@ -240,7 +238,6 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                         <td className="px-4 py-3 font-medium text-[var(--text)]">{e.nombre}</td>
                         <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.citas}</td>
                         <td className="px-3 py-3 text-right font-semibold text-[var(--text)]">{fmt$(e.ventaNeta)}</td>
-                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">{fmt$(e.comision)}</td>
                         <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.diasPresente}d{e.tardanzas > 0 ? ` ·${e.tardanzas}t` : ''}</td>
                         <td className="px-4 py-3 text-right">
                           {e.ocupacionPct !== null ? (

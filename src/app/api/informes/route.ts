@@ -23,7 +23,6 @@ export async function GET(request: NextRequest) {
 
   const [
     { data: citas },
-    { data: atenciones },
     { data: asistencia },
     { data: comprasData },
     { data: usuarios },
@@ -33,11 +32,6 @@ export async function GET(request: NextRequest) {
       .select('usuario_id, nombre_empleada, estado, categoria, servicio, duracion_min, venta_neta')
       .gte('fecha', inicio)
       .lte('fecha', fin),
-    supabaseAdmin
-      .from('liquidacion_atenciones')
-      .select('usuario_id, venta_neta, comision')
-      .eq('anio', y)
-      .eq('mes', m),
     supabaseAdmin
       .from('asistencia_procesada')
       .select('usuario_id, estado, horas_fichadas, minutos_tarde')
@@ -55,7 +49,7 @@ export async function GET(request: NextRequest) {
 
   const citasNoCanc = (citas ?? []).filter(c => c.estado !== 'cancelado')
   const citasCanceladas = (citas ?? []).filter(c => c.estado === 'cancelado')
-  const ventasNetas = (atenciones ?? []).reduce((s, a) => s + (a.venta_neta || 0), 0)
+  const ventasNetas = citasNoCanc.reduce((s, c) => s + (c.venta_neta || 0), 0)
   const gastos = (comprasData ?? []).reduce((s, c) => s + (c.monto || 0), 0)
   const ausencias = (asistencia ?? []).filter(a => a.estado === 'ausente').length
   const tardanzas = (asistencia ?? []).filter(a => (a.minutos_tarde || 0) > 0).length
@@ -67,8 +61,7 @@ export async function GET(request: NextRequest) {
     nombre: string
     citas: number
     duracionMin: number
-    ventaOficial: number
-    comision: number
+    ventaNeta: number
     diasPresente: number
     diasAusente: number
     tardanzas: number
@@ -76,20 +69,15 @@ export async function GET(request: NextRequest) {
   }
   const empMap = new Map<string, EmpData>()
   const getEmp = (uid: string, nombre: string) => {
-    if (!empMap.has(uid)) empMap.set(uid, { nombre, citas: 0, duracionMin: 0, ventaOficial: 0, comision: 0, diasPresente: 0, diasAusente: 0, tardanzas: 0, horasFichadas: 0 })
+    if (!empMap.has(uid)) empMap.set(uid, { nombre, citas: 0, duracionMin: 0, ventaNeta: 0, diasPresente: 0, diasAusente: 0, tardanzas: 0, horasFichadas: 0 })
     return empMap.get(uid)!
   }
 
   for (const c of citasNoCanc) {
     const e = getEmp(c.usuario_id, c.nombre_empleada)
     e.citas++
+    e.ventaNeta += c.venta_neta || 0
     e.duracionMin += c.duracion_min || 0
-  }
-  for (const a of (atenciones ?? [])) {
-    const nombre = nombreMap.get(a.usuario_id) ?? '—'
-    const e = getEmp(a.usuario_id, nombre)
-    e.ventaOficial += a.venta_neta || 0
-    e.comision += a.comision || 0
   }
   for (const a of (asistencia ?? [])) {
     const nombre = nombreMap.get(a.usuario_id) ?? '—'
@@ -104,8 +92,7 @@ export async function GET(request: NextRequest) {
     .map(e => ({
       nombre: e.nombre,
       citas: e.citas,
-      ventaNeta: Math.round(e.ventaOficial),
-      comision: Math.round(e.comision),
+      ventaNeta: Math.round(e.ventaNeta),
       diasPresente: e.diasPresente,
       tardanzas: e.tardanzas,
       duracionMin: e.duracionMin,
