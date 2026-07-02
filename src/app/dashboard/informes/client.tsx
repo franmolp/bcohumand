@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import type { SessionUser } from '@/types'
 import { Spinner } from '@/components/ui'
-import { IconBarChart, IconChevronLeft, IconChevronRight, IconDollar, IconCalendarCheck, IconAlertCircle, IconClock, IconUsers } from '@/components/ui/Icons'
+import { IconBarChart, IconChevronLeft, IconChevronRight, IconDollar, IconCalendarCheck, IconClock, IconUsers } from '@/components/ui/Icons'
 
 interface Kpis {
   totalCitas: number
@@ -12,8 +12,6 @@ interface Kpis {
   ventasNetas: number
   gastos: number
   balance: number
-  ausencias: number
-  tardanzas: number
   proyeccion: number | null
   diasTranscurridos: number
   diasDelMes: number
@@ -26,15 +24,8 @@ interface EmpleadaRow {
   diasPresente: number
   tardanzas: number
   duracionMin: number
-  horasFichadas: number
+  horasBase: number
   ocupacionPct: number | null
-}
-
-interface CategoriaRow {
-  categoria: string
-  cantidad: number
-  ventaNeta: number
-  duracionMin: number
 }
 
 interface ServicioRow {
@@ -49,8 +40,8 @@ interface ServicioRow {
 interface ApiData {
   kpis: Kpis
   productividad: EmpleadaRow[]
-  categorias: CategoriaRow[]
   servicios: ServicioRow[]
+  rentabilidad: ServicioRow[]
 }
 
 function fmt$(n: number) {
@@ -65,20 +56,17 @@ function fmtMes(mes: string) {
 }
 
 function mesActual() {
-  const tz = 'America/Argentina/Buenos_Aires'
-  return new Date().toLocaleDateString('en-CA', { timeZone: tz }).substring(0, 7)
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).substring(0, 7)
 }
 
 function prevMes(mes: string) {
   const [y, m] = mes.split('-').map(Number)
-  const d = new Date(y, m - 2, 1)
-  return d.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).substring(0, 7)
+  return new Date(y, m - 2, 1).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).substring(0, 7)
 }
 
 function nextMes(mes: string) {
   const [y, m] = mes.split('-').map(Number)
-  const d = new Date(y, m, 1)
-  return d.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).substring(0, 7)
+  return new Date(y, m, 1).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).substring(0, 7)
 }
 
 function KpiCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
@@ -94,7 +82,7 @@ function KpiCard({ label, value, sub, color }: { label: string; value: string; s
 function BaraCSS({ pct, color = 'var(--primary)' }: { pct: number; color?: string }) {
   return (
     <div className="h-2 rounded-full bg-gray-100 overflow-hidden flex-1">
-      <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, pct)}%`, background: color }} />
+      <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, Math.max(0, pct))}%`, background: color }} />
     </div>
   )
 }
@@ -120,7 +108,6 @@ export default function InformesClient({ user }: { user: SessionUser }) {
 
   const actual = mesActual()
   const puedeAvanzar = mes < actual
-
   const k = datos?.kpis
 
   return (
@@ -148,15 +135,11 @@ export default function InformesClient({ user }: { user: SessionUser }) {
         </button>
       </div>
 
-      {cargando && (
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
-      )}
+      {cargando && <div className="flex justify-center py-16"><Spinner /></div>}
 
       {error && !cargando && (
         <div className="flex items-center gap-2 text-red-500 text-[14px] py-8 justify-center">
-          <IconAlertCircle size={16} /> {error}
+          {error}
         </div>
       )}
 
@@ -173,24 +156,6 @@ export default function InformesClient({ user }: { user: SessionUser }) {
               value={fmt$(k.balance)}
               color={k.balance >= 0 ? 'text-green-600' : 'text-red-500'}
             />
-          </div>
-
-          {/* KPIs secundarios */}
-          <div className="flex gap-3">
-            <div className="flex-1 bg-white rounded-2xl border border-[var(--border)] px-4 py-3 flex items-center gap-2.5">
-              <IconUsers size={16} className="text-[var(--text-muted)]" />
-              <div>
-                <p className="text-[11px] text-[var(--text-muted)]">Ausencias</p>
-                <p className="text-[16px] font-bold text-[var(--text)]">{k.ausencias}</p>
-              </div>
-            </div>
-            <div className="flex-1 bg-white rounded-2xl border border-[var(--border)] px-4 py-3 flex items-center gap-2.5">
-              <IconClock size={16} className="text-[var(--text-muted)]" />
-              <div>
-                <p className="text-[11px] text-[var(--text-muted)]">Tardanzas</p>
-                <p className="text-[16px] font-bold text-[var(--text)]">{k.tardanzas}</p>
-              </div>
-            </div>
           </div>
 
           {/* Proyección */}
@@ -252,32 +217,35 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                 </table>
               </div>
               <p className="px-4 py-2 text-[10px] text-[var(--text-muted)] border-t border-gray-50">
-                Ocup. = minutos con citas / horas fichadas
+                Ocup. = tiempo en citas / horas base del turno
               </p>
             </div>
           )}
 
-          {/* Categorías */}
-          {datos.categorias.length > 0 && (
+          {/* Servicios más pedidos */}
+          {datos.servicios.length > 0 && (
             <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
               <div className="px-4 py-3 border-b border-[var(--border)]">
                 <p className="text-[13px] font-semibold text-[var(--text)] flex items-center gap-2">
-                  <IconCalendarCheck size={15} className="text-[var(--primary)]" /> Servicios por categoría
+                  <IconCalendarCheck size={15} className="text-[var(--primary)]" /> Servicios
                 </p>
               </div>
               <div className="px-4 py-3 flex flex-col gap-3">
                 {(() => {
-                  const maxVta = Math.max(...datos.categorias.map(c => c.ventaNeta), 1)
-                  return datos.categorias.map((c, i) => (
+                  const maxCant = Math.max(...datos.servicios.map(s => s.cantidad), 1)
+                  return datos.servicios.map((s, i) => (
                     <div key={i}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-[13px] font-medium text-[var(--text)]">{c.categoria}</span>
-                        <div className="flex items-center gap-2 text-[12px]">
-                          <span className="text-[var(--text-muted)]">{c.cantidad} citas</span>
-                          <span className="font-semibold text-[var(--text)]">{fmt$(c.ventaNeta)}</span>
+                        <div className="flex-1 min-w-0 mr-3">
+                          <p className="text-[13px] font-medium text-[var(--text)] truncate">{s.servicio}</p>
+                          {s.categoria && <p className="text-[10px] text-[var(--text-muted)]">{s.categoria}</p>}
+                        </div>
+                        <div className="flex items-center gap-2 text-[12px] shrink-0">
+                          <span className="font-semibold text-[var(--text)]">{s.cantidad} citas</span>
+                          <span className="text-[var(--text-muted)]">{fmt$(s.ventaNeta)}</span>
                         </div>
                       </div>
-                      <BaraCSS pct={c.ventaNeta / maxVta * 100} />
+                      <BaraCSS pct={s.cantidad / maxCant * 100} />
                     </div>
                   ))
                 })()}
@@ -285,8 +253,8 @@ export default function InformesClient({ user }: { user: SessionUser }) {
             </div>
           )}
 
-          {/* Top servicios */}
-          {datos.servicios.length > 0 && (
+          {/* Rentabilidad por servicio */}
+          {datos.rentabilidad.length > 0 && (
             <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
               <div className="px-4 py-3 border-b border-[var(--border)]">
                 <p className="text-[13px] font-semibold text-[var(--text)] flex items-center gap-2">
@@ -299,33 +267,33 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                     <tr className="border-b border-[var(--border)] text-[var(--text-muted)]">
                       <th className="text-left px-4 py-2.5 font-medium">Servicio</th>
                       <th className="text-right px-3 py-2.5 font-medium">Citas</th>
-                      <th className="text-right px-3 py-2.5 font-medium">Ventas</th>
+                      <th className="text-right px-3 py-2.5 font-medium">Precio prom.</th>
                       <th className="text-right px-4 py-2.5 font-medium">$/hora</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {datos.servicios.map((s, i) => (
+                    {datos.rentabilidad.map((s, i) => (
                       <tr key={i} className="border-b border-gray-50 last:border-0">
                         <td className="px-4 py-3">
                           <p className="font-medium text-[var(--text)]">{s.servicio}</p>
-                          <p className="text-[10px] text-[var(--text-muted)]">{s.categoria}</p>
+                          {s.categoria && <p className="text-[10px] text-[var(--text-muted)]">{s.categoria}</p>}
                         </td>
                         <td className="px-3 py-3 text-right text-[var(--text-muted)]">{s.cantidad}</td>
-                        <td className="px-3 py-3 text-right font-semibold text-[var(--text)]">{fmt$(s.ventaNeta)}</td>
+                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">{fmt$(s.ventaNeta / s.cantidad)}</td>
                         <td className="px-4 py-3 text-right">
-                          {s.precioPorHora !== null ? (
-                            <span className="font-semibold text-[var(--primary)]">{fmt$(s.precioPorHora)}</span>
-                          ) : <span className="text-gray-300">—</span>}
+                          <span className="font-semibold text-[var(--primary)]">{fmt$(s.precioPorHora!)}</span>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+              <p className="px-4 py-2 text-[10px] text-[var(--text-muted)] border-t border-gray-50">
+                $/hora = precio promedio del servicio ÷ duración promedio en horas
+              </p>
             </div>
           )}
 
-          {/* Sin datos de citas */}
           {k.totalCitas === 0 && datos.productividad.length === 0 && (
             <div className="text-center py-10 text-[var(--text-muted)] text-[14px]">
               Sin datos de citas para este mes.

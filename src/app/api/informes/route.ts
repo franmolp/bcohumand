@@ -3,6 +3,16 @@ import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { CHIP_INFO } from '@/lib/asistencia'
 
+function citaDurMin(c: { duracion_min: number | null; franja_inicio: string | null; franja_fin: string | null }): number {
+  if (c.duracion_min && c.duracion_min > 0) return c.duracion_min
+  if (c.franja_inicio && c.franja_fin) {
+    const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + (m || 0) }
+    const diff = toMin(c.franja_fin) - toMin(c.franja_inicio)
+    if (diff > 0) return diff
+  }
+  return 0
+}
+
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
@@ -30,12 +40,12 @@ export async function GET(request: NextRequest) {
   ] = await Promise.all([
     supabaseAdmin
       .from('fresha_citas_detalle')
-      .select('usuario_id, nombre_empleada, estado, categoria, servicio, duracion_min, venta_neta')
+      .select('usuario_id, nombre_empleada, estado, categoria, servicio, duracion_min, franja_inicio, franja_fin, venta_neta')
       .gte('fecha', inicio)
       .lte('fecha', fin),
     supabaseAdmin
       .from('asistencia_procesada')
-      .select('usuario_id, estado, horas_fichadas, minutos_tarde')
+      .select('usuario_id, estado, horas_fichadas, horas_base, minutos_tarde')
       .gte('fecha', inicio)
       .lte('fecha', fin),
     supabaseAdmin
@@ -52,13 +62,6 @@ export async function GET(request: NextRequest) {
   const citasCanceladas = (citas ?? []).filter(c => c.estado === 'cancelado' || c.estado === 'Cancelado')
   const ventasNetas = citasNoCanc.reduce((s, c) => s + (c.venta_neta || 0), 0)
   const gastos = (comprasData ?? []).reduce((s, c) => s + (c.monto || 0), 0)
-  const ausencias = (asistencia ?? []).filter(a => {
-    const chip = CHIP_INFO[a.estado ?? '']
-    return chip && !chip.present && !chip.justificado
-  }).length
-  const tardanzas = (asistencia ?? []).filter(a =>
-    a.estado === 'Llegada tarde' || a.estado === 'Llegada tarde/Salida temprana'
-  ).length
   const proyeccion = diasTranscurridos < diasDelMes && diasTranscurridos > 0
     ? Math.round(ventasNetas / diasTranscurridos * diasDelMes)
     : null
@@ -71,11 +74,11 @@ export async function GET(request: NextRequest) {
     diasPresente: number
     diasAusente: number
     tardanzas: number
-    horasFichadas: number
+    horasBase: number
   }
   const empMap = new Map<string, EmpData>()
   const getEmp = (uid: string, nombre: string) => {
-    if (!empMap.has(uid)) empMap.set(uid, { nombre, citas: 0, duracionMin: 0, ventaNeta: 0, diasPresente: 0, diasAusente: 0, tardanzas: 0, horasFichadas: 0 })
+    if (!empMap.has(uid)) empMap.set(uid, { nombre, citas: 0, duracionMin: 0, ventaNeta: 0, diasPresente: 0, diasAusente: 0, tardanzas: 0, horasBase: 0 })
     return empMap.get(uid)!
   }
 
@@ -83,13 +86,16 @@ export async function GET(request: NextRequest) {
     const e = getEmp(c.usuario_id, c.nombre_empleada)
     e.citas++
     e.ventaNeta += c.venta_neta || 0
-    e.duracionMin += c.duracion_min || 0
+    e.duracionMin += citaDurMin(c)
   }
   for (const a of (asistencia ?? [])) {
     const nombre = nombreMap.get(a.usuario_id) ?? '—'
     const e = getEmp(a.usuario_id, nombre)
     const chip = CHIP_INFO[a.estado ?? '']
-    if (chip?.present) { e.diasPresente++; e.horasFichadas += a.horas_fichadas || 0 }
+    if (chip?.present) {
+      e.diasPresente++
+      e.horasBase += a.horas_base || a.horas_fichadas || 0
+    }
     if (chip && !chip.present && !chip.justificado) e.diasAusente++
     if (a.estado === 'Llegada tarde' || a.estado === 'Llegada tarde/Salida temprana') e.tardanzas++
   }
@@ -103,27 +109,25 @@ export async function GET(request: NextRequest) {
       diasPresente: e.diasPresente,
       tardanzas: e.tardanzas,
       duracionMin: e.duracionMin,
-      horasFichadas: Math.round(e.horasFichadas * 10) / 10,
-      ocupacionPct: e.horasFichadas > 0 ? Math.round(e.duracionMin / (e.horasFichadas * 60) * 100) : null,
+      horasBase: Math.round(e.horasBase * 10) / 10,
+      ocupacionPct: e.horasBase > 0 ? Math.round(e.duracionMin / (e.horasBase * 60) * 100) : null,
     }))
-    .sort((a, b) => b.ventaNeta - a.ventaNeta)
-
-  const catMap = new Map<string, { cantidad: number; ventaNeta: number; duracionMin: number }>()
-  for (const c of citasNoCanc) {
-    const cat = c.categoria || 'Sin categoría'
-    const prev = catMap.get(cat) ?? { cantidad: 0, ventaNeta: 0, duracionMin: 0 }
-    catMap.set(cat, { cantidad: prev.cantidad + 1, ventaNeta: prev.ventaNeta + (c.venta_neta || 0), duracionMin: prev.duracionMin + (c.duracion_min || 0) })
-  }
-  const categorias = [...catMap.entries()]
-    .map(([categoria, d]) => ({ categoria, ...d }))
     .sort((a, b) => b.ventaNeta - a.ventaNeta)
 
   const srvMap = new Map<string, { categoria: string; cantidad: number; ventaNeta: number; duracionMin: number }>()
   for (const c of citasNoCanc) {
     const key = c.servicio || 'Sin servicio'
+    const dur = citaDurMin(c)
     const prev = srvMap.get(key) ?? { categoria: c.categoria || '', cantidad: 0, ventaNeta: 0, duracionMin: 0 }
-    srvMap.set(key, { categoria: prev.categoria || c.categoria || '', cantidad: prev.cantidad + 1, ventaNeta: prev.ventaNeta + (c.venta_neta || 0), duracionMin: prev.duracionMin + (c.duracion_min || 0) })
+    srvMap.set(key, {
+      categoria: prev.categoria || c.categoria || '',
+      cantidad: prev.cantidad + 1,
+      ventaNeta: prev.ventaNeta + (c.venta_neta || 0),
+      duracionMin: prev.duracionMin + dur,
+    })
   }
+
+  // Más pedidos: top 15 por cantidad
   const servicios = [...srvMap.entries()]
     .map(([servicio, d]) => ({
       servicio,
@@ -131,9 +135,27 @@ export async function GET(request: NextRequest) {
       cantidad: d.cantidad,
       ventaNeta: Math.round(d.ventaNeta),
       duracionMin: d.duracionMin,
-      precioPorHora: d.duracionMin > 0 ? Math.round(d.ventaNeta / (d.duracionMin / 60)) : null,
+      precioPorHora: d.duracionMin > 0
+        ? Math.round((d.ventaNeta / d.cantidad) / ((d.duracionMin / d.cantidad) / 60))
+        : null,
     }))
-    .sort((a, b) => b.ventaNeta - a.ventaNeta)
+    .sort((a, b) => b.cantidad - a.cantidad)
+    .slice(0, 15)
+
+  // Rentabilidad: top 10 por $/hora
+  const rentabilidad = [...srvMap.entries()]
+    .map(([servicio, d]) => ({
+      servicio,
+      categoria: d.categoria,
+      cantidad: d.cantidad,
+      ventaNeta: Math.round(d.ventaNeta),
+      duracionMin: d.duracionMin,
+      precioPorHora: d.duracionMin > 0
+        ? Math.round((d.ventaNeta / d.cantidad) / ((d.duracionMin / d.cantidad) / 60))
+        : null,
+    }))
+    .filter(s => s.precioPorHora !== null)
+    .sort((a, b) => (b.precioPorHora ?? 0) - (a.precioPorHora ?? 0))
     .slice(0, 10)
 
   return NextResponse.json({
@@ -144,14 +166,12 @@ export async function GET(request: NextRequest) {
       ventasNetas: Math.round(ventasNetas),
       gastos: Math.round(gastos),
       balance: Math.round(ventasNetas - gastos),
-      ausencias,
-      tardanzas,
       proyeccion,
       diasTranscurridos,
       diasDelMes,
     },
     productividad,
-    categorias,
     servicios,
+    rentabilidad,
   })
 }
