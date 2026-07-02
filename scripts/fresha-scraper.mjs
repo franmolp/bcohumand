@@ -129,7 +129,14 @@ function parseCitasDetalle(text) {
     const franja = iFr >= 0 ? (r[iFr] ?? '').trim() : ''
     const categoria   = iCat >= 0 ? (r[iCat] ?? '').trim() : ''
     const servicio    = iSrv >= 0 ? (r[iSrv] ?? '').trim() : ''
-    const duracion_min = iDur >= 0 ? (parseInt(r[iDur] ?? '0') || 0) : 0
+    const durRaw = iDur >= 0 ? (r[iDur] ?? '').trim() : ''
+    const duracion_min = (() => {
+      if (!durRaw) return 0
+      // Formato "H:MM" → horas*60 + minutos
+      const hm = durRaw.match(/^(\d+):(\d{2})$/)
+      if (hm) return parseInt(hm[1]) * 60 + parseInt(hm[2])
+      return parseInt(durRaw) || 0
+    })()
     const ventaRaw    = iVnt >= 0 ? (r[iVnt] ?? '').replace(/[^0-9.,-]/g, '').replace(',', '.') : '0'
     const venta_neta  = parseFloat(ventaRaw) || 0
     let franja_inicio = null, franja_fin = null

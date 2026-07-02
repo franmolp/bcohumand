@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { CHIP_INFO } from '@/lib/asistencia'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -47,12 +48,17 @@ export async function GET(request: NextRequest) {
 
   const nombreMap = new Map((usuarios ?? []).map(u => [u.id, u.nombre]))
 
-  const citasNoCanc = (citas ?? []).filter(c => c.estado !== 'cancelado')
-  const citasCanceladas = (citas ?? []).filter(c => c.estado === 'cancelado')
+  const citasNoCanc = (citas ?? []).filter(c => c.estado !== 'cancelado' && c.estado !== 'Cancelado')
+  const citasCanceladas = (citas ?? []).filter(c => c.estado === 'cancelado' || c.estado === 'Cancelado')
   const ventasNetas = citasNoCanc.reduce((s, c) => s + (c.venta_neta || 0), 0)
   const gastos = (comprasData ?? []).reduce((s, c) => s + (c.monto || 0), 0)
-  const ausencias = (asistencia ?? []).filter(a => a.estado === 'ausente').length
-  const tardanzas = (asistencia ?? []).filter(a => (a.minutos_tarde || 0) > 0).length
+  const ausencias = (asistencia ?? []).filter(a => {
+    const chip = CHIP_INFO[a.estado ?? '']
+    return chip && !chip.present && !chip.justificado
+  }).length
+  const tardanzas = (asistencia ?? []).filter(a =>
+    a.estado === 'Llegada tarde' || a.estado === 'Llegada tarde/Salida temprana'
+  ).length
   const proyeccion = diasTranscurridos < diasDelMes && diasTranscurridos > 0
     ? Math.round(ventasNetas / diasTranscurridos * diasDelMes)
     : null
@@ -82,9 +88,10 @@ export async function GET(request: NextRequest) {
   for (const a of (asistencia ?? [])) {
     const nombre = nombreMap.get(a.usuario_id) ?? '—'
     const e = getEmp(a.usuario_id, nombre)
-    if (a.estado === 'presente') { e.diasPresente++; e.horasFichadas += a.horas_fichadas || 0 }
-    if (a.estado === 'ausente') e.diasAusente++
-    if ((a.minutos_tarde || 0) > 0) e.tardanzas++
+    const chip = CHIP_INFO[a.estado ?? '']
+    if (chip?.present) { e.diasPresente++; e.horasFichadas += a.horas_fichadas || 0 }
+    if (chip && !chip.present && !chip.justificado) e.diasAusente++
+    if (a.estado === 'Llegada tarde' || a.estado === 'Llegada tarde/Salida temprana') e.tardanzas++
   }
 
   const productividad = [...empMap.values()]
