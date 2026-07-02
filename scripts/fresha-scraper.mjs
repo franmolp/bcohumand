@@ -26,6 +26,9 @@ if (!FRESHA_SESSION) throw new Error('Falta FRESHA_SESSION')
 // ─── Rango de fechas: lunes de la semana actual → último día del mes siguiente ──
 
 function getDateRange() {
+  if (process.env.FROM && process.env.TO) {
+    return { from: process.env.FROM, to: process.env.TO }
+  }
   const now = new Date()
   const dow = now.getDay() === 0 ? 7 : now.getDay()
   const monday = new Date(now)
@@ -306,7 +309,7 @@ async function main() {
   console.log(`\n═══ Importación Fresha: ${from} → ${to} ═══`)
 
   // Cargar sesión guardada
-  const SESSION_PATH = '/tmp/fresha-session.json'
+  const SESSION_PATH = (process.env.TEMP || process.env.TMP || '/tmp') + '/fresha-session.json'
   const sessionJson = Buffer.from(FRESHA_SESSION, 'base64').toString('utf8')
   fs.writeFileSync(SESSION_PATH, sessionJson)
 
