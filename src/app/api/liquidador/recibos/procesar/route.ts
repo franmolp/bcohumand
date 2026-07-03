@@ -16,8 +16,8 @@ function formatearNombrePDF(raw: string): string {
 
 async function extractPageText(pdfBytes: Uint8Array, pageNum: number): Promise<string> {
   try {
-    // pdfjs-dist runs without worker in Node.js
     const pdfjs = await import('pdfjs-dist')
+    pdfjs.GlobalWorkerOptions.workerSrc = ''
     const doc = await pdfjs.getDocument({
       data: pdfBytes,
       useWorkerFetch: false,
