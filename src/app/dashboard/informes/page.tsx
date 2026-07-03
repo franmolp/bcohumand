@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { requireAuth } from '@/lib/auth'
 import InformesClient from './client'
 
-const ROLES_ALLOWED = ['Admin', 'admin', 'HR']
+const ROLES_ALLOWED = ['Admin', 'admin']
 
 export default async function InformesPage() {
   const session = await requireAuth()

@@ -23,7 +23,7 @@ const allNav = [
   { href: '/dashboard/muro',          label: 'Muro Social',     icon: IconWall },
   { href: '/dashboard/reparaciones',  label: 'Reparaciones',    icon: IconWrench },
   { href: '/dashboard/juegos',        label: 'Juegos',          icon: IconStar,        mobile: true },
-  { href: '/dashboard/informes',       label: 'Informes',        icon: IconBarChart,   roles: ['Admin', 'admin', 'HR'] },
+  { href: '/dashboard/informes',       label: 'Informes',        icon: IconBarChart,   admin: true },
   { href: '/dashboard/equipos',       label: 'Equipos y Roles', icon: IconSettings,   admin: true },
   { href: '/dashboard/seguridad',    label: 'Seguridad',      icon: IconShield,      admin: true },
 ]

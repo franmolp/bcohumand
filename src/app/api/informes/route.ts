@@ -16,7 +16,7 @@ function citaDurMin(c: { duracion_min: number | null; franja_inicio: string | nu
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  if (!['admin', 'Admin', 'HR'].includes(session.rol)) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
+  if (!['admin', 'Admin'].includes(session.rol)) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
 
   const mes = request.nextUrl.searchParams.get('mes')
   if (!mes || !/^\d{4}-\d{2}$/.test(mes)) return NextResponse.json({ error: 'mes inválido' }, { status: 400 })
