@@ -58,6 +58,63 @@ export function normalizarNombre(nombre: string): string {
 
 const SIG_KEY = 'humand_firma_empleador'
 
+// pdfjs without CDN worker — runs in main thread, works on iOS Safari
+async function getPdfjsLib() {
+  const pdfjs = await import('pdfjs-dist')
+  // Empty workerSrc disables the worker and runs synchronously in-thread
+  ;(pdfjs as unknown as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc = ''
+  return pdfjs as unknown as {
+    getDocument: (opts: object) => { promise: Promise<{
+      numPages: number
+      getPage: (n: number) => Promise<{
+        getTextContent: () => Promise<{ items: { str: string }[] }>
+        getViewport: (o: { scale: number }) => { width: number; height: number }
+        render: (o: { canvasContext: CanvasRenderingContext2D; viewport: unknown }) => { promise: Promise<void> }
+      }>
+    }> }
+  }
+}
+
+// Extract employee names from each page of the PDF (client-side)
+async function extractPageNames(file: File): Promise<string[]> {
+  try {
+    const pdfjs = await getPdfjsLib()
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const doc = await pdfjs.getDocument({ data: bytes, useWorkerFetch: false, isEvalSupported: false }).promise
+    const names: string[] = []
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i)
+      const content = await page.getTextContent()
+      const text = content.items.map(it => it.str).join(' ')
+      const match =
+        text.match(/Nombre\s+y\s+Apellido[\s:]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s]+?)(?:\s{2,}|CUIL|DNI|Per[ií]|$)/i) ??
+        text.match(/Apellido\s+y\s+Nombre[\s:]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s]+?)(?:\s{2,}|CUIL|DNI|Per[ií]|$)/i)
+      names.push(match ? match[1].trim() : '')
+    }
+    return names
+  } catch {
+    return []
+  }
+}
+
+// Render page 1 of a single-page PDF to a JPEG data URL thumbnail
+async function renderThumbnail(pdfBytes: Uint8Array): Promise<string> {
+  try {
+    const pdfjs = await getPdfjsLib()
+    const doc  = await pdfjs.getDocument({ data: pdfBytes, useWorkerFetch: false, isEvalSupported: false }).promise
+    const page = await doc.getPage(1)
+    const vp   = page.getViewport({ scale: 0.65 })
+    const canvas = document.createElement('canvas')
+    canvas.width = vp.width; canvas.height = vp.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return ''
+    await page.render({ canvasContext: ctx, viewport: vp }).promise
+    return canvas.toDataURL('image/jpeg', 0.75)
+  } catch {
+    return ''
+  }
+}
+
 // Remove white pixels from signature image → returns PNG Uint8Array
 async function removeWhiteBg(dataUrl: string): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
@@ -211,18 +268,22 @@ export function RecibosTab() {
     setProgreso({ actual: 0, total: 0 })
 
     try {
-      // Remove white background client-side (uses Canvas API)
+      // 1. Extraer nombres de cada página (client-side, sin CDN worker)
+      const nombres = await extractPageNames(pdfFile)
+
+      // 2. Quitar fondo blanco de firma (Canvas API)
       const sigBytes = await removeWhiteBg(firma)
 
+      // 3. Enviar al servidor para dividir y firmar
       const fd = new FormData()
       fd.append('pdf', pdfFile)
       fd.append('firma', new Blob([sigBytes], { type: 'image/png' }), 'firma.png')
       fd.append('mes', String(mes))
       fd.append('anio', String(anio))
+      fd.append('nombres', JSON.stringify(nombres))
 
-      const res = await fetch('/api/liquidador/recibos/procesar', { method: 'POST', body: fd })
+      const res  = await fetch('/api/liquidador/recibos/procesar', { method: 'POST', body: fd })
       const data = await res.json()
-
       if (!res.ok) throw new Error(data.error ?? 'Error del servidor')
 
       const pages: Array<{
@@ -230,26 +291,28 @@ export function RecibosTab() {
         mesStr: string; anioStr: string; pdfBase64: string; nombreArchivo: string
       }> = data.pages
 
-      setProgreso({ actual: data.total, total: data.total })
-
+      // 4. Convertir base64 → bytes y armar estado inicial (sin thumbnails aún)
       const results: ReciboProcesado[] = pages.map(p => {
         const binary = atob(p.pdfBase64)
-        const bytes = new Uint8Array(binary.length)
+        const bytes  = new Uint8Array(binary.length)
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
         return {
-          pageIndex: p.pageIndex,
-          nombreRaw: p.nombreRaw,
+          pageIndex: p.pageIndex, nombreRaw: p.nombreRaw,
           nombreFormateado: p.nombreFormateado,
-          mesStr: p.mesStr,
-          anioStr: p.anioStr,
-          pdfBytes: bytes,
-          previewUrl: '',
-          status: 'pending' as const,
-          nombreArchivo: p.nombreArchivo,
+          mesStr: p.mesStr, anioStr: p.anioStr,
+          pdfBytes: bytes, previewUrl: '',
+          status: 'pending' as const, nombreArchivo: p.nombreArchivo,
         }
       })
 
+      setProgreso({ actual: data.total, total: data.total })
       setRecibos(results)
+
+      // 5. Generar thumbnails uno por uno en el fondo
+      for (let i = 0; i < results.length; i++) {
+        const thumb = await renderThumbnail(results[i].pdfBytes)
+        if (thumb) setRecibos(prev => prev.map((r, idx) => idx === i ? { ...r, previewUrl: thumb } : r))
+      }
     } catch (e) {
       console.error('Error procesando PDF', e)
       showToast(e instanceof Error ? e.message : 'Error al procesar el PDF', 'error')
@@ -420,10 +483,11 @@ export function RecibosTab() {
                 {r.previewUrl ? (
                   <img src={r.previewUrl} alt={r.nombreFormateado}
                     className="w-full object-cover border-b border-gray-100"
-                    style={{ maxHeight: 280 }} />
+                    style={{ maxHeight: 320 }} />
                 ) : (
-                  <div className="h-20 bg-gray-50 flex items-center justify-center border-b border-gray-100">
-                    <IconFileText size={24} className="text-gray-300" />
+                  <div className="h-24 bg-gray-50 flex flex-col items-center justify-center gap-2 border-b border-gray-100">
+                    <div className="w-4 h-4 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" />
+                    <p className="text-[11px] text-gray-400">Generando vista previa...</p>
                   </div>
                 )}
                 {/* Info */}
