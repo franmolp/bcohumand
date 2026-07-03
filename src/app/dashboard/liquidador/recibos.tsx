@@ -208,122 +208,51 @@ export function RecibosTab() {
     if (!pdfFile || !firma) return
     setProcesando(true)
     setRecibos([])
+    setProgreso({ actual: 0, total: 0 })
 
     try {
-      // Dynamic imports (client-only, avoid SSR)
-      const [PDFLib, pdfjs] = await Promise.all([
-        import('pdf-lib'),
-        import('pdfjs-dist'),
-      ])
-
-      // Configure pdfjs worker via unpkg CDN (matches installed version)
-      const version = (pdfjs as unknown as { version: string }).version
-      ;(pdfjs as unknown as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc =
-        `//unpkg.com/pdfjs-dist@${version}/build/pdf.worker.min.mjs`
-
-      // Remove white background from signature
+      // Remove white background client-side (uses Canvas API)
       const sigBytes = await removeWhiteBg(firma)
 
-      // Read source PDF
-      const pdfBuffer = await pdfFile.arrayBuffer()
-      const pdfBytes  = new Uint8Array(pdfBuffer)
+      const fd = new FormData()
+      fd.append('pdf', pdfFile)
+      fd.append('firma', new Blob([sigBytes], { type: 'image/png' }), 'firma.png')
+      fd.append('mes', String(mes))
+      fd.append('anio', String(anio))
 
-      // Load with pdf-lib (for modification)
-      const srcDoc = await PDFLib.PDFDocument.load(pdfBytes.slice().buffer as ArrayBuffer)
+      const res = await fetch('/api/liquidador/recibos/procesar', { method: 'POST', body: fd })
+      const data = await res.json()
 
-      // Load with pdfjs (for text extraction)
-      const pdfJsLib = pdfjs as unknown as {
-        getDocument: (opts: { data: Uint8Array }) => { promise: Promise<{ getPage: (n: number) => Promise<{ getTextContent: () => Promise<{ items: { str: string }[] }> }> }> }
-      }
-      const pdfJsDoc = await pdfJsLib.getDocument({ data: pdfBytes.slice() }).promise
+      if (!res.ok) throw new Error(data.error ?? 'Error del servidor')
 
-      const numPages = srcDoc.getPageCount()
-      setProgreso({ actual: 0, total: numPages })
+      const pages: Array<{
+        pageIndex: number; nombreRaw: string; nombreFormateado: string
+        mesStr: string; anioStr: string; pdfBase64: string; nombreArchivo: string
+      }> = data.pages
 
-      const results: ReciboProcesado[] = []
+      setProgreso({ actual: data.total, total: data.total })
 
-      for (let i = 0; i < numPages; i++) {
-        setProgreso({ actual: i + 1, total: numPages })
-
-        // Extract text
-        const pdfJsPage  = await pdfJsDoc.getPage(i + 1)
-        const textContent = await pdfJsPage.getTextContent()
-        const fullText   = textContent.items.map(it => it.str).join(' ')
-
-        // Name regex: "Nombre y Apellido: OJEDA ROCIO AYELEN"
-        const nameMatch =
-          fullText.match(/Nombre\s+y\s+Apellido[\s:]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s]+?)(?:\s{2,}|CUIL|DNI|Per[ií]|$)/i) ??
-          fullText.match(/Apellido\s+y\s+Nombre[\s:]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s]+?)(?:\s{2,}|CUIL|DNI|Per[ií]|$)/i)
-
-        // Period regex: "Período Febrero 2026"
-        const periodMatch = fullText.match(/Per[ií]odo[\s:]+([A-Za-záéíóúüñ]+)\s+(\d{4})/i)
-
-        const nombreRaw       = nameMatch?.[1]?.trim() ?? `Página ${i + 1}`
-        const mesStr          = periodMatch?.[1] ?? MESES[mes - 1]
-        const anioStr         = periodMatch?.[2] ?? String(anio)
-        const nombreFormateado = nameMatch ? formatearNombrePDF(nombreRaw) : `Página ${i + 1}`
-        const nombreArchivo   = `${nombreFormateado} Liquidacion ${mesStr}.pdf`
-
-        // Create individual signed PDF
-        const newDoc = await PDFLib.PDFDocument.create()
-        const [copiedPage] = await newDoc.copyPages(srcDoc, [i])
-        newDoc.addPage(copiedPage)
-
-        const page  = newDoc.getPages()[0]
-        const { width, height } = page.getSize()
-
-        // Embed signature
-        const sigImage  = await newDoc.embedPng(sigBytes)
-        const sigWidth  = width * 0.12
-        const sigHeight = sigWidth * (sigImage.height / sigImage.width)
-
-        page.drawImage(sigImage, {
-          x: width * 0.61,
-          y: height * 0.04,
-          width: sigWidth,
-          height: sigHeight,
-          opacity: 0.92,
-        })
-
-        const signedBytes = await newDoc.save()
-
-        // Generate preview using pdfjs
-        let previewUrl = ''
-        try {
-          const prevDoc  = await pdfJsLib.getDocument({ data: signedBytes.slice() }).promise
-          const prevPage = await prevDoc.getPage(1)
-          const vp = (prevPage as unknown as {
-            getViewport: (opts: { scale: number }) => {
-              width: number; height: number;
-              clone: (o: object) => typeof vp
-            }
-          }).getViewport({ scale: 1.2 })
-          const canvas = document.createElement('canvas')
-          canvas.width = vp.width; canvas.height = vp.height
-          const ctx = canvas.getContext('2d')!
-          await (prevPage as unknown as {
-            render: (opts: { canvasContext: CanvasRenderingContext2D; viewport: typeof vp }) => { promise: Promise<void> }
-          }).render({ canvasContext: ctx, viewport: vp }).promise
-          previewUrl = canvas.toDataURL('image/jpeg', 0.82)
-        } catch (e) {
-          console.warn('Preview render failed', e)
+      const results: ReciboProcesado[] = pages.map(p => {
+        const binary = atob(p.pdfBase64)
+        const bytes = new Uint8Array(binary.length)
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+        return {
+          pageIndex: p.pageIndex,
+          nombreRaw: p.nombreRaw,
+          nombreFormateado: p.nombreFormateado,
+          mesStr: p.mesStr,
+          anioStr: p.anioStr,
+          pdfBytes: bytes,
+          previewUrl: '',
+          status: 'pending' as const,
+          nombreArchivo: p.nombreArchivo,
         }
-
-        results.push({
-          pageIndex: i,
-          nombreRaw, nombreFormateado,
-          mesStr, anioStr,
-          pdfBytes: signedBytes,
-          previewUrl,
-          status: 'pending',
-          nombreArchivo,
-        })
-      }
+      })
 
       setRecibos(results)
     } catch (e) {
       console.error('Error procesando PDF', e)
-      showToast('Error al procesar el PDF. Verificá que pdf-lib y pdfjs-dist estén instalados.', 'error')
+      showToast(e instanceof Error ? e.message : 'Error al procesar el PDF', 'error')
     } finally {
       setProcesando(false)
     }
@@ -453,12 +382,11 @@ export function RecibosTab() {
           <div className="flex items-center gap-3">
             <Spinner size={20} inline />
             <span className="text-[13px] text-[var(--text-sub)]">
-              Procesando página {progreso.actual} de {progreso.total}...
+              Procesando recibos...
             </span>
           </div>
-          <div className="w-full bg-gray-100 rounded-full h-2">
-            <div className="bg-[var(--primary)] h-2 rounded-full transition-all"
-              style={{ width: `${progreso.total > 0 ? (progreso.actual / progreso.total) * 100 : 0}%` }} />
+          <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+            <div className="h-2 rounded-full bg-[var(--primary)] animate-pulse w-full" />
           </div>
         </div>
       )}
