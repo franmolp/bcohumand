@@ -58,52 +58,63 @@ export function normalizarNombre(nombre: string): string {
 
 const SIG_KEY = 'humand_firma_empleador'
 
-// pdfjs without CDN worker — runs in main thread, works on iOS Safari
-async function getPdfjsLib() {
-  const pdfjs = await import('pdfjs-dist')
-  // Empty workerSrc disables the worker and runs synchronously in-thread
-  ;(pdfjs as unknown as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc = ''
-  return pdfjs as unknown as {
-    getDocument: (opts: object) => { promise: Promise<{
-      numPages: number
-      getPage: (n: number) => Promise<{
-        getTextContent: () => Promise<{ items: { str: string }[] }>
-        getViewport: (o: { scale: number }) => { width: number; height: number }
-        render: (o: { canvasContext: CanvasRenderingContext2D; viewport: unknown }) => { promise: Promise<void> }
-      }>
-    }> }
-  }
+type PdfjsLib = {
+  getDocument: (opts: object) => { promise: Promise<{
+    numPages: number
+    getPage: (n: number) => Promise<{
+      getTextContent: () => Promise<{ items: { str: string }[] }>
+      getViewport: (o: { scale: number }) => { width: number; height: number }
+      render: (o: { canvasContext: CanvasRenderingContext2D; viewport: unknown }) => { promise: Promise<void> }
+    }>
+  }> }
 }
 
-// Extract employee names from each page of the PDF (client-side)
-async function extractPageNames(file: File): Promise<string[]> {
+// Load pdfjs with local worker (no CDN → works on iOS Safari)
+let _pdfjs: PdfjsLib | null = null
+async function getPdfjsLib(): Promise<PdfjsLib> {
+  if (_pdfjs) return _pdfjs
+  const pdfjs = await import('pdfjs-dist')
+  ;(pdfjs as unknown as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc =
+    '/pdf.worker.min.mjs'
+  _pdfjs = pdfjs as unknown as PdfjsLib
+  return _pdfjs
+}
+
+interface PageMeta { nombre: string; mesStr: string | null }
+
+// Extract name + period from each page of the original PDF
+async function extractPageMeta(file: File): Promise<PageMeta[]> {
   try {
     const pdfjs = await getPdfjsLib()
     const bytes = new Uint8Array(await file.arrayBuffer())
-    const doc = await pdfjs.getDocument({ data: bytes, useWorkerFetch: false, isEvalSupported: false }).promise
-    const names: string[] = []
+    const doc   = await pdfjs.getDocument({ data: bytes }).promise
+    const result: PageMeta[] = []
     for (let i = 1; i <= doc.numPages; i++) {
-      const page = await doc.getPage(i)
+      const page    = await doc.getPage(i)
       const content = await page.getTextContent()
-      const text = content.items.map(it => it.str).join(' ')
-      const match =
+      const text    = content.items.map(it => it.str).join(' ')
+      const nameMatch =
         text.match(/Nombre\s+y\s+Apellido[\s:]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s]+?)(?:\s{2,}|CUIL|DNI|Per[ií]|$)/i) ??
         text.match(/Apellido\s+y\s+Nombre[\s:]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s]+?)(?:\s{2,}|CUIL|DNI|Per[ií]|$)/i)
-      names.push(match ? match[1].trim() : '')
+      const periodMatch = text.match(/Per[ií]odo[\s:]+([A-Za-záéíóúüñ]+)\s+(\d{4})/i)
+      result.push({
+        nombre: nameMatch ? nameMatch[1].trim() : '',
+        mesStr: periodMatch ? periodMatch[1] : null,
+      })
     }
-    return names
+    return result
   } catch {
     return []
   }
 }
 
-// Render page 1 of a single-page PDF to a JPEG data URL thumbnail
+// Render page 1 of a single-page PDF to a JPEG thumbnail
 async function renderThumbnail(pdfBytes: Uint8Array): Promise<string> {
   try {
-    const pdfjs = await getPdfjsLib()
-    const doc  = await pdfjs.getDocument({ data: pdfBytes, useWorkerFetch: false, isEvalSupported: false }).promise
-    const page = await doc.getPage(1)
-    const vp   = page.getViewport({ scale: 0.65 })
+    const pdfjs  = await getPdfjsLib()
+    const doc    = await pdfjs.getDocument({ data: pdfBytes }).promise
+    const page   = await doc.getPage(1)
+    const vp     = page.getViewport({ scale: 0.65 })
     const canvas = document.createElement('canvas')
     canvas.width = vp.width; canvas.height = vp.height
     const ctx = canvas.getContext('2d')
@@ -243,10 +254,19 @@ export function RecibosTab() {
     }
   }
 
-  // Load signature from localStorage
+  // Cargar firma: localStorage como cache rápida, servidor como fuente de verdad
   useEffect(() => {
-    const saved = localStorage.getItem(SIG_KEY)
-    if (saved) setFirma(saved)
+    const cached = localStorage.getItem(SIG_KEY)
+    if (cached) setFirma(cached)
+    fetch('/api/liquidador/firma')
+      .then(r => r.json())
+      .then(d => {
+        if (d.dataUrl) {
+          setFirma(d.dataUrl)
+          localStorage.setItem(SIG_KEY, d.dataUrl)
+        }
+      })
+      .catch(() => {})
   }, [])
 
   function handleFirma(e: React.ChangeEvent<HTMLInputElement>) {
@@ -257,8 +277,18 @@ export function RecibosTab() {
       const dataUrl = ev.target?.result as string
       localStorage.setItem(SIG_KEY, dataUrl)
       setFirma(dataUrl)
+      // Guardar en servidor en segundo plano
+      const fd = new FormData()
+      fd.append('firma', file)
+      fetch('/api/liquidador/firma', { method: 'POST', body: fd }).catch(() => {})
     }
     reader.readAsDataURL(file)
+  }
+
+  async function eliminarFirma() {
+    localStorage.removeItem(SIG_KEY)
+    setFirma(null)
+    await fetch('/api/liquidador/firma', { method: 'DELETE' }).catch(() => {})
   }
 
   async function procesarPDF() {
@@ -268,8 +298,8 @@ export function RecibosTab() {
     setProgreso({ actual: 0, total: 0 })
 
     try {
-      // 1. Extraer nombres de cada página (client-side, sin CDN worker)
-      const nombres = await extractPageNames(pdfFile)
+      // 1. Extraer nombre y período de cada página (client-side, worker local)
+      const meta = await extractPageMeta(pdfFile)
 
       // 2. Quitar fondo blanco de firma (Canvas API)
       const sigBytes = await removeWhiteBg(firma)
@@ -280,7 +310,7 @@ export function RecibosTab() {
       fd.append('firma', new Blob([sigBytes], { type: 'image/png' }), 'firma.png')
       fd.append('mes', String(mes))
       fd.append('anio', String(anio))
-      fd.append('nombres', JSON.stringify(nombres))
+      fd.append('meta', JSON.stringify(meta))
 
       const res  = await fetch('/api/liquidador/recibos/procesar', { method: 'POST', body: fd })
       const data = await res.json()
@@ -410,10 +440,16 @@ export function RecibosTab() {
           {firma ? (
             <div className="h-24 border-2 border-[var(--primary)] bg-[var(--primary-light)] rounded-xl flex items-center justify-between px-4">
               <img src={firma} alt="Firma" className="max-h-14 max-w-[120px] object-contain" style={{ background: 'transparent' }} />
-              <button onClick={() => { localStorage.removeItem(SIG_KEY); setFirma(null) }}
-                className="text-[12px] text-[var(--text-sub)] hover:text-red-500 cursor-pointer ml-2 shrink-0">
-                Cambiar
-              </button>
+              <div className="flex flex-col items-end gap-1.5 ml-2 shrink-0">
+                <label className="text-[12px] text-[var(--text-sub)] hover:text-[var(--primary)] cursor-pointer">
+                  Cambiar
+                  <input type="file" accept="image/*" className="hidden" onChange={handleFirma} />
+                </label>
+                <button onClick={eliminarFirma}
+                  className="text-[12px] text-red-400 hover:text-red-600 cursor-pointer">
+                  Eliminar
+                </button>
+              </div>
             </div>
           ) : (
             <label className="flex items-center justify-center h-24 border-2 border-dashed border-gray-200 hover:border-[var(--primary)] hover:bg-[var(--primary-light)] rounded-xl cursor-pointer transition-colors">

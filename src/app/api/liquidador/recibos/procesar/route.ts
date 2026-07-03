@@ -26,8 +26,8 @@ export async function POST(req: NextRequest) {
   const firmaBlob = formData.get('firma')  as Blob | null
   const mes       = parseInt(formData.get('mes')  as string || '') || (new Date().getMonth() + 1)
   const anio      = parseInt(formData.get('anio') as string || '') || new Date().getFullYear()
-  const nombresParam = formData.get('nombres') as string | null
-  const nombresArr: string[] = nombresParam ? JSON.parse(nombresParam) : []
+  const metaParam = formData.get('meta') as string | null
+  const metaArr: { nombre: string; mesStr: string | null }[] = metaParam ? JSON.parse(metaParam) : []
 
   if (!pdfFile || !firmaBlob) return NextResponse.json({ error: 'Faltan archivos' }, { status: 400 })
 
@@ -38,13 +38,15 @@ export async function POST(req: NextRequest) {
   try { srcDoc = await PDFDocument.load(pdfBytes.buffer as ArrayBuffer) }
   catch { return NextResponse.json({ error: 'PDF inválido o corrupto' }, { status: 400 }) }
 
-  const numPages = srcDoc.getPageCount()
-  const mesStr   = MESES[mes - 1]
-  const anioStr  = String(anio)
-  const results  = []
+  const numPages    = srcDoc.getPageCount()
+  const fallbackMes = MESES[mes - 1]
+  const anioStr     = String(anio)
+  const results     = []
 
   for (let i = 0; i < numPages; i++) {
-    const nombreRaw        = nombresArr[i] || ''
+    const m              = metaArr[i]
+    const nombreRaw      = m?.nombre || ''
+    const mesStr         = m?.mesStr || fallbackMes
     const nombreFormateado = nombreRaw ? formatearNombrePDF(nombreRaw) : `Pág. ${i + 1}`
     const nombreArchivo    = `${nombreFormateado} Liquidacion ${mesStr}.pdf`
 
