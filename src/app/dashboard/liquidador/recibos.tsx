@@ -393,10 +393,29 @@ export function RecibosTab() {
       // 1. Quitar fondo blanco de firma (Canvas API)
       const sigBytes = await removeWhiteBg(firma)
 
-      // 2. Extraer nombre y mes client-side con pdfjs (evita problemas server-side)
-      const pageMeta = await extractPageMeta(pdfFile)
+      // 2. Extraer nombre y mes client-side con pdfjs (funciona en desktop Chrome/Safari)
+      const pdfjsMeta = await extractPageMeta(pdfFile)
 
-      // 3. Enviar al servidor — el servidor solo firma, usa pageMeta del cliente
+      // 3. Extraer nombre y mes server-side con CID (funciona en iOS Safari)
+      let serverMeta: PageMeta[] = []
+      try {
+        const fdEx = new FormData()
+        fdEx.append('pdf', pdfFile)
+        const resEx = await fetch('/api/liquidador/recibos/extraer', { method: 'POST', body: fdEx })
+        if (resEx.ok) {
+          const dataEx = await resEx.json()
+          serverMeta = Array.isArray(dataEx.pages) ? dataEx.pages : []
+        }
+      } catch { /* silencio — se usa solo pdfjs */ }
+
+      // 4. Fusionar: pdfjs tiene prioridad si extrajo algo, fallback a server CID
+      const maxLen = Math.max(pdfjsMeta.length, serverMeta.length)
+      const pageMeta: PageMeta[] = Array.from({ length: maxLen }, (_, i) => ({
+        nombre: pdfjsMeta[i]?.nombre || serverMeta[i]?.nombre || '',
+        mesStr: pdfjsMeta[i]?.mesStr || serverMeta[i]?.mesStr || null,
+      }))
+
+      // 5. Enviar al servidor para firmar — el servidor solo firma, usa pageMeta fusionado
       const fd = new FormData()
       fd.append('pdf', pdfFile)
       fd.append('firma', new Blob([sigBytes], { type: 'image/png' }), 'firma.png')
@@ -413,7 +432,7 @@ export function RecibosTab() {
         mesStr: string; anioStr: string; pdfBase64: string; nombreArchivo: string
       }> = data.pages
 
-      // 4. Convertir base64 → bytes y armar estado inicial (sin thumbnails aún)
+      // 6. Convertir base64 → bytes y armar estado inicial (sin thumbnails aún)
       const results: ReciboProcesado[] = pages.map(p => {
         const binary = atob(p.pdfBase64)
         const bytes  = new Uint8Array(binary.length)
@@ -430,7 +449,7 @@ export function RecibosTab() {
       setProgreso({ actual: data.total, total: data.total })
       setRecibos(results)
 
-      // 5. Generar thumbnails uno por uno en el fondo
+      // 7. Generar thumbnails uno por uno en el fondo
       for (let i = 0; i < results.length; i++) {
         const thumb = await renderThumbnail(results[i].pdfBytes)
         if (thumb) setRecibos(prev => prev.map((r, idx) => idx === i ? { ...r, previewUrl: thumb } : r))

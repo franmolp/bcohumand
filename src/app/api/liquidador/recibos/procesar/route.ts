@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { PDFDocument } from 'pdf-lib'
-import { inflateSync, inflateRawSync } from 'zlib'
 
 export const maxDuration = 60
 
-const MESES    = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-const MESES_RE = MESES.join('|')
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
 function cap(s: string) { return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '' }
 function formatearNombrePDF(raw: string): string {
@@ -15,193 +13,6 @@ function formatearNombrePDF(raw: string): string {
   if (parts.length === 1) return cap(parts[0])
   return cap(parts[1]) + ' ' + parts[0][0].toUpperCase()
 }
-
-// ── Extracción de texto desde bytes crudos ────────────────────────────────────
-
-function decompress(buf: Buffer): Buffer {
-  try { return inflateSync(buf) }    catch { /* continúa */ }
-  try { return inflateRawSync(buf) } catch { /* continúa */ }
-  return buf
-}
-
-function* iterStreams(pdfBytes: Buffer): Generator<Buffer> {
-  let pos = 0
-  while (pos < pdfBytes.length) {
-    let si = -1, from = pos
-    while (from < pdfBytes.length) {
-      const idx = pdfBytes.indexOf(Buffer.from('stream'), from)
-      if (idx === -1) break
-      if (idx === 0 || pdfBytes[idx - 1] !== 100 /* 'd' */) { si = idx; break }
-      from = idx + 1
-    }
-    if (si === -1) break
-    let start = si + 6
-    if (pdfBytes[start] === 13) start++
-    if (pdfBytes[start] === 10) start++
-    const ei = pdfBytes.indexOf(Buffer.from('endstream'), start)
-    if (ei === -1) break
-    let end = ei
-    while (end > start && (pdfBytes[end - 1] === 13 || pdfBytes[end - 1] === 10)) end--
-    const raw = pdfBytes.slice(start, end)
-    pos = ei + 9
-    if (raw.length > 10) yield raw
-  }
-}
-
-function parseCmap(cmapText: string): Map<number, string> {
-  const map = new Map<number, string>()
-  const bfcharRe = /beginbfchar([\s\S]*?)endbfchar/g
-  let m: RegExpExecArray | null
-  while ((m = bfcharRe.exec(cmapText)) !== null) {
-    const tokens = m[1].trim().split(/\s+/)
-    for (let i = 0; i + 1 < tokens.length; i += 2) {
-      const cid = parseInt(tokens[i].replace(/[<>]/g, ''), 16)
-      const uni = parseInt(tokens[i + 1].replace(/[<>]/g, ''), 16)
-      if (!isNaN(cid) && !isNaN(uni)) map.set(cid, String.fromCodePoint(uni))
-    }
-  }
-  const bfrangeRe = /beginbfrange([\s\S]*?)endbfrange/g
-  while ((m = bfrangeRe.exec(cmapText)) !== null) {
-    const tokens = m[1].trim().split(/\s+/)
-    for (let i = 0; i + 2 < tokens.length; i += 3) {
-      const start    = parseInt(tokens[i].replace(/[<>]/g, ''), 16)
-      const end      = parseInt(tokens[i + 1].replace(/[<>]/g, ''), 16)
-      const startUni = parseInt(tokens[i + 2].replace(/[<>]/g, ''), 16)
-      for (let c = start; c <= end; c++) map.set(c, String.fromCodePoint(startUni + (c - start)))
-    }
-  }
-  return map
-}
-
-function buildCidMap(pdfBytes: Buffer): Map<number, string> {
-  const merged = new Map<number, string>()
-  for (const raw of iterStreams(pdfBytes)) {
-    let text = ''
-    try { text = decompress(raw).toString('latin1') } catch { text = raw.toString('latin1') }
-    if (text.includes('begincmap')) {
-      for (const [k, v] of parseCmap(text)) merged.set(k, v)
-    }
-  }
-  return merged
-}
-
-function decodeCIDHex(hex: string, cidMap: Map<number, string>): string {
-  let text = ''
-  for (let i = 0; i < hex.length; i += 4) {
-    const cid = parseInt(hex.slice(i, i + 4), 16)
-    text += cidMap.get(cid) ?? ''
-  }
-  return text
-}
-
-function streamToText(content: string, cidMap: Map<number, string>): string {
-  let text = ''
-  let m: RegExpExecArray | null
-  const reTJ = /\[([^\]]{0,8000})\]\s*TJ/g
-  while ((m = reTJ.exec(content)) !== null) {
-    const inner = m[1]
-    const hexRe = /<([0-9a-fA-F]+)>/g
-    let hm: RegExpExecArray | null
-    while ((hm = hexRe.exec(inner)) !== null) text += decodeCIDHex(hm[1], cidMap)
-    const litRe = /\(([^)\\]*(?:\\.[^)\\]*)*)\)/g
-    while ((hm = litRe.exec(inner)) !== null) text += hm[1].replace(/\\[nrt]/g, ' ').replace(/\\(.)/g, '$1')
-    text += ' '
-  }
-  const reTj = /\(([^)\\]*(?:\\.[^)\\]*)*)\)\s*[Tj'"]/g
-  while ((m = reTj.exec(content)) !== null) text += m[1].replace(/\\[nrt]/g, ' ').replace(/\\(.)/g, '$1') + ' '
-  const reTjHex = /<([0-9a-fA-F]+)>\s*Tj/g
-  while ((m = reTjHex.exec(content)) !== null) text += decodeCIDHex(m[1], cidMap) + ' '
-  return text
-}
-
-function extractTextFromBytes(pdfBytes: Buffer): string {
-  const cidMap = buildCidMap(pdfBytes)
-  let allText = ''
-  for (const raw of iterStreams(pdfBytes)) {
-    const decoded = decompress(raw)
-    const content = decoded.toString('binary')
-    if (content.includes('Tj') || content.includes('TJ')) {
-      allText += streamToText(content, cidMap)
-    }
-  }
-  if (!allText.trim()) {
-    const rawStr = pdfBytes.toString('latin1')
-    for (const match of rawStr.matchAll(/[ -~\t]{5,}/g)) allText += match[0] + ' '
-  }
-  return allText
-}
-
-function parsearNombreMes(text: string, strs: string[]): { nombre: string; mesStr: string | null } {
-  const mesM =
-    text.match(new RegExp(`Per[ií]odo[\\s:]+(${MESES_RE})\\s+20\\d{2}`, 'i')) ??
-    text.match(new RegExp(`Liquidaci[oó]n[\\s:]+(${MESES_RE})\\s+20\\d{2}`, 'i')) ??
-    text.match(new RegExp(`\\b(${MESES_RE})\\s+20\\d{2}\\b`, 'i'))
-
-  let nombre = ''
-
-  if (!nombre) {
-    const m = text.match(
-      /(?:Apellido\s+y\s+Nombre[s]?|Nombre[s]?\s+y\s+Apellido)\s*[:\-]?\s*(.{1,80}?)(?=\s{2,}|\s+CUIL|\s+DNI|\s+\d{2}[-.\s]\d|\s+Per[ií]|\s+Concepto)/i
-    )
-    if (m?.[1]) {
-      const c = m[1].trim().replace(/\s+/g, ' ')
-      if (/[A-ZÁÉÍÓÚÜÑ]{2,}/.test(c) && !/^\d/.test(c)) nombre = c
-    }
-  }
-
-  if (!nombre) {
-    const cuilM = text.match(/\b(\d{2}[-.\s]\d{7,8}[-.\s]\d)\b/)
-    if (cuilM) {
-      const before = text.slice(Math.max(0, cuilM.index! - 220), cuilM.index!)
-        .replace(/\bCUIL\s*[:\-]?\s*$/, '').trimEnd()
-      const m = before.match(/\b([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,}){1,3})\s*$/)
-      if (m?.[1]) nombre = m[1].trim()
-    }
-  }
-
-  if (!nombre) {
-    for (let j = 0; j < strs.length; j++) {
-      if (/^CUIL\s*:?$/i.test(strs[j].trim())) {
-        const parts: string[] = []
-        for (let k = j - 1; k >= Math.max(0, j - 12); k--) {
-          const c = strs[k].trim()
-          if (!c || /^[:\-\/·\s]+$/.test(c)) continue
-          if (/^[A-ZÁÉÍÓÚÜÑ]{2,}(?: [A-ZÁÉÍÓÚÜÑ]{2,})*$/.test(c)) parts.unshift(...c.split(/\s+/))
-          else break
-        }
-        if (parts.length >= 2) { nombre = parts.join(' '); break }
-      }
-    }
-  }
-
-  if (!nombre) {
-    const lower = strs.map(s => s.toLowerCase())
-    for (let j = 0; j < lower.length; j++) {
-      if (lower[j].includes('apellido')) {
-        const parts: string[] = []
-        for (let k = j + 1; k < Math.min(j + 25, strs.length); k++) {
-          const c = strs[k].trim()
-          if (!c || /^[:\-\/·\s]+$/.test(c)) continue
-          if (/^[A-ZÁÉÍÓÚÜÑ]{2,}(?: [A-ZÁÉÍÓÚÜÑ]{2,})*$/.test(c) && !/^(CUIL|DNI)$/.test(c)) {
-            parts.push(...c.split(/\s+/))
-          } else if (parts.length > 0) break
-        }
-        if (parts.length >= 2) { nombre = parts.join(' '); break }
-      }
-    }
-  }
-
-  if (!nombre) {
-    const ap = text.match(/\bApellido\s*[:\-]\s*([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,})*)/i)
-    const nm = text.match(/\bNombres?\s*[:\-]\s*([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,})*)/i)
-    if (ap?.[1] && nm?.[1]) nombre = ap[1].trim() + ' ' + nm[1].trim()
-    else if (ap?.[1]) nombre = ap[1].trim()
-  }
-
-  return { nombre, mesStr: mesM ? mesM[1] : null }
-}
-
-// ── Handler ───────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
@@ -232,11 +43,9 @@ export async function POST(req: NextRequest) {
   const numPages    = srcDoc.getPageCount()
   const fallbackMes = MESES[mes - 1]
   const anioStr     = String(anio)
-
-  const results = []
+  const results     = []
 
   for (let i = 0; i < numPages; i++) {
-    // 1. Firmar la página — srcDoc no se toca antes de este paso
     const newDoc = await PDFDocument.create()
     const [copied] = await newDoc.copyPages(srcDoc, [i])
     newDoc.addPage(copied)
@@ -248,27 +57,11 @@ export async function POST(req: NextRequest) {
     const sigHeight         = sigWidth * (sigImage.height / sigImage.width)
     page.drawImage(sigImage, { x: width * 0.57, y: height * 0.085, width: sigWidth, height: sigHeight, opacity: 0.92 })
 
-    const signedBytes = Buffer.from(await newDoc.save())
+    const signedBytes = await newDoc.save()
 
-    // 2. Extraer texto del PDF firmado ya generado (bytes independientes, no toca srcDoc)
-    //    pdf-lib copia todos los recursos de fuentes al hacer copyPages, incluido el CMap
-    let nombre = ''
-    let mesStr = fallbackMes
-    try {
-      const text = extractTextFromBytes(signedBytes)
-      const strs = text.split(/\s+/).filter(Boolean)
-      console.log(`[p${i+1}] len=${text.length} "${text.substring(0, 100).replace(/\s+/g,' ')}"`)
-      const parsed = parsearNombreMes(text, strs)
-      // Cliente tiene prioridad si pdfjs extrajo algo
-      const client = clientMeta[i]
-      nombre = client?.nombre || parsed.nombre
-      mesStr = client?.mesStr || parsed.mesStr || fallbackMes
-    } catch (e) {
-      console.error(`[p${i+1}] extracción error:`, e instanceof Error ? e.message : e)
-      const client = clientMeta[i]
-      nombre = client?.nombre || ''
-      mesStr = client?.mesStr || fallbackMes
-    }
+    const client  = clientMeta[i]
+    const nombre  = client?.nombre  || ''
+    const mesStr  = client?.mesStr  || fallbackMes
 
     const nombreFormateado = nombre ? formatearNombrePDF(nombre) : ''
     const nombreArchivo    = `${nombreFormateado || `Pagina ${i + 1}`} Liquidacion ${mesStr}.pdf`
@@ -279,7 +72,7 @@ export async function POST(req: NextRequest) {
       nombreFormateado,
       mesStr,
       anioStr,
-      pdfBase64:        signedBytes.toString('base64'),
+      pdfBase64:        Buffer.from(signedBytes).toString('base64'),
       nombreArchivo,
     })
   }
