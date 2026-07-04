@@ -15,12 +15,16 @@ function formatearNombrePDF(raw: string): string {
   return cap(parts[1]) + ' ' + parts[0][0].toUpperCase()
 }
 
-// Extracción server-side con pdfjs — funciona en Node.js con workerSrc vacío
+// Extracción server-side con pdfjs — usa el worker .mjs en public/ vía file://
 async function extractarPaginas(buf: ArrayBuffer): Promise<Array<{ nombre: string; mesStr: string | null }>> {
   try {
+    const { join } = await import('path')
     const pdfjs = await import('pdfjs-dist')
-    // En Node.js no hay browser worker; workerSrc vacío usa ejecución síncrona en main thread
-    ;(pdfjs as unknown as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc = ''
+
+    // pdfjs v6 en Node.js necesita una ruta real al worker; workerSrc='' no funciona en v6
+    const workerPath = join(process.cwd(), 'public', 'pdf.worker.min.mjs')
+    ;(pdfjs as unknown as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc =
+      `file://${workerPath}`
 
     const doc = await pdfjs.getDocument({ data: buf }).promise
     const out: Array<{ nombre: string; mesStr: string | null }> = []
@@ -132,11 +136,10 @@ export async function POST(req: NextRequest) {
   if (!pdfFile || !firmaBlob) return NextResponse.json({ error: 'Faltan archivos' }, { status: 400 })
 
   const rawBuf     = await pdfFile.arrayBuffer()
-  const pdfBytes   = new Uint8Array(rawBuf)
   const firmaBytes = new Uint8Array(await firmaBlob.arrayBuffer())
 
   let srcDoc: PDFDocument
-  try { srcDoc = await PDFDocument.load(rawBuf) }
+  try { srcDoc = await PDFDocument.load(rawBuf.slice(0)) }
   catch { return NextResponse.json({ error: 'PDF inválido o corrupto' }, { status: 400 }) }
 
   const numPages    = srcDoc.getPageCount()
