@@ -384,19 +384,16 @@ export function RecibosTab() {
     setProgreso({ actual: 0, total: 0 })
 
     try {
-      // 1. Extraer nombre y período de cada página (client-side, worker local)
-      const meta = await extractPageMeta(pdfFile)
-
-      // 2. Quitar fondo blanco de firma (Canvas API)
+      // 1. Quitar fondo blanco de firma (Canvas API)
       const sigBytes = await removeWhiteBg(firma)
 
-      // 3. Enviar al servidor para dividir y firmar
+      // 2. Enviar al servidor — el servidor extrae nombre/mes con pdfjs en Node.js
+      //    (evita el problema del web worker en iOS Safari)
       const fd = new FormData()
       fd.append('pdf', pdfFile)
       fd.append('firma', new Blob([sigBytes], { type: 'image/png' }), 'firma.png')
       fd.append('mes', String(mes))
       fd.append('anio', String(anio))
-      fd.append('meta', JSON.stringify(meta))
 
       const res  = await fetch('/api/liquidador/recibos/procesar', { method: 'POST', body: fd })
       const data = await res.json()
