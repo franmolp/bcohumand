@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { PDFDocument, PDFName, PDFRef, PDFArray, PDFRawStream } from 'pdf-lib'
+import { PDFDocument } from 'pdf-lib'
 import { inflateSync, inflateRawSync } from 'zlib'
 
 export const maxDuration = 60
@@ -16,13 +16,14 @@ function formatearNombrePDF(raw: string): string {
   return cap(parts[1]) + ' ' + parts[0][0].toUpperCase()
 }
 
+// ── Extracción de texto desde bytes crudos ────────────────────────────────────
+
 function decompress(buf: Buffer): Buffer {
   try { return inflateSync(buf) }    catch { /* continúa */ }
   try { return inflateRawSync(buf) } catch { /* continúa */ }
   return buf
 }
 
-// ── Construir mapa CID→Unicode escaneando todos los streams del PDF ───────────
 function* iterStreams(pdfBytes: Buffer): Generator<Buffer> {
   let pos = 0
   while (pos < pdfBytes.length) {
@@ -113,43 +114,21 @@ function streamToText(content: string, cidMap: Map<number, string>): string {
   return text
 }
 
-// ── Leer los streams de contenido de una página SIN copyPages ─────────────────
-// Usa context.lookup() directamente — srcDoc no se modifica en absoluto.
-function getPageContentStreams(srcDoc: PDFDocument, pageIndex: number): Buffer[] {
-  const page = srcDoc.getPages()[pageIndex]
-  if (!page) return []
-
-  const contentsEntry = page.node.get(PDFName.of('Contents'))
-  if (!contentsEntry) return []
-
-  const buffers: Buffer[] = []
-
-  function collect(obj: unknown): void {
-    if (!obj) return
-    if (obj instanceof PDFRef) {
-      collect(srcDoc.context.lookup(obj))
-    } else if (obj instanceof PDFArray) {
-      for (const item of obj.asArray()) collect(item)
-    } else if (obj instanceof PDFRawStream) {
-      if (obj.contents.length > 10) buffers.push(Buffer.from(obj.contents))
-    }
-  }
-
-  collect(contentsEntry)
-  return buffers
-}
-
-function extractPageText(srcDoc: PDFDocument, pageIndex: number, cidMap: Map<number, string>): string {
-  const rawStreams = getPageContentStreams(srcDoc, pageIndex)
-  let text = ''
-  for (const raw of rawStreams) {
+function extractTextFromBytes(pdfBytes: Buffer): string {
+  const cidMap = buildCidMap(pdfBytes)
+  let allText = ''
+  for (const raw of iterStreams(pdfBytes)) {
     const decoded = decompress(raw)
     const content = decoded.toString('binary')
     if (content.includes('Tj') || content.includes('TJ')) {
-      text += streamToText(content, cidMap)
+      allText += streamToText(content, cidMap)
     }
   }
-  return text
+  if (!allText.trim()) {
+    const rawStr = pdfBytes.toString('latin1')
+    for (const match of rawStr.matchAll(/[ -~\t]{5,}/g)) allText += match[0] + ' '
+  }
+  return allText
 }
 
 function parsearNombreMes(text: string, strs: string[]): { nombre: string; mesStr: string | null } {
@@ -222,6 +201,8 @@ function parsearNombreMes(text: string, strs: string[]): { nombre: string; mesSt
   return { nombre, mesStr: mesM ? mesM[1] : null }
 }
 
+// ── Handler ───────────────────────────────────────────────────────────────────
+
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
@@ -252,42 +233,10 @@ export async function POST(req: NextRequest) {
   const fallbackMes = MESES[mes - 1]
   const anioStr     = String(anio)
 
-  // CID map desde los bytes crudos (no toca srcDoc)
-  const cidMap = buildCidMap(Buffer.from(rawBuf))
-  console.log(`[cidMap] entries=${cidMap.size}`)
-
-  // Extracción de texto vía context.lookup() — SIN copyPages, srcDoc intacto
-  const serverPaginas = Array.from({ length: numPages }, (_, i) => {
-    try {
-      const text = extractPageText(srcDoc, i, cidMap)
-      const strs = text.split(/\s+/).filter(Boolean)
-      console.log(`[p${i+1}] len=${text.length} "${text.substring(0, 100).replace(/\s+/g,' ')}"`)
-      return parsearNombreMes(text, strs)
-    } catch (e) {
-      console.error(`[p${i+1}] error:`, e instanceof Error ? e.message : e)
-      return { nombre: '', mesStr: null }
-    }
-  })
-
-  // Cliente tiene prioridad si pdfjs extrajo algo
-  const paginas = serverPaginas.map((server, i) => {
-    const client = clientMeta[i]
-    return {
-      nombre: client?.nombre || server.nombre,
-      mesStr: client?.mesStr || server.mesStr,
-    }
-  })
-
   const results = []
 
-  // srcDoc nunca fue modificado por la extracción → copyPages produce PDFs válidos
   for (let i = 0; i < numPages; i++) {
-    const info             = paginas[i]
-    const nombreRaw        = info?.nombre || ''
-    const mesStr           = info?.mesStr || fallbackMes
-    const nombreFormateado = nombreRaw ? formatearNombrePDF(nombreRaw) : ''
-    const nombreArchivo    = `${nombreFormateado || `Pagina ${i + 1}`} Liquidacion ${mesStr}.pdf`
-
+    // 1. Firmar la página — srcDoc no se toca antes de este paso
     const newDoc = await PDFDocument.create()
     const [copied] = await newDoc.copyPages(srcDoc, [i])
     newDoc.addPage(copied)
@@ -299,15 +248,38 @@ export async function POST(req: NextRequest) {
     const sigHeight         = sigWidth * (sigImage.height / sigImage.width)
     page.drawImage(sigImage, { x: width * 0.57, y: height * 0.085, width: sigWidth, height: sigHeight, opacity: 0.92 })
 
-    const signedBytes = await newDoc.save()
+    const signedBytes = Buffer.from(await newDoc.save())
+
+    // 2. Extraer texto del PDF firmado ya generado (bytes independientes, no toca srcDoc)
+    //    pdf-lib copia todos los recursos de fuentes al hacer copyPages, incluido el CMap
+    let nombre = ''
+    let mesStr = fallbackMes
+    try {
+      const text = extractTextFromBytes(signedBytes)
+      const strs = text.split(/\s+/).filter(Boolean)
+      console.log(`[p${i+1}] len=${text.length} "${text.substring(0, 100).replace(/\s+/g,' ')}"`)
+      const parsed = parsearNombreMes(text, strs)
+      // Cliente tiene prioridad si pdfjs extrajo algo
+      const client = clientMeta[i]
+      nombre = client?.nombre || parsed.nombre
+      mesStr = client?.mesStr || parsed.mesStr || fallbackMes
+    } catch (e) {
+      console.error(`[p${i+1}] extracción error:`, e instanceof Error ? e.message : e)
+      const client = clientMeta[i]
+      nombre = client?.nombre || ''
+      mesStr = client?.mesStr || fallbackMes
+    }
+
+    const nombreFormateado = nombre ? formatearNombrePDF(nombre) : ''
+    const nombreArchivo    = `${nombreFormateado || `Pagina ${i + 1}`} Liquidacion ${mesStr}.pdf`
 
     results.push({
       pageIndex:        i,
-      nombreRaw:        nombreRaw || '',
+      nombreRaw:        nombre || '',
       nombreFormateado,
       mesStr,
       anioStr,
-      pdfBase64:        Buffer.from(signedBytes).toString('base64'),
+      pdfBase64:        signedBytes.toString('base64'),
       nombreArchivo,
     })
   }
