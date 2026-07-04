@@ -92,10 +92,15 @@ async function extractPageMeta(file: File): Promise<PageMeta[]> {
     for (let i = 1; i <= doc.numPages; i++) {
       const page    = await doc.getPage(i)
       const content = await page.getTextContent()
-      const text    = content.items.map(it => it.str).join(' ')
+      // Join with single space; some PDFs emit items without separators
+      const text = content.items.map(it => it.str).join(' ')
+
+      // Name: capture everything after the label up to CUIL / DNI / Período / double-space
+      // Use lookahead so boundary chars aren't consumed; .+? handles any encoding
       const nameMatch =
-        text.match(/Nombre\s+y\s+Apellido[\s:]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s]+?)(?:\s{2,}|CUIL|DNI|Per[ií]|$)/i) ??
-        text.match(/Apellido\s+y\s+Nombre[\s:]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s]+?)(?:\s{2,}|CUIL|DNI|Per[ií]|$)/i)
+        text.match(/Nombre\s+y\s+Apellido\s*:?\s*(.+?)(?=\s{2,}|\s+CUIL|\s+DNI|\s+Per[ií]|$)/i) ??
+        text.match(/Apellido\s+y\s+Nombre\s*:?\s*(.+?)(?=\s{2,}|\s+CUIL|\s+DNI|\s+Per[ií]|$)/i)
+
       const periodMatch = text.match(/Per[ií]odo[\s:]+([A-Za-záéíóúüñ]+)\s+(\d{4})/i)
       result.push({
         nombre: nameMatch ? nameMatch[1].trim() : '',
