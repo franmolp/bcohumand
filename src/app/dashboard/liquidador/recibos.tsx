@@ -487,13 +487,16 @@ export function RecibosTab() {
       const mesPdf = recibo.mesStr ? MESES.indexOf(recibo.mesStr) + 1 : -1
       const mesUpload = mesPdf > 0 ? mesPdf : mes
 
-      // Convertir bytes a base64 en el cliente (FileReader es 100% confiable en browser)
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload  = () => resolve((reader.result as string).split(',')[1])
-        reader.onerror = reject
-        reader.readAsDataURL(new Blob([recibo.pdfBytes], { type: 'application/pdf' }))
-      })
+      // Convertir bytes a base64 en el cliente (loop nativo, funciona en iOS)
+      const bytes = recibo.pdfBytes
+      let binary = ''
+      const chunk = 8192
+      for (let k = 0; k < bytes.length; k += chunk) {
+        binary += String.fromCharCode(...bytes.subarray(k, k + chunk))
+      }
+      const base64 = btoa(binary)
+      console.log(`[subir ${index}] base64 len=${base64.length} nombre="${recibo.nombreArchivo}"`)
+      if (!base64) throw new Error('No se pudo codificar el PDF')
 
       const r = await fetch('/api/liquidador/recibos/upload', {
         method:  'POST',

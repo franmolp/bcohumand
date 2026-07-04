@@ -17,8 +17,16 @@ export async function POST(request: NextRequest) {
     const nombre        = body.nombre as string
     const nombreArchivo = body.nombre_archivo as string
 
-    if (!base64 || !anioStr || !mesStr || !nombre || !nombreArchivo) {
-      return NextResponse.json({ error: 'Faltan campos requeridos' }, { status: 400 })
+    const missing = [
+      !base64        && 'base64',
+      !anioStr       && 'anio',
+      !mesStr        && 'mes',
+      !nombre        && 'nombre',
+      !nombreArchivo && 'nombre_archivo',
+    ].filter(Boolean)
+    if (missing.length) {
+      console.error('[upload] campos faltantes:', missing, '| base64 len:', base64?.length ?? 0)
+      return NextResponse.json({ error: `Faltan campos: ${missing.join(', ')}` }, { status: 400 })
     }
 
     const anio = parseInt(anioStr)
