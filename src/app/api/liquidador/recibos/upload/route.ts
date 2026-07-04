@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { supabase } from '@/lib/supabase'
 import { getSession } from '@/lib/auth'
 import { gasReady, gasUpload } from '@/lib/gas-upload'
-import { crearNotificacion } from '@/lib/notificaciones'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -62,23 +60,8 @@ export async function POST(request: NextRequest) {
     if (dbError) {
       console.error('DB register error:', dbError.message)
     } else {
-      // Buscar el empleado por nombre y notificarle
-      const { data: emp } = await supabase
-        .from('usuarios')
-        .select('id')
-        .ilike('nombre', nombre)
-        .eq('estado_cuenta', 'activo')
-        .maybeSingle()
-
-      if (emp?.id) {
-        const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
-        await crearNotificacion({
-          usuario_id: emp.id,
-          titulo: `Tu recibo de sueldo está disponible`,
-          mensaje: `Ya podés ver tu liquidación de ${meses[mes - 1]} ${anio}.`,
-          tipo: 'recibo',
-        })
-      }
+      // Notificación desactivada temporalmente
+      // if (emp?.id) { await crearNotificacion({ ... }) }
     }
 
     return NextResponse.json({ url })
