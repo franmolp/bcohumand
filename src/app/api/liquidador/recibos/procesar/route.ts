@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
-import { PDFDocument } from 'pdf-lib'
+import { PDFDocument, PDFName, PDFRef, PDFArray, PDFRawStream } from 'pdf-lib'
 import { inflateSync, inflateRawSync } from 'zlib'
 
 export const maxDuration = 60
@@ -22,6 +22,7 @@ function decompress(buf: Buffer): Buffer {
   return buf
 }
 
+// ── Construir mapa CID→Unicode escaneando todos los streams del PDF ───────────
 function* iterStreams(pdfBytes: Buffer): Generator<Buffer> {
   let pos = 0
   while (pos < pdfBytes.length) {
@@ -112,20 +113,43 @@ function streamToText(content: string, cidMap: Map<number, string>): string {
   return text
 }
 
-function extractPdfText(pdfBytes: Buffer, cidMap: Map<number, string>): string {
-  let allText = ''
-  for (const raw of iterStreams(pdfBytes)) {
+// ── Leer los streams de contenido de una página SIN copyPages ─────────────────
+// Usa context.lookup() directamente — srcDoc no se modifica en absoluto.
+function getPageContentStreams(srcDoc: PDFDocument, pageIndex: number): Buffer[] {
+  const page = srcDoc.getPages()[pageIndex]
+  if (!page) return []
+
+  const contentsEntry = page.node.get(PDFName.of('Contents'))
+  if (!contentsEntry) return []
+
+  const buffers: Buffer[] = []
+
+  function collect(obj: unknown): void {
+    if (!obj) return
+    if (obj instanceof PDFRef) {
+      collect(srcDoc.context.lookup(obj))
+    } else if (obj instanceof PDFArray) {
+      for (const item of obj.asArray()) collect(item)
+    } else if (obj instanceof PDFRawStream) {
+      if (obj.contents.length > 10) buffers.push(Buffer.from(obj.contents))
+    }
+  }
+
+  collect(contentsEntry)
+  return buffers
+}
+
+function extractPageText(srcDoc: PDFDocument, pageIndex: number, cidMap: Map<number, string>): string {
+  const rawStreams = getPageContentStreams(srcDoc, pageIndex)
+  let text = ''
+  for (const raw of rawStreams) {
     const decoded = decompress(raw)
     const content = decoded.toString('binary')
     if (content.includes('Tj') || content.includes('TJ')) {
-      allText += streamToText(content, cidMap)
+      text += streamToText(content, cidMap)
     }
   }
-  if (!allText.trim()) {
-    const rawStr = pdfBytes.toString('latin1')
-    for (const m of rawStr.matchAll(/[ -~\t]{5,}/g)) allText += m[0] + ' '
-  }
-  return allText
+  return text
 }
 
 function parsearNombreMes(text: string, strs: string[]): { nombre: string; mesStr: string | null } {
@@ -198,32 +222,6 @@ function parsearNombreMes(text: string, strs: string[]): { nombre: string; mesSt
   return { nombre, mesStr: mesM ? mesM[1] : null }
 }
 
-// Extrae texto por página usando un PDFDocument DEDICADO solo a esto,
-// completamente separado del srcDoc que se usa para firmar.
-async function extractarPaginas(
-  srcDocTexto: PDFDocument,
-  numPages:    number,
-  cidMap:      Map<number, string>
-): Promise<Array<{ nombre: string; mesStr: string | null }>> {
-  const out: Array<{ nombre: string; mesStr: string | null }> = []
-  for (let i = 0; i < numPages; i++) {
-    try {
-      const pageDoc = await PDFDocument.create()
-      const [copied] = await pageDoc.copyPages(srcDocTexto, [i])
-      pageDoc.addPage(copied)
-      const pageBytes = Buffer.from(await pageDoc.save())
-      const text = extractPdfText(pageBytes, cidMap)
-      const strs = text.split(/\s+/).filter(Boolean)
-      console.log(`[p${i+1}] len=${text.length} "${text.substring(0, 120).replace(/\s+/g,' ')}"`)
-      out.push(parsearNombreMes(text, strs))
-    } catch (e) {
-      console.error(`[p${i+1}] error:`, e instanceof Error ? e.message : e)
-      out.push({ nombre: '', mesStr: null })
-    }
-  }
-  return out
-}
-
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
@@ -246,31 +244,32 @@ export async function POST(req: NextRequest) {
   const rawBuf     = await pdfFile.arrayBuffer()
   const firmaBytes = new Uint8Array(await firmaBlob.arrayBuffer())
 
-  // ── Dos instancias completamente separadas del mismo PDF ──────────────────
-  // srcDocTexto: solo para extracción de texto (puede quedar en estado alterado)
-  // srcDocFirma: solo para firmar, NUNCA tocado por extracción
-  let srcDocTexto: PDFDocument
-  let srcDocFirma: PDFDocument
-  try {
-    // Copiar el buffer para que cada load tenga su propia memoria independiente
-    const buf1 = rawBuf.slice(0)
-    const buf2 = rawBuf.slice(0)
-    srcDocTexto = await PDFDocument.load(buf1)
-    srcDocFirma = await PDFDocument.load(buf2)
-  } catch {
-    return NextResponse.json({ error: 'PDF inválido o corrupto' }, { status: 400 })
-  }
+  let srcDoc: PDFDocument
+  try { srcDoc = await PDFDocument.load(rawBuf) }
+  catch { return NextResponse.json({ error: 'PDF inválido o corrupto' }, { status: 400 }) }
 
-  const numPages    = srcDocFirma.getPageCount()
+  const numPages    = srcDoc.getPageCount()
   const fallbackMes = MESES[mes - 1]
   const anioStr     = String(anio)
 
-  // Extracción server-side con CID map (usa srcDocTexto, no toca srcDocFirma)
+  // CID map desde los bytes crudos (no toca srcDoc)
   const cidMap = buildCidMap(Buffer.from(rawBuf))
   console.log(`[cidMap] entries=${cidMap.size}`)
-  const serverPaginas = await extractarPaginas(srcDocTexto, numPages, cidMap)
 
-  // Cliente tiene prioridad si pdfjs extrajo algo, server como fallback
+  // Extracción de texto vía context.lookup() — SIN copyPages, srcDoc intacto
+  const serverPaginas = Array.from({ length: numPages }, (_, i) => {
+    try {
+      const text = extractPageText(srcDoc, i, cidMap)
+      const strs = text.split(/\s+/).filter(Boolean)
+      console.log(`[p${i+1}] len=${text.length} "${text.substring(0, 100).replace(/\s+/g,' ')}"`)
+      return parsearNombreMes(text, strs)
+    } catch (e) {
+      console.error(`[p${i+1}] error:`, e instanceof Error ? e.message : e)
+      return { nombre: '', mesStr: null }
+    }
+  })
+
+  // Cliente tiene prioridad si pdfjs extrajo algo
   const paginas = serverPaginas.map((server, i) => {
     const client = clientMeta[i]
     return {
@@ -281,7 +280,7 @@ export async function POST(req: NextRequest) {
 
   const results = []
 
-  // Firma usando srcDocFirma, que nunca fue tocado por la extracción
+  // srcDoc nunca fue modificado por la extracción → copyPages produce PDFs válidos
   for (let i = 0; i < numPages; i++) {
     const info             = paginas[i]
     const nombreRaw        = info?.nombre || ''
@@ -290,7 +289,7 @@ export async function POST(req: NextRequest) {
     const nombreArchivo    = `${nombreFormateado || `Pagina ${i + 1}`} Liquidacion ${mesStr}.pdf`
 
     const newDoc = await PDFDocument.create()
-    const [copied] = await newDoc.copyPages(srcDocFirma, [i])
+    const [copied] = await newDoc.copyPages(srcDoc, [i])
     newDoc.addPage(copied)
 
     const page              = newDoc.getPages()[0]
