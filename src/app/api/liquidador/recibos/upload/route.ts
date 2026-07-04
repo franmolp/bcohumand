@@ -2,6 +2,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/auth'
 import { gasReady, gasUploadBase64 } from '@/lib/gas-upload'
+import { crearNotificacion } from '@/lib/notificaciones'
+
+const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+
+// Mismo algoritmo que normNombre() en el GET — convierte "Rocio Ojeda" → "Rocio O"
+function normNombre(nombre: string): string {
+  const parts = nombre.trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return nombre
+  const first = parts[0]
+  const last  = parts[parts.length - 1]
+  if (parts.length === 1) return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase()
+  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase() + ' ' + last.charAt(0).toUpperCase()
+}
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -65,8 +78,25 @@ export async function POST(request: NextRequest) {
     if (dbError) {
       console.error('DB register error:', dbError.message)
     } else {
-      // Notificación desactivada temporalmente
-      // if (emp?.id) { await crearNotificacion({ ... }) }
+      // Notificar al empleado — buscar por nombre normalizado
+      try {
+        const { data: users } = await supabaseAdmin
+          .from('usuarios')
+          .select('id, nombre')
+          .eq('estado_cuenta', 'activo')
+        const emp = users?.find(u => normNombre(u.nombre) === nombre)
+        if (emp?.id) {
+          const mesNombre = MESES_ES[mes - 1] ?? String(mes)
+          await crearNotificacion({
+            usuario_id: emp.id,
+            titulo:     'Nuevo recibo de sueldo',
+            mensaje:    `Tu recibo de ${mesNombre} ${anio} ya está disponible`,
+            tipo:       'recibo',
+          })
+        }
+      } catch (notifErr) {
+        console.error('Error al enviar notificación de recibo:', notifErr)
+      }
     }
 
     return NextResponse.json({ url })
