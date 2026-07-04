@@ -390,66 +390,72 @@ export function RecibosTab() {
     setProgreso({ actual: 0, total: 0 })
 
     try {
-      // 1. Quitar fondo blanco de firma (Canvas API)
-      const sigBytes = await removeWhiteBg(firma)
+      // 1. Importar pdf-lib (puro JS, funciona en browser/iOS sin problemas de servidor)
+      const { PDFDocument } = await import('pdf-lib')
 
-      // 2. Extraer nombre y mes client-side con pdfjs (funciona en desktop Chrome/Safari)
-      const pdfjsMeta = await extractPageMeta(pdfFile)
+      // 2. Leer PDF y firma en paralelo
+      const [rawBuf, sigBytes] = await Promise.all([
+        pdfFile.arrayBuffer(),
+        removeWhiteBg(firma),
+      ])
 
-      // 3. Extraer nombre y mes server-side con CID (funciona en iOS Safari)
-      let serverMeta: PageMeta[] = []
-      try {
-        const fdEx = new FormData()
-        fdEx.append('pdf', pdfFile)
-        const resEx = await fetch('/api/liquidador/recibos/extraer', { method: 'POST', body: fdEx })
-        if (resEx.ok) {
-          const dataEx = await resEx.json()
-          serverMeta = Array.isArray(dataEx.pages) ? dataEx.pages : []
-        }
-      } catch { /* silencio — se usa solo pdfjs */ }
+      const srcDoc  = await PDFDocument.load(rawBuf)
+      const numPages = srcDoc.getPageCount()
+      setProgreso({ actual: 0, total: numPages })
 
-      // 4. Fusionar: pdfjs tiene prioridad si extrajo algo, fallback a server CID
-      const maxLen = Math.max(pdfjsMeta.length, serverMeta.length)
-      const pageMeta: PageMeta[] = Array.from({ length: maxLen }, (_, i) => ({
-        nombre: pdfjsMeta[i]?.nombre || serverMeta[i]?.nombre || '',
-        mesStr: pdfjsMeta[i]?.mesStr || serverMeta[i]?.mesStr || null,
-      }))
+      // 3. Extraer metadata: pdfjs (desktop) y servidor CID (iOS) en paralelo
+      const [pdfjsMeta, serverMeta] = await Promise.all([
+        extractPageMeta(pdfFile),
+        (async (): Promise<PageMeta[]> => {
+          try {
+            const fdEx = new FormData()
+            fdEx.append('pdf', pdfFile)
+            const resEx = await fetch('/api/liquidador/recibos/extraer', { method: 'POST', body: fdEx })
+            if (!resEx.ok) return []
+            const d = await resEx.json()
+            return Array.isArray(d.pages) ? d.pages : []
+          } catch { return [] }
+        })(),
+      ])
 
-      // 5. Enviar al servidor para firmar — el servidor solo firma, usa pageMeta fusionado
-      const fd = new FormData()
-      fd.append('pdf', pdfFile)
-      fd.append('firma', new Blob([sigBytes], { type: 'image/png' }), 'firma.png')
-      fd.append('mes', String(mes))
-      fd.append('anio', String(anio))
-      fd.append('pageMeta', JSON.stringify(pageMeta))
+      const fallbackMes = MESES[mes - 1]
+      const anioStr     = String(anio)
 
-      const res  = await fetch('/api/liquidador/recibos/procesar', { method: 'POST', body: fd })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Error del servidor')
+      // 4. Firmar cada página directamente en el browser — pdf-lib es JS puro
+      const results: ReciboProcesado[] = []
 
-      const pages: Array<{
-        pageIndex: number; nombreRaw: string; nombreFormateado: string
-        mesStr: string; anioStr: string; pdfBase64: string; nombreArchivo: string
-      }> = data.pages
+      for (let i = 0; i < numPages; i++) {
+        const pageDoc    = await PDFDocument.create()
+        const [copied]   = await pageDoc.copyPages(srcDoc, [i])
+        pageDoc.addPage(copied)
 
-      // 6. Convertir base64 → bytes y armar estado inicial (sin thumbnails aún)
-      const results: ReciboProcesado[] = pages.map(p => {
-        const binary = atob(p.pdfBase64)
-        const bytes  = new Uint8Array(binary.length)
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-        return {
-          pageIndex: p.pageIndex, nombreRaw: p.nombreRaw,
-          nombreFormateado: p.nombreFormateado,
-          mesStr: p.mesStr, anioStr: p.anioStr,
-          pdfBytes: bytes, previewUrl: '',
-          status: 'pending' as const, nombreArchivo: p.nombreArchivo,
-        }
-      })
+        const page              = pageDoc.getPages()[0]
+        const { width, height } = page.getSize()
+        const sigImage          = await pageDoc.embedPng(sigBytes)
+        const sigWidth          = width * 0.11
+        const sigHeight         = sigWidth * (sigImage.height / sigImage.width)
+        page.drawImage(sigImage, { x: width * 0.57, y: height * 0.085, width: sigWidth, height: sigHeight, opacity: 0.92 })
 
-      setProgreso({ actual: data.total, total: data.total })
+        const signedBytes = await pageDoc.save()
+
+        const nombre = pdfjsMeta[i]?.nombre || serverMeta[i]?.nombre || ''
+        const mesStr = pdfjsMeta[i]?.mesStr || serverMeta[i]?.mesStr || fallbackMes
+
+        const nombreFormateado = nombre ? formatearNombrePDF(nombre) : ''
+        const nombreArchivo    = `${nombreFormateado || `Pagina ${i + 1}`} Liquidacion ${mesStr}.pdf`
+
+        results.push({
+          pageIndex: i, nombreRaw: nombre, nombreFormateado,
+          mesStr, anioStr, pdfBytes: signedBytes,
+          previewUrl: '', status: 'pending', nombreArchivo,
+        })
+
+        setProgreso({ actual: i + 1, total: numPages })
+      }
+
       setRecibos(results)
 
-      // 7. Generar thumbnails uno por uno en el fondo
+      // 5. Generar thumbnails uno por uno en el fondo
       for (let i = 0; i < results.length; i++) {
         const thumb = await renderThumbnail(results[i].pdfBytes)
         if (thumb) setRecibos(prev => prev.map((r, idx) => idx === i ? { ...r, previewUrl: thumb } : r))
