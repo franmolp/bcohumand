@@ -393,13 +393,16 @@ export function RecibosTab() {
       // 1. Quitar fondo blanco de firma (Canvas API)
       const sigBytes = await removeWhiteBg(firma)
 
-      // 2. Enviar al servidor — el servidor extrae nombre/mes con pdfjs en Node.js
-      //    (evita el problema del web worker en iOS Safari)
+      // 2. Extraer nombre y mes client-side con pdfjs (evita problemas server-side)
+      const pageMeta = await extractPageMeta(pdfFile)
+
+      // 3. Enviar al servidor — el servidor solo firma, usa pageMeta del cliente
       const fd = new FormData()
       fd.append('pdf', pdfFile)
       fd.append('firma', new Blob([sigBytes], { type: 'image/png' }), 'firma.png')
       fd.append('mes', String(mes))
       fd.append('anio', String(anio))
+      fd.append('pageMeta', JSON.stringify(pageMeta))
 
       const res  = await fetch('/api/liquidador/recibos/procesar', { method: 'POST', body: fd })
       const data = await res.json()

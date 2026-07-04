@@ -227,12 +227,17 @@ export async function POST(req: NextRequest) {
   try { formData = await req.formData() }
   catch { return NextResponse.json({ error: 'Error al leer el formulario' }, { status: 400 }) }
 
-  const pdfFile   = formData.get('pdf')   as File | null
-  const firmaBlob = formData.get('firma') as Blob | null
-  const mes       = parseInt(formData.get('mes')  as string || '') || (new Date().getMonth() + 1)
-  const anio      = parseInt(formData.get('anio') as string || '') || new Date().getFullYear()
+  const pdfFile      = formData.get('pdf')      as File | null
+  const firmaBlob    = formData.get('firma')    as Blob | null
+  const mes          = parseInt(formData.get('mes')  as string || '') || (new Date().getMonth() + 1)
+  const anio         = parseInt(formData.get('anio') as string || '') || new Date().getFullYear()
+  const pageMetaRaw  = formData.get('pageMeta') as string | null
 
   if (!pdfFile || !firmaBlob) return NextResponse.json({ error: 'Faltan archivos' }, { status: 400 })
+
+  // Metadatos extraídos por el cliente con pdfjs (más confiable que server-side)
+  let clientMeta: Array<{ nombre: string; mesStr: string | null }> = []
+  try { if (pageMetaRaw) clientMeta = JSON.parse(pageMetaRaw) } catch {}
 
   const rawBuf     = await pdfFile.arrayBuffer()
   const firmaBytes = new Uint8Array(await firmaBlob.arrayBuffer())
@@ -245,7 +250,10 @@ export async function POST(req: NextRequest) {
   const fallbackMes = MESES[mes - 1]
   const anioStr     = String(anio)
 
-  const paginas = await extractarPaginas(srcDoc, numPages)
+  // Usa metadatos del cliente si están disponibles; si no, corre extracción server-side
+  const paginas = clientMeta.length >= numPages
+    ? clientMeta.map(m => ({ nombre: m.nombre, mesStr: m.mesStr }))
+    : await extractarPaginas(srcDoc, numPages)
 
   const results = []
 
