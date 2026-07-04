@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { PDFDocument } from 'pdf-lib'
+import { inflateSync } from 'zlib'
 
 export const maxDuration = 60
 
-const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+const MESES    = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 const MESES_RE = MESES.join('|')
 
 function cap(s: string) { return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '' }
@@ -15,49 +16,93 @@ function formatearNombrePDF(raw: string): string {
   return cap(parts[1]) + ' ' + parts[0][0].toUpperCase()
 }
 
-// Extracción server-side con pdfjs legacy build (diseñado para Node.js)
-async function extractarPaginas(buf: ArrayBuffer): Promise<Array<{ nombre: string; mesStr: string | null }>> {
-  try {
-    const { join }         = await import('path')
-    const { existsSync }   = await import('fs')
-    const { createRequire } = await import('module')
-    // El build principal (pdf.mjs) usa DOMMatrix y otras APIs de browser — falla en Node.js
-    // El legacy build está específicamente preparado para Node.js
-    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+// ── Extracción de texto desde bytes PDF ──────────────────────────────────────
+// Sin pdfjs, sin worker threads — usa zlib (built-in Node.js) para descomprimir
+// streams FlateDecode y regex para extraer operadores Tj/TJ del PDF.
+// Funciona en cualquier entorno Node.js, incluyendo Vercel Lambda.
+function extractPdfText(pdfBytes: Buffer): string {
+  const STREAM    = Buffer.from('stream')
+  const ENDSTREAM = Buffer.from('endstream')
+  let allText = ''
+  let pos     = 0
 
-    // createRequire usa la resolución de módulos de Node.js → encuentra el archivo
-    // incluso en Vercel Lambda donde process.cwd() puede apuntar a /var/task
-    let workerPath: string
-    try {
-      const req = createRequire(import.meta.url)
-      workerPath = req.resolve('pdfjs-dist/legacy/build/pdf.worker.min.mjs')
-    } catch {
-      workerPath = join(process.cwd(), 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.min.mjs')
+  while (pos < pdfBytes.length) {
+    const si = pdfBytes.indexOf(STREAM, pos)
+    if (si === -1) break
+
+    let start = si + STREAM.length
+    if (pdfBytes[start] === 13) start++ // CR
+    if (pdfBytes[start] === 10) start++ // LF
+
+    const ei = pdfBytes.indexOf(ENDSTREAM, start)
+    if (ei === -1) break
+
+    let end = ei
+    while (end > start && (pdfBytes[end - 1] === 13 || pdfBytes[end - 1] === 10)) end--
+
+    const raw = pdfBytes.slice(start, end)
+    let content: string
+    try { content = inflateSync(raw).toString('binary') }
+    catch { content = raw.toString('binary') }
+
+    if (!content.includes('Tj') && !content.includes('TJ')) {
+      pos = ei + ENDSTREAM.length
+      continue
     }
 
-    console.log('[pdfjs] worker:', workerPath, '| exists:', existsSync(workerPath))
-    ;(pdfjs as unknown as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc =
-      `file://${workerPath}`
+    // (text)Tj
+    const reTj = /\(([^)\\]*(?:\\.[^)\\]*)*)\)\s*Tj/g
+    let m: RegExpExecArray | null
+    while ((m = reTj.exec(content)) !== null) {
+      allText += m[1].replace(/\\[nrt]/g, ' ').replace(/\\(.)/g, '$1') + ' '
+    }
 
-    const doc = await pdfjs.getDocument({ data: buf }).promise
-    const out: Array<{ nombre: string; mesStr: string | null }> = []
+    // [(text)num...]TJ
+    const reTJ = /\[([^\]]*)\]\s*TJ/g
+    while ((m = reTJ.exec(content)) !== null) {
+      const rePart = /\(([^)\\]*(?:\\.[^)\\]*)*)\)/g
+      let p: RegExpExecArray | null
+      while ((p = rePart.exec(m[1])) !== null) {
+        allText += p[1].replace(/\\[nrt]/g, ' ').replace(/\\(.)/g, '$1')
+      }
+      allText += ' '
+    }
 
-    for (let i = 1; i <= doc.numPages; i++) {
-      const page    = await doc.getPage(i)
-      const content = await page.getTextContent()
-      const strs    = (content.items as Array<{ str: string }>).map(it => it.str)
-      const text    = strs.join(' ')
+    pos = ei + ENDSTREAM.length
+  }
 
-      // ── Mes ──────────────────────────────────────────────────────────────
+  return allText
+}
+
+// ── Extracción de nombre y mes por página ────────────────────────────────────
+// Para cada página: crea un PDF de una página con pdf-lib → extrae texto → regex.
+async function extractarPaginas(
+  srcDoc: PDFDocument,
+  numPages: number
+): Promise<Array<{ nombre: string; mesStr: string | null }>> {
+  const out: Array<{ nombre: string; mesStr: string | null }> = []
+
+  for (let i = 0; i < numPages; i++) {
+    try {
+      const pageDoc = await PDFDocument.create()
+      const [copied] = await pageDoc.copyPages(srcDoc, [i])
+      pageDoc.addPage(copied)
+      const pageBytes = Buffer.from(await pageDoc.save())
+      const text      = extractPdfText(pageBytes)
+      const strs      = text.split(/\s+/).filter(Boolean)
+
+      console.log(`[pdf p${i + 1}] preview:`, text.substring(0, 250).replace(/\s+/g, ' '))
+
+      // ── Mes ────────────────────────────────────────────────────────────────
       const mesM =
         text.match(new RegExp(`Per[ií]odo[\\s:]+(${MESES_RE})\\s+20\\d{2}`, 'i')) ??
         text.match(new RegExp(`Liquidaci[oó]n[\\s:]+(${MESES_RE})\\s+20\\d{2}`, 'i')) ??
         text.match(new RegExp(`\\b(${MESES_RE})\\s+20\\d{2}\\b`, 'i'))
 
-      // ── Nombre — 5 estrategias ────────────────────────────────────────────
+      // ── Nombre — 5 estrategias ──────────────────────────────────────────────
       let nombre = ''
 
-      // S1: etiqueta "Apellido y Nombre:" → valor
+      // S1: "Apellido y Nombre:" → valor
       if (!nombre) {
         const m = text.match(
           /(?:Apellido\s+y\s+Nombre[s]?|Nombre[s]?\s+y\s+Apellido)\s*[:\-]?\s*(.{1,80}?)(?=\s{2,}|\s+CUIL|\s+DNI|\s+\d{2}[-.\s]\d|\s+Per[ií])/i
@@ -68,7 +113,7 @@ async function extractarPaginas(buf: ArrayBuffer): Promise<Array<{ nombre: strin
         }
       }
 
-      // S2: texto justo antes del número de CUIL (XX-XXXXXXXX-X o XX.XXXXXXXX.X)
+      // S2: texto antes del CUIL
       if (!nombre) {
         const cuilM = text.match(/\b(\d{2}[-.\s]\d{7,8}[-.\s]\d)\b/)
         if (cuilM) {
@@ -81,7 +126,7 @@ async function extractarPaginas(buf: ArrayBuffer): Promise<Array<{ nombre: strin
         }
       }
 
-      // S3: ítem "CUIL" en array → ítems ALL-CAPS anteriores
+      // S3: ítem "CUIL" → ítems ALL-CAPS anteriores
       if (!nombre) {
         for (let j = 0; j < strs.length; j++) {
           if (/^CUIL\s*:?$/i.test(strs[j].trim())) {
@@ -89,9 +134,8 @@ async function extractarPaginas(buf: ArrayBuffer): Promise<Array<{ nombre: strin
             for (let k = j - 1; k >= Math.max(0, j - 12); k--) {
               const c = strs[k].trim()
               if (!c || /^[:\-\/·\s]+$/.test(c)) continue
-              if (/^[A-ZÁÉÍÓÚÜÑ]{2,}(?: [A-ZÁÉÍÓÚÜÑ]{2,})*$/.test(c)) {
-                parts.unshift(...c.split(/\s+/))
-              } else break
+              if (/^[A-ZÁÉÍÓÚÜÑ]{2,}(?: [A-ZÁÉÍÓÚÜÑ]{2,})*$/.test(c)) parts.unshift(...c.split(/\s+/))
+              else break
             }
             if (parts.length >= 2) { nombre = parts.join(' '); break }
           }
@@ -116,7 +160,7 @@ async function extractarPaginas(buf: ArrayBuffer): Promise<Array<{ nombre: strin
         }
       }
 
-      // S5: campos "Apellido:" y "Nombre:" separados
+      // S5: "Apellido:" y "Nombre:" separados
       if (!nombre) {
         const ap = text.match(/\bApellido\s*[:\-]\s*([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,})*)/i)
         const nm = text.match(/\bNombres?\s*[:\-]\s*([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,})*)/i)
@@ -125,12 +169,13 @@ async function extractarPaginas(buf: ArrayBuffer): Promise<Array<{ nombre: strin
       }
 
       out.push({ nombre, mesStr: mesM ? mesM[1] : null })
+    } catch (e) {
+      console.error(`[pdf p${i + 1}] error:`, e instanceof Error ? e.message : e)
+      out.push({ nombre: '', mesStr: null })
     }
-    return out
-  } catch (e) {
-    console.error('[extractarPaginas] FALLO:', e instanceof Error ? `${e.message}\n${e.stack}` : e)
-    return []
   }
+
+  return out
 }
 
 export async function POST(req: NextRequest) {
@@ -141,8 +186,8 @@ export async function POST(req: NextRequest) {
   try { formData = await req.formData() }
   catch { return NextResponse.json({ error: 'Error al leer el formulario' }, { status: 400 }) }
 
-  const pdfFile   = formData.get('pdf')    as File | null
-  const firmaBlob = formData.get('firma')  as Blob | null
+  const pdfFile   = formData.get('pdf')   as File | null
+  const firmaBlob = formData.get('firma') as Blob | null
   const mes       = parseInt(formData.get('mes')  as string || '') || (new Date().getMonth() + 1)
   const anio      = parseInt(formData.get('anio') as string || '') || new Date().getFullYear()
 
@@ -152,20 +197,19 @@ export async function POST(req: NextRequest) {
   const firmaBytes = new Uint8Array(await firmaBlob.arrayBuffer())
 
   let srcDoc: PDFDocument
-  try { srcDoc = await PDFDocument.load(rawBuf.slice(0)) }
+  try { srcDoc = await PDFDocument.load(rawBuf) }
   catch { return NextResponse.json({ error: 'PDF inválido o corrupto' }, { status: 400 }) }
 
   const numPages    = srcDoc.getPageCount()
   const fallbackMes = MESES[mes - 1]
   const anioStr     = String(anio)
 
-  // Extracción server-side (funciona en iOS y en todo device porque ocurre en el servidor)
-  const paginas = await extractarPaginas(rawBuf.slice(0))
+  const paginas = await extractarPaginas(srcDoc, numPages)
 
   const results = []
 
   for (let i = 0; i < numPages; i++) {
-    const info     = paginas[i]
+    const info             = paginas[i]
     const nombreRaw        = info?.nombre || ''
     const mesStr           = info?.mesStr || fallbackMes
     const nombreFormateado = nombreRaw ? formatearNombrePDF(nombreRaw) : `Pagina ${i + 1}`
@@ -190,7 +234,7 @@ export async function POST(req: NextRequest) {
       nombreFormateado,
       mesStr,
       anioStr,
-      pdfBase64: Buffer.from(signedBytes).toString('base64'),
+      pdfBase64:    Buffer.from(signedBytes).toString('base64'),
       nombreArchivo,
     })
   }
