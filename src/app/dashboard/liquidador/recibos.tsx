@@ -459,7 +459,7 @@ export function RecibosTab() {
       fd.append('file', new Blob([recibo.pdfBytes], { type: 'application/pdf' }), recibo.nombreArchivo)
       fd.append('anio', recibo.anioStr)
       fd.append('mes', String(mes))
-      fd.append('nombre', recibo.nombreEditado ?? recibo.nombreFormateado || `Pagina ${index + 1}`)
+      fd.append('nombre', (recibo.nombreEditado ?? recibo.nombreFormateado) || `Pagina ${index + 1}`)
       fd.append('nombre_archivo', recibo.nombreArchivo)
 
       const r = await fetch('/api/liquidador/recibos/upload', { method: 'POST', body: fd })
@@ -641,7 +641,7 @@ export function RecibosTab() {
                         className={`text-[13px] font-semibold text-left w-full truncate block ${r.status !== 'uploaded' ? 'hover:text-[var(--primary)] cursor-text' : ''} transition-colors`}
                         title={r.status !== 'uploaded' ? 'Tocar para editar nombre' : undefined}
                       >
-                        {r.nombreEditado ?? r.nombreFormateado || <span className="text-amber-500">Pagina {i + 1} — tocar para editar</span>}
+                        {(r.nombreEditado ?? r.nombreFormateado) || <span className="text-amber-500">Pagina {i + 1} — tocar para editar</span>}
                       </button>
                     )}
                     <p className="text-[11px] text-gray-400 truncate">{r.nombreArchivo}</p>
