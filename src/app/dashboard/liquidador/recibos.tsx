@@ -13,6 +13,7 @@ interface ReciboProcesado {
   pageIndex: number
   nombreRaw: string
   nombreFormateado: string
+  nombreEditado?: string   // override manual del usuario
   mesStr: string
   anioStr: string
   pdfBytes: Uint8Array
@@ -21,6 +22,10 @@ interface ReciboProcesado {
   errorMsg?: string
   storageUrl?: string
   nombreArchivo: string
+}
+
+function buildNombreArchivo(nombre: string, mes: string) {
+  return `${nombre} Liquidacion ${mes}.pdf`
 }
 
 interface ReciboDB {
@@ -310,6 +315,7 @@ export function RecibosTab() {
   const [subiendo,   setSubiendo]   = useState(false)
   const [syncing,    setSyncing]    = useState(false)
   const [syncResult, setSyncResult] = useState<{ inserted: number; skipped: number; deleted?: number } | null>(null)
+  const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -434,6 +440,14 @@ export function RecibosTab() {
     }
   }
 
+  function updateNombre(index: number, valor: string) {
+    setRecibos(prev => prev.map((r, i) => {
+      if (i !== index) return r
+      const nombre = valor.trim()
+      return { ...r, nombreEditado: nombre, nombreArchivo: buildNombreArchivo(nombre || `Pagina ${i + 1}`, r.mesStr) }
+    }))
+  }
+
   async function subirRecibo(index: number) {
     const recibo = recibos[index]
     if (!recibo || recibo.status === 'uploaded') return
@@ -445,7 +459,7 @@ export function RecibosTab() {
       fd.append('file', new Blob([recibo.pdfBytes], { type: 'application/pdf' }), recibo.nombreArchivo)
       fd.append('anio', recibo.anioStr)
       fd.append('mes', String(mes))
-      fd.append('nombre', recibo.nombreFormateado)
+      fd.append('nombre', recibo.nombreEditado ?? recibo.nombreFormateado || `Pagina ${index + 1}`)
       fd.append('nombre_archivo', recibo.nombreArchivo)
 
       const r = await fetch('/api/liquidador/recibos/upload', { method: 'POST', body: fd })
@@ -613,7 +627,23 @@ export function RecibosTab() {
                 {/* Info */}
                 <div className="p-3 flex items-start gap-2">
                   <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-semibold">{r.nombreFormateado}</p>
+                    {editingIdx === i ? (
+                      <input
+                        autoFocus
+                        className="text-[13px] font-semibold w-full border-b border-[var(--primary)] outline-none bg-transparent pb-0.5 mb-0.5"
+                        defaultValue={r.nombreEditado ?? r.nombreFormateado}
+                        onBlur={e => { updateNombre(i, e.target.value); setEditingIdx(null) }}
+                        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                      />
+                    ) : (
+                      <button
+                        onClick={() => r.status !== 'uploaded' && setEditingIdx(i)}
+                        className={`text-[13px] font-semibold text-left w-full truncate block ${r.status !== 'uploaded' ? 'hover:text-[var(--primary)] cursor-text' : ''} transition-colors`}
+                        title={r.status !== 'uploaded' ? 'Tocar para editar nombre' : undefined}
+                      >
+                        {r.nombreEditado ?? r.nombreFormateado || <span className="text-amber-500">Pagina {i + 1} — tocar para editar</span>}
+                      </button>
+                    )}
                     <p className="text-[11px] text-gray-400 truncate">{r.nombreArchivo}</p>
                     <div className="mt-1.5 flex items-center gap-2">
                       <StatusBadge status={r.status} errorMsg={r.errorMsg} />
