@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/auth'
-import { gasReady, gasUpload } from '@/lib/gas-upload'
+import { gasReady, gasUploadBase64 } from '@/lib/gas-upload'
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -10,37 +10,34 @@ export async function POST(request: NextRequest) {
   if (!isAdmin) return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
 
   try {
-    const formData      = await request.formData()
-    const file          = formData.get('file') as File | null
-    const anioStr       = formData.get('anio') as string
-    const mesStr        = formData.get('mes') as string
-    const nombre        = formData.get('nombre') as string
-    const nombreArchivo = formData.get('nombre_archivo') as string
+    const body          = await request.json()
+    const base64        = body.base64 as string | undefined
+    const anioStr       = body.anio as string
+    const mesStr        = body.mes as string
+    const nombre        = body.nombre as string
+    const nombreArchivo = body.nombre_archivo as string
 
-    if (!file || !anioStr || !mesStr || !nombre || !nombreArchivo) {
+    if (!base64 || !anioStr || !mesStr || !nombre || !nombreArchivo) {
       return NextResponse.json({ error: 'Faltan campos requeridos' }, { status: 400 })
     }
-    if (file.type !== 'application/pdf') {
-      return NextResponse.json({ error: 'Solo se permiten archivos PDF' }, { status: 400 })
-    }
 
-    const anio  = parseInt(anioStr)
-    const mes   = parseInt(mesStr)
-    const bytes = await file.arrayBuffer()
+    const anio = parseInt(anioStr)
+    const mes  = parseInt(mesStr)
 
     let url: string
 
     if (gasReady()) {
-      url = await gasUpload({
-        bytes, mimeType: 'application/pdf', fileName: nombreArchivo,
+      url = await gasUploadBase64({
+        base64, mimeType: 'application/pdf', fileName: nombreArchivo,
         folderType: 'liquidaciones',
         anio, mes,
       })
     } else {
+      const pdfBytes    = Buffer.from(base64, 'base64')
       const storagePath = `${anio}/${String(mes).padStart(2, '0')}/${nombreArchivo}`
       const { error: uploadError } = await supabaseAdmin.storage
         .from('recibos-sueldo')
-        .upload(storagePath, new Uint8Array(bytes), { contentType: 'application/pdf', upsert: true })
+        .upload(storagePath, pdfBytes, { contentType: 'application/pdf', upsert: true })
       if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 })
       const { data: urlData } = supabaseAdmin.storage.from('recibos-sueldo').getPublicUrl(storagePath)
       url = urlData.publicUrl

@@ -16,14 +16,26 @@ export async function gasUpload(opts: {
   mes: number
 }): Promise<string> {
   if (!gasReady()) throw new Error('Integración con Drive no configurada')
-  const base64 = Buffer.from(opts.bytes).toString('base64')
+  const base64 = Buffer.from(new Uint8Array(opts.bytes)).toString('base64')
+  return gasUploadBase64({ base64, mimeType: opts.mimeType, fileName: opts.fileName, folderType: opts.folderType, anio: opts.anio, mes: opts.mes })
+}
+
+export async function gasUploadBase64(opts: {
+  base64: string
+  mimeType: string
+  fileName: string
+  folderType: FolderType
+  anio: number
+  mes: number
+}): Promise<string> {
+  if (!gasReady()) throw new Error('Integración con Drive no configurada')
   const res = await fetch(GAS_URL, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({
       secret:     GAS_SECRET,
       action:     'upload_file',
-      data:       base64,
+      data:       opts.base64,
       mimeType:   opts.mimeType,
       fileName:   opts.fileName,
       folderType: opts.folderType,

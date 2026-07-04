@@ -487,14 +487,25 @@ export function RecibosTab() {
       const mesPdf = recibo.mesStr ? MESES.indexOf(recibo.mesStr) + 1 : -1
       const mesUpload = mesPdf > 0 ? mesPdf : mes
 
-      const fd = new FormData()
-      fd.append('file', new Blob([recibo.pdfBytes], { type: 'application/pdf' }), recibo.nombreArchivo)
-      fd.append('anio', recibo.anioStr)
-      fd.append('mes', String(mesUpload))
-      fd.append('nombre', (recibo.nombreEditado ?? recibo.nombreFormateado) || `Pagina ${index + 1}`)
-      fd.append('nombre_archivo', recibo.nombreArchivo)
+      // Convertir bytes a base64 en el cliente (FileReader es 100% confiable en browser)
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload  = () => resolve((reader.result as string).split(',')[1])
+        reader.onerror = reject
+        reader.readAsDataURL(new Blob([recibo.pdfBytes], { type: 'application/pdf' }))
+      })
 
-      const r = await fetch('/api/liquidador/recibos/upload', { method: 'POST', body: fd })
+      const r = await fetch('/api/liquidador/recibos/upload', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          base64,
+          anio:           recibo.anioStr,
+          mes:            String(mesUpload),
+          nombre:         (recibo.nombreEditado ?? recibo.nombreFormateado) || `Pagina ${index + 1}`,
+          nombre_archivo: recibo.nombreArchivo,
+        }),
+      })
       const d = await r.json()
 
       if (r.ok) {
