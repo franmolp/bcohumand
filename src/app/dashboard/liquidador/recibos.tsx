@@ -458,10 +458,14 @@ export function RecibosTab() {
     setRecibos(prev => prev.map((r, i) => i === index ? { ...r, status: 'uploading' } : r))
 
     try {
+      // Usar el mes detectado en el PDF (mesStr) en vez del picker, para que se guarde en la carpeta correcta
+      const mesPdf = recibo.mesStr ? MESES.indexOf(recibo.mesStr) + 1 : -1
+      const mesUpload = mesPdf > 0 ? mesPdf : mes
+
       const fd = new FormData()
       fd.append('file', new Blob([recibo.pdfBytes], { type: 'application/pdf' }), recibo.nombreArchivo)
       fd.append('anio', recibo.anioStr)
-      fd.append('mes', String(mes))
+      fd.append('mes', String(mesUpload))
       fd.append('nombre', (recibo.nombreEditado ?? recibo.nombreFormateado) || `Pagina ${index + 1}`)
       fd.append('nombre_archivo', recibo.nombreArchivo)
 

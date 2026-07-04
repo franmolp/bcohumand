@@ -7,6 +7,7 @@ import { IconDollar, IconFileText } from '@/components/ui/Icons'
 import type { SessionUser } from '@/types'
 import { MESES } from '@/lib/liquidador'
 import FileViewer from '@/components/FileViewer'
+import { IconTrash, IconCheck, IconX } from '@/components/ui/Icons'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,8 @@ function LiquidacionesTab() {
   const [rows, setRows] = useState<ReciboDB[]>([])
   const [loading, setLoading] = useState(false)
   const [viewer, setViewer] = useState<{ url: string; name: string } | null>(null)
+  const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -84,6 +87,21 @@ function LiquidacionesTab() {
     catch { return iso }
   }
 
+  async function handleDelete(id: string) {
+    setDeleting(true)
+    try {
+      const res = await fetch('/api/liquidador/recibos', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+      if (res.ok) setRows(prev => prev.filter(r => r.id !== id))
+    } finally {
+      setDeleting(false)
+      setConfirmId(null)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <MonthPicker anio={anio} mes={mes} onChange={(a, m) => { setAnio(a); setMes(m) }} />
@@ -96,16 +114,40 @@ function LiquidacionesTab() {
       ) : (
         <div className="bg-white rounded-xl border border-gray-200/60 divide-y divide-gray-100">
           {rows.map(r => (
-            <button key={r.id}
-              onClick={() => setViewer({ url: r.storage_url, name: r.nombre_archivo })}
-              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left cursor-pointer">
-              <IconFileText size={18} className="text-gray-400 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-[13px] font-medium truncate">{r.nombre_empleada}</p>
-                <p className="text-[11px] text-[var(--text-sub)] truncate">{r.nombre_archivo}</p>
-              </div>
-              <span className="text-[11px] text-[var(--text-sub)] shrink-0">{fmtDate(r.subido_el)}</span>
-            </button>
+            <div key={r.id} className="flex items-center gap-0 hover:bg-gray-50 transition-colors">
+              <button
+                onClick={() => { setConfirmId(null); setViewer({ url: r.storage_url, name: r.nombre_archivo }) }}
+                className="flex-1 flex items-center gap-3 px-4 py-3 text-left cursor-pointer min-w-0">
+                <IconFileText size={18} className="text-gray-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium truncate">{r.nombre_empleada}</p>
+                  <p className="text-[11px] text-[var(--text-sub)] truncate">{r.nombre_archivo}</p>
+                </div>
+                <span className="text-[11px] text-[var(--text-sub)] shrink-0 mr-2">{fmtDate(r.subido_el)}</span>
+              </button>
+
+              {confirmId === r.id ? (
+                <div className="flex items-center gap-1 pr-3 shrink-0">
+                  <button
+                    onClick={() => handleDelete(r.id)}
+                    disabled={deleting}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-500 text-white disabled:opacity-50 cursor-pointer">
+                    <IconCheck size={13} />
+                  </button>
+                  <button
+                    onClick={() => setConfirmId(null)}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-200 text-gray-600 cursor-pointer">
+                    <IconX size={13} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmId(r.id)}
+                  className="pr-4 pl-2 py-3 text-gray-300 hover:text-red-400 active:text-red-500 cursor-pointer shrink-0 transition-colors">
+                  <IconTrash size={15} />
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}
