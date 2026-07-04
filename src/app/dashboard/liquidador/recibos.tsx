@@ -16,7 +16,7 @@ interface ReciboProcesado {
   nombreEditado?: string   // override manual del usuario
   mesStr: string
   anioStr: string
-  pdfBytes: Uint8Array
+  pdfBase64: string
   previewUrl: string
   status: 'pending' | 'uploading' | 'uploaded' | 'error'
   errorMsg?: string
@@ -195,10 +195,27 @@ async function extractPageMeta(file: File): Promise<PageMeta[]> {
   }
 }
 
+function toUint8(base64: string): Uint8Array {
+  const bin = atob(base64)
+  const arr = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+  return arr
+}
+
+function uint8ToBase64(bytes: Uint8Array): string {
+  const CHUNK = 8192
+  const parts: string[] = []
+  for (let k = 0; k < bytes.length; k += CHUNK) {
+    parts.push(String.fromCharCode.apply(null, bytes.subarray(k, k + CHUNK) as unknown as number[]))
+  }
+  return btoa(parts.join(''))
+}
+
 // Render page 1 of a single-page PDF to a JPEG thumbnail
-async function renderThumbnail(pdfBytes: Uint8Array): Promise<string> {
+async function renderThumbnail(pdfBase64: string): Promise<string> {
   try {
     const pdfjs  = await getPdfjsLib()
+    const pdfBytes = toUint8(pdfBase64)
     const doc    = await pdfjs.getDocument({ data: pdfBytes }).promise
     const page   = await doc.getPage(1)
     const vp     = page.getViewport({ scale: 0.65 })
@@ -436,7 +453,8 @@ export function RecibosTab() {
         const sigHeight         = sigWidth * (sigImage.height / sigImage.width)
         page.drawImage(sigImage, { x: width * 0.57, y: height * 0.085, width: sigWidth, height: sigHeight, opacity: 0.92 })
 
-        const signedBytes = await pageDoc.save()
+        const signedBytes  = await pageDoc.save()
+        const pdfBase64    = uint8ToBase64(signedBytes)   // codificar acá, NO guardar Uint8Array en state
 
         const nombre = pdfjsMeta[i]?.nombre || serverMeta[i]?.nombre || ''
         const mesStr = pdfjsMeta[i]?.mesStr || serverMeta[i]?.mesStr || fallbackMes
@@ -446,7 +464,7 @@ export function RecibosTab() {
 
         results.push({
           pageIndex: i, nombreRaw: nombre, nombreFormateado,
-          mesStr, anioStr, pdfBytes: signedBytes,
+          mesStr, anioStr, pdfBase64,
           previewUrl: '', status: 'pending', nombreArchivo,
         })
 
@@ -457,7 +475,7 @@ export function RecibosTab() {
 
       // 5. Generar thumbnails uno por uno en el fondo
       for (let i = 0; i < results.length; i++) {
-        const thumb = await renderThumbnail(results[i].pdfBytes)
+        const thumb = await renderThumbnail(results[i].pdfBase64)
         if (thumb) setRecibos(prev => prev.map((r, idx) => idx === i ? { ...r, previewUrl: thumb } : r))
       }
     } catch (e) {
@@ -487,17 +505,8 @@ export function RecibosTab() {
       const mesPdf = recibo.mesStr ? MESES.indexOf(recibo.mesStr) + 1 : -1
       const mesUpload = mesPdf > 0 ? mesPdf : mes
 
-      // Convertir bytes a base64 — apply() igual que el GAS original, evita spread con arrays grandes
-      const bytes = recibo.pdfBytes
-      console.log(`[subir ${index}] pdfBytes type=${Object.prototype.toString.call(bytes)} length=${bytes?.length}`)
-      if (!bytes?.length) throw new Error('PDF vacío (0 bytes)')
-      const chunks: string[] = []
-      const chunk = 8192
-      for (let k = 0; k < bytes.length; k += chunk) {
-        chunks.push(String.fromCharCode.apply(null, bytes.subarray(k, k + chunk) as unknown as number[]))
-      }
-      const base64 = btoa(chunks.join(''))
-      console.log(`[subir ${index}] base64 len=${base64.length} nombre="${recibo.nombreArchivo}"`)
+      const base64 = recibo.pdfBase64
+      if (!base64) throw new Error('PDF vacío')
 
       const r = await fetch('/api/liquidador/recibos/upload', {
         method:  'POST',
