@@ -15,14 +15,15 @@ function formatearNombrePDF(raw: string): string {
   return cap(parts[1]) + ' ' + parts[0][0].toUpperCase()
 }
 
-// Extracción server-side con pdfjs — usa el worker .mjs en public/ vía file://
+// Extracción server-side con pdfjs legacy build (diseñado para Node.js)
 async function extractarPaginas(buf: ArrayBuffer): Promise<Array<{ nombre: string; mesStr: string | null }>> {
   try {
     const { join } = await import('path')
-    const pdfjs = await import('pdfjs-dist')
+    // El build principal (pdf.mjs) usa DOMMatrix y otras APIs de browser — falla en Node.js
+    // El legacy build está específicamente preparado para Node.js
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
 
-    // pdfjs v6 en Node.js necesita una ruta real al worker; workerSrc='' no funciona en v6
-    const workerPath = join(process.cwd(), 'public', 'pdf.worker.min.mjs')
+    const workerPath = join(process.cwd(), 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.min.mjs')
     ;(pdfjs as unknown as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc =
       `file://${workerPath}`
 
