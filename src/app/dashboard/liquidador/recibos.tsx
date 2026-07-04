@@ -487,16 +487,17 @@ export function RecibosTab() {
       const mesPdf = recibo.mesStr ? MESES.indexOf(recibo.mesStr) + 1 : -1
       const mesUpload = mesPdf > 0 ? mesPdf : mes
 
-      // Convertir bytes a base64 en el cliente (loop nativo, funciona en iOS)
+      // Convertir bytes a base64 — apply() igual que el GAS original, evita spread con arrays grandes
       const bytes = recibo.pdfBytes
-      let binary = ''
+      console.log(`[subir ${index}] pdfBytes type=${Object.prototype.toString.call(bytes)} length=${bytes?.length}`)
+      if (!bytes?.length) throw new Error('PDF vacío (0 bytes)')
+      const chunks: string[] = []
       const chunk = 8192
       for (let k = 0; k < bytes.length; k += chunk) {
-        binary += String.fromCharCode(...bytes.subarray(k, k + chunk))
+        chunks.push(String.fromCharCode.apply(null, bytes.subarray(k, k + chunk) as unknown as number[]))
       }
-      const base64 = btoa(binary)
+      const base64 = btoa(chunks.join(''))
       console.log(`[subir ${index}] base64 len=${base64.length} nombre="${recibo.nombreArchivo}"`)
-      if (!base64) throw new Error('No se pudo codificar el PDF')
 
       const r = await fetch('/api/liquidador/recibos/upload', {
         method:  'POST',
@@ -516,8 +517,10 @@ export function RecibosTab() {
       } else {
         setRecibos(prev => prev.map((rec, i) => i === index ? { ...rec, status: 'error', errorMsg: d.error } : rec))
       }
-    } catch {
-      setRecibos(prev => prev.map((rec, i) => i === index ? { ...rec, status: 'error', errorMsg: 'Error de red' } : rec))
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Error de red'
+      console.error(`[subir ${index}] catch:`, msg)
+      setRecibos(prev => prev.map((rec, i) => i === index ? { ...rec, status: 'error', errorMsg: msg } : rec))
     }
   }
 
