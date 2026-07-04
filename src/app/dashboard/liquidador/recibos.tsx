@@ -89,23 +89,67 @@ async function extractPageMeta(file: File): Promise<PageMeta[]> {
     const bytes = new Uint8Array(await file.arrayBuffer())
     const doc   = await pdfjs.getDocument({ data: bytes }).promise
     const result: PageMeta[] = []
+
     for (let i = 1; i <= doc.numPages; i++) {
       const page    = await doc.getPage(i)
       const content = await page.getTextContent()
-      // Join with single space; some PDFs emit items without separators
-      const text = content.items.map(it => it.str).join(' ')
+      const strs    = content.items.map(it => it.str)
+      const text    = strs.join(' ')
 
-      // Name: capture everything after the label up to CUIL / DNI / Período / double-space
-      // Use lookahead so boundary chars aren't consumed; .+? handles any encoding
-      const nameMatch =
-        text.match(/Nombre\s+y\s+Apellido\s*:?\s*(.+?)(?=\s{2,}|\s+CUIL|\s+DNI|\s+Per[ií]|$)/i) ??
-        text.match(/Apellido\s+y\s+Nombre\s*:?\s*(.+?)(?=\s{2,}|\s+CUIL|\s+DNI|\s+Per[ií]|$)/i)
-
+      // Período ──────────────────────────────────────────────────────────────
       const periodMatch = text.match(/Per[ií]odo[\s:]+([A-Za-záéíóúüñ]+)\s+(\d{4})/i)
-      result.push({
-        nombre: nameMatch ? nameMatch[1].trim() : '',
-        mesStr: periodMatch ? periodMatch[1] : null,
-      })
+
+      // Nombre — 4 estrategias, primera que resulte gana ─────────────────────
+      let nombre = ''
+
+      // S1: etiqueta → valor en texto unido (sin $ en lookahead para evitar match vacío)
+      if (!nombre) {
+        const m = text.match(
+          /(?:Apellido\s+y\s+Nombre[s]?|Nombre[s]?\s+y\s+Apellido)\s*[:\-]?\s*(.{1,80}?)(?=\s{2,}|\s+CUIL|\s+DNI|\s+\d{2}[-\s]\d|\s+Per[ií])/i
+        )
+        if (m?.[1]) {
+          const c = m[1].trim().replace(/\s+/g, ' ')
+          if (/[A-ZÁÉÍÓÚÜÑ]{2,}/.test(c) && !/^\d/.test(c)) nombre = c
+        }
+      }
+
+      // S2: proximidad al CUIL — el nombre siempre aparece justo antes del número de CUIL
+      if (!nombre) {
+        const cuilIdx = text.search(/\b\d{2}[-\s]\d{7,8}[-\s]\d\b/)
+        if (cuilIdx > 10) {
+          const before = text.slice(Math.max(0, cuilIdx - 200), cuilIdx)
+          const seqs = [...before.matchAll(/\b([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,}){1,4})\b/g)]
+          if (seqs.length) nombre = seqs[seqs.length - 1][1].trim()
+        }
+      }
+
+      // S3: array de items — buscar "apellido" en algún item, tomar los items ALL-CAPS siguientes
+      if (!nombre) {
+        const lower = strs.map(s => s.toLowerCase())
+        for (let j = 0; j < lower.length; j++) {
+          if (lower[j].includes('apellido')) {
+            const parts: string[] = []
+            for (let k = j + 1; k < Math.min(j + 25, strs.length); k++) {
+              const c = strs[k].trim()
+              if (!c || /^[:\-\/·\s]+$/.test(c)) continue
+              if (/^[A-ZÁÉÍÓÚÜÑ]{2,}$/.test(c) && !/^(CUIL|DNI)$/.test(c)) {
+                parts.push(c)
+              } else if (parts.length > 0) break
+            }
+            if (parts.length >= 2) { nombre = parts.join(' '); break }
+          }
+        }
+      }
+
+      // S4: campos "Apellido:" y "Nombre:" separados
+      if (!nombre) {
+        const ap = text.match(/\bApellido\s*[:\-]\s*([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,})*)/i)
+        const nm = text.match(/\bNombres?\s*[:\-]\s*([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,})*)/i)
+        if (ap?.[1] && nm?.[1]) nombre = ap[1].trim() + ' ' + nm[1].trim()
+        else if (ap?.[1]) nombre = ap[1].trim()
+      }
+
+      result.push({ nombre, mesStr: periodMatch ? periodMatch[1] : null })
     }
     return result
   } catch {
@@ -232,7 +276,7 @@ export function RecibosTab() {
   const [recibos,    setRecibos]    = useState<ReciboProcesado[]>([])
   const [subiendo,   setSubiendo]   = useState(false)
   const [syncing,    setSyncing]    = useState(false)
-  const [syncResult, setSyncResult] = useState<{ inserted: number; skipped: number } | null>(null)
+  const [syncResult, setSyncResult] = useState<{ inserted: number; skipped: number; deleted?: number } | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -250,8 +294,12 @@ export function RecibosTab() {
       })
       const data = await res.json()
       if (data.error) { showToast(data.error, 'error'); return }
-      setSyncResult({ inserted: data.inserted ?? 0, skipped: data.skipped ?? 0 })
-      showToast(`Sincronización completa: ${data.inserted} importados, ${data.skipped} ya existían`)
+      const deleted = data.deleted ?? 0
+      setSyncResult({ inserted: data.inserted ?? 0, skipped: data.skipped ?? 0, deleted })
+      const msg = deleted
+        ? `Sincronización: ${data.inserted} importados, ${data.skipped} ya existían, ${deleted} borrados de Drive eliminados`
+        : `Sincronización completa: ${data.inserted} importados, ${data.skipped} ya existían`
+      showToast(msg)
     } catch {
       showToast('Error al conectar con Drive', 'error')
     } finally {
@@ -407,6 +455,7 @@ export function RecibosTab() {
           {syncResult && (
             <span className="text-[12px] text-emerald-600 font-medium">
               {syncResult.inserted} importados · {syncResult.skipped} ya existían
+              {!!syncResult.deleted && ` · ${syncResult.deleted} eliminados`}
             </span>
           )}
           <button onClick={handleSync} disabled={syncing}

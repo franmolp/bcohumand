@@ -45,9 +45,9 @@ export async function POST(req: NextRequest) {
 
   for (let i = 0; i < numPages; i++) {
     const m              = metaArr[i]
-    const nombreRaw      = m?.nombre || ''
-    const mesStr         = m?.mesStr || fallbackMes
-    const nombreFormateado = nombreRaw ? formatearNombrePDF(nombreRaw) : `Pág. ${i + 1}`
+    const nombreRaw        = m?.nombre || ''
+    const mesStr           = m?.mesStr || fallbackMes
+    const nombreFormateado = nombreRaw ? formatearNombrePDF(nombreRaw) : `Pagina ${i + 1}`
     const nombreArchivo    = `${nombreFormateado} Liquidacion ${mesStr}.pdf`
 
     const newDoc = await PDFDocument.create()
