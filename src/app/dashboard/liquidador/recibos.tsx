@@ -82,6 +82,8 @@ async function getPdfjsLib(): Promise<PdfjsLib> {
 
 interface PageMeta { nombre: string; mesStr: string | null }
 
+const MESES_ES = 'Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre'
+
 // Extract name + period from each page of the original PDF
 async function extractPageMeta(file: File): Promise<PageMeta[]> {
   try {
@@ -96,16 +98,25 @@ async function extractPageMeta(file: File): Promise<PageMeta[]> {
       const strs    = content.items.map(it => it.str)
       const text    = strs.join(' ')
 
-      // Período ──────────────────────────────────────────────────────────────
-      const periodMatch = text.match(/Per[ií]odo[\s:]+([A-Za-záéíóúüñ]+)\s+(\d{4})/i)
+      // Log para diagnóstico (visible en consola del browser)
+      console.log(`[PDF p${i}] items[0..15]:`, strs.slice(0, 15).join('|'))
+      console.log(`[PDF p${i}] text:`, text.substring(0, 500))
 
-      // Nombre — 4 estrategias, primera que resulte gana ─────────────────────
+      // ── Período ────────────────────────────────────────────────────────────
+      // Acepta "Período Junio 2026", "Liquidación Junio 2026", o simplemente "Junio 2026"
+      const rMeses = new RegExp(`(${MESES_ES})\\s+(20\\d{2})`, 'i')
+      const periodMatch =
+        text.match(new RegExp(`Per[ií]odo[\\s:]+(?:Liquidaci[oó]n[\\s]+)?(${MESES_ES})\\s+(20\\d{2})`, 'i')) ??
+        text.match(new RegExp(`Liquidaci[oó]n[\\s:]+(?:Mensual[\\s]+)?(${MESES_ES})\\s+(20\\d{2})`, 'i')) ??
+        text.match(rMeses)
+
+      // ── Nombre — 5 estrategias, primera que resulte gana ──────────────────
       let nombre = ''
 
-      // S1: etiqueta → valor en texto unido (sin $ en lookahead para evitar match vacío)
+      // S1: "Apellido y Nombre:" → captura hasta CUIL/DNI/número de CUIL
       if (!nombre) {
         const m = text.match(
-          /(?:Apellido\s+y\s+Nombre[s]?|Nombre[s]?\s+y\s+Apellido)\s*[:\-]?\s*(.{1,80}?)(?=\s{2,}|\s+CUIL|\s+DNI|\s+\d{2}[-\s]\d|\s+Per[ií])/i
+          /(?:Apellido\s+y\s+Nombre[s]?|Nombre[s]?\s+y\s+Apellido)\s*[:\-]?\s*(.{1,80}?)(?=\s{2,}|\s+CUIL|\s+DNI|\s+\d{2}[-.\s]\d|\s+Per[ií])/i
         )
         if (m?.[1]) {
           const c = m[1].trim().replace(/\s+/g, ' ')
@@ -113,17 +124,37 @@ async function extractPageMeta(file: File): Promise<PageMeta[]> {
         }
       }
 
-      // S2: proximidad al CUIL — el nombre siempre aparece justo antes del número de CUIL
+      // S2: texto inmediatamente antes del número de CUIL (XX-XXXXXXXX-X o XX.XXXXXXXX.X)
       if (!nombre) {
-        const cuilIdx = text.search(/\b\d{2}[-\s]\d{7,8}[-\s]\d\b/)
-        if (cuilIdx > 10) {
-          const before = text.slice(Math.max(0, cuilIdx - 200), cuilIdx)
-          const seqs = [...before.matchAll(/\b([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,}){1,4})\b/g)]
-          if (seqs.length) nombre = seqs[seqs.length - 1][1].trim()
+        const cuilM = text.match(/\b(\d{2}[-.\s]\d{7,8}[-.\s]\d)\b/)
+        if (cuilM) {
+          const before = text
+            .slice(Math.max(0, cuilM.index! - 220), cuilM.index!)
+            .replace(/\bCUIL\s*[:\-]?\s*$/, '')
+            .trimEnd()
+          const m = before.match(/\b([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,}){1,3})\s*$/)
+          if (m?.[1]) nombre = m[1].trim()
         }
       }
 
-      // S3: array de items — buscar "apellido" en algún item, tomar los items ALL-CAPS siguientes
+      // S3: ítem "CUIL" en array → tomar ítems ALL-CAPS inmediatamente anteriores
+      if (!nombre) {
+        for (let j = 0; j < strs.length; j++) {
+          if (/^CUIL\s*:?$/i.test(strs[j].trim())) {
+            const parts: string[] = []
+            for (let k = j - 1; k >= Math.max(0, j - 12); k--) {
+              const c = strs[k].trim()
+              if (!c || /^[:\-\/·\s]+$/.test(c)) continue
+              if (/^[A-ZÁÉÍÓÚÜÑ]{2,}(?: [A-ZÁÉÍÓÚÜÑ]{2,})*$/.test(c)) {
+                parts.unshift(...c.split(/\s+/))
+              } else break
+            }
+            if (parts.length >= 2) { nombre = parts.join(' '); break }
+          }
+        }
+      }
+
+      // S4: ítem que contiene "apellido" → ítems ALL-CAPS siguientes
       if (!nombre) {
         const lower = strs.map(s => s.toLowerCase())
         for (let j = 0; j < lower.length; j++) {
@@ -132,8 +163,8 @@ async function extractPageMeta(file: File): Promise<PageMeta[]> {
             for (let k = j + 1; k < Math.min(j + 25, strs.length); k++) {
               const c = strs[k].trim()
               if (!c || /^[:\-\/·\s]+$/.test(c)) continue
-              if (/^[A-ZÁÉÍÓÚÜÑ]{2,}$/.test(c) && !/^(CUIL|DNI)$/.test(c)) {
-                parts.push(c)
+              if (/^[A-ZÁÉÍÓÚÜÑ]{2,}(?: [A-ZÁÉÍÓÚÜÑ]{2,})*$/.test(c) && !/^(CUIL|DNI)$/.test(c)) {
+                parts.push(...c.split(/\s+/))
               } else if (parts.length > 0) break
             }
             if (parts.length >= 2) { nombre = parts.join(' '); break }
@@ -141,7 +172,7 @@ async function extractPageMeta(file: File): Promise<PageMeta[]> {
         }
       }
 
-      // S4: campos "Apellido:" y "Nombre:" separados
+      // S5: campos "Apellido:" y "Nombre:" separados
       if (!nombre) {
         const ap = text.match(/\bApellido\s*[:\-]\s*([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,})*)/i)
         const nm = text.match(/\bNombres?\s*[:\-]\s*([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,})*)/i)
@@ -149,10 +180,12 @@ async function extractPageMeta(file: File): Promise<PageMeta[]> {
         else if (ap?.[1]) nombre = ap[1].trim()
       }
 
+      console.log(`[PDF p${i}] nombre="${nombre}" mes="${periodMatch?.[1] ?? ''}"`)
       result.push({ nombre, mesStr: periodMatch ? periodMatch[1] : null })
     }
     return result
-  } catch {
+  } catch (e) {
+    console.error('[extractPageMeta]', e)
     return []
   }
 }
