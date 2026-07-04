@@ -291,6 +291,10 @@ export async function POST(req: NextRequest) {
   // Extracción server-side con soporte CID
   const serverPaginas = await extractarPaginas(srcDoc, numPages, cidMap)
 
+  // Recargar srcDoc limpio: extractarPaginas hace copyPages múltiples veces
+  // lo que puede corromper el estado interno de pdf-lib para el loop de firma
+  srcDoc = await PDFDocument.load(rawBuf)
+
   // Combinar: cliente tiene prioridad si extrajo algo, server como fallback
   const paginas = serverPaginas.map((server, i) => {
     const client = clientMeta[i]

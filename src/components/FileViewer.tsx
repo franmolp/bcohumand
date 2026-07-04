@@ -68,23 +68,11 @@ export default function FileViewer({ url, name, onClose }: FileViewerProps) {
             />
           </div>
         ) : (
-          // PDFs en iframe fallan en iOS Safari → mostrar botón nativo
-          <div className="flex flex-col items-center justify-center h-full gap-5">
-            <svg width={56} height={56} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-white/20">
-              <path d="M14 3v4a1 1 0 001 1h4"/><path d="M17 21h-10a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z"/>
-              <path d="M9 9l1 0"/><path d="M9 13l6 0"/><path d="M9 17l6 0"/>
-            </svg>
-            <p className="text-white/50 text-[13px] text-center px-8 max-w-xs">{name || 'Documento PDF'}</p>
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-white text-gray-900 font-semibold text-[14px] rounded-2xl px-8 py-3.5 flex items-center gap-2 active:opacity-80 hover:bg-gray-100 transition-colors"
-            >
-              <IconExternalLink size={17} />
-              Abrir PDF
-            </a>
-          </div>
+          <iframe
+            src={url}
+            className="w-full h-full border-0"
+            title={name ?? 'Archivo'}
+          />
         )}
       </div>
     </div>,
