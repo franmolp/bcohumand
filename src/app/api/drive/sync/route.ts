@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     // Si GAS devuelve la lista de archivos actuales en Drive, sincronizamos borrados
     // GAS puede devolver data.files = string[] con los nombre_archivo vigentes
     let deleted = 0
-    if (Array.isArray(data.files) && data.files.length > 0) {
+    if (Array.isArray(data.files)) {
       const driveNames = new Set<string>(data.files as string[])
 
       // Obtener registros DB del mismo período (últimos 3 meses)

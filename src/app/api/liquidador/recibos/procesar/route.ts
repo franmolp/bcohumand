@@ -18,12 +18,24 @@ function formatearNombrePDF(raw: string): string {
 // Extracción server-side con pdfjs legacy build (diseñado para Node.js)
 async function extractarPaginas(buf: ArrayBuffer): Promise<Array<{ nombre: string; mesStr: string | null }>> {
   try {
-    const { join } = await import('path')
+    const { join }         = await import('path')
+    const { existsSync }   = await import('fs')
+    const { createRequire } = await import('module')
     // El build principal (pdf.mjs) usa DOMMatrix y otras APIs de browser — falla en Node.js
     // El legacy build está específicamente preparado para Node.js
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
 
-    const workerPath = join(process.cwd(), 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.min.mjs')
+    // createRequire usa la resolución de módulos de Node.js → encuentra el archivo
+    // incluso en Vercel Lambda donde process.cwd() puede apuntar a /var/task
+    let workerPath: string
+    try {
+      const req = createRequire(import.meta.url)
+      workerPath = req.resolve('pdfjs-dist/legacy/build/pdf.worker.min.mjs')
+    } catch {
+      workerPath = join(process.cwd(), 'node_modules', 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.min.mjs')
+    }
+
+    console.log('[pdfjs] worker:', workerPath, '| exists:', existsSync(workerPath))
     ;(pdfjs as unknown as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc =
       `file://${workerPath}`
 
@@ -116,7 +128,7 @@ async function extractarPaginas(buf: ArrayBuffer): Promise<Array<{ nombre: strin
     }
     return out
   } catch (e) {
-    console.error('[extractarPaginas]', e)
+    console.error('[extractarPaginas] FALLO:', e instanceof Error ? `${e.message}\n${e.stack}` : e)
     return []
   }
 }
