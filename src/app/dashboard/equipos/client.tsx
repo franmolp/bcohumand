@@ -9,14 +9,22 @@ import { IconSettings, IconEdit, IconTrash, IconPlus, IconUsers } from '@/compon
 interface Equipo { id: number; nombre: string }
 interface Rol { id: number; nombre: string; descripcion: string | null; permisos: string[] | null }
 
-// Módulos que se pueden configurar por rol (los admin-only están excluidos — son fijos)
+// Todos los módulos configurables por rol (Informes, Equipos y Seguridad son admin-only y no aparecen acá)
 const MODULOS = [
+  { href: '/dashboard',                 label: 'Inicio',             sub: 'Página de inicio del dashboard' },
+  { href: '/dashboard/solicitudes',     label: 'Solicitudes',        sub: 'Solicitudes de ausencias, licencias y permisos' },
+  { href: '/dashboard/adelantos',       label: 'Adelantos',          sub: 'Solicitud y gestión de adelantos de sueldo' },
+  { href: '/dashboard/mi-asistencia',   label: 'Mi Asistencia',      sub: 'Fichadas propias del empleado · no aplica a Admin/HR/Encargada' },
   { href: '/dashboard/asistencia',      label: 'Asistencia',         sub: 'Gestión de fichadas de todos · ≠ Mi Asistencia' },
   { href: '/dashboard/empleados',       label: 'Empleados',          sub: 'CRUD de empleados, roles y equipos' },
   { href: '/dashboard/liquidador',      label: 'Liquidaciones',      sub: 'Firmar y subir recibos de todos · ≠ Mi Liquidación' },
   { href: '/dashboard/espacio-trabajo', label: 'Espacio de trabajo', sub: 'Gestión de recursos y turnos del local' },
   { href: '/dashboard/compras',         label: 'Compras',            sub: 'Registro de gastos y proveedores' },
   { href: '/dashboard/monotributo',     label: 'Monotributo',        sub: 'Archivos de monotributo de todos' },
+  { href: '/dashboard/calendario',      label: 'Calendario',         sub: 'Calendario de eventos y turnos' },
+  { href: '/dashboard/muro',            label: 'Muro Social',        sub: 'Publicaciones y comunicados del equipo' },
+  { href: '/dashboard/reparaciones',    label: 'Reparaciones',       sub: 'Registro de reparaciones y mantenimiento' },
+  { href: '/dashboard/juegos',          label: 'Juegos',             sub: 'Juegos y actividades del equipo' },
 ]
 
 // ─── Equipos ─────────────────────────────────────────────────────────────────
@@ -231,7 +239,7 @@ function RolesTab() {
               })}
             </div>
             <p className="text-[11px] text-[var(--text-muted)] mt-1.5">
-              Inicio, Solicitudes, Adelantos, Calendario, Muro, Reparaciones y Juegos son visibles para todos.
+              Informes, Equipos y Roles, y Seguridad son exclusivos de Admin y no se configuran acá.
             </p>
           </div>
 
