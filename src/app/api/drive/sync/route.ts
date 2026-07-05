@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     const res = await fetch(GAS_URL, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ secret: GAS_SECRET, action: 'sync_drive', tipo, mesesAtras: 3 }),
+      body:    JSON.stringify({ secret: GAS_SECRET, action: 'sync_drive', tipo, mesesAtras: 36 }),
       signal:  AbortSignal.timeout(55000),
     })
     const data = await res.json()
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
 
       // Obtener registros DB del mismo período (últimos 3 meses)
       const cutoff = new Date()
-      cutoff.setMonth(cutoff.getMonth() - 3)
+      cutoff.setMonth(cutoff.getMonth() - 36)
       const { data: dbRows } = await supabaseAdmin
         .from('recibos_sueldo')
         .select('id, nombre_archivo')
