@@ -11,12 +11,12 @@ interface Rol { id: number; nombre: string; descripcion: string | null; permisos
 
 // Módulos que se pueden configurar por rol (los admin-only están excluidos — son fijos)
 const MODULOS = [
-  { href: '/dashboard/asistencia',      label: 'Asistencia' },
-  { href: '/dashboard/empleados',       label: 'Empleados' },
-  { href: '/dashboard/liquidador',      label: 'Liquidaciones' },
-  { href: '/dashboard/espacio-trabajo', label: 'Espacio de trabajo' },
-  { href: '/dashboard/compras',         label: 'Compras' },
-  { href: '/dashboard/monotributo',     label: 'Monotributo' },
+  { href: '/dashboard/asistencia',      label: 'Asistencia',         sub: 'Gestión de fichadas de todos · ≠ Mi Asistencia' },
+  { href: '/dashboard/empleados',       label: 'Empleados',          sub: 'CRUD de empleados, roles y equipos' },
+  { href: '/dashboard/liquidador',      label: 'Liquidaciones',      sub: 'Firmar y subir recibos de todos · ≠ Mi Liquidación' },
+  { href: '/dashboard/espacio-trabajo', label: 'Espacio de trabajo', sub: 'Gestión de recursos y turnos del local' },
+  { href: '/dashboard/compras',         label: 'Compras',            sub: 'Registro de gastos y proveedores' },
+  { href: '/dashboard/monotributo',     label: 'Monotributo',        sub: 'Archivos de monotributo de todos' },
 ]
 
 // ─── Equipos ─────────────────────────────────────────────────────────────────
@@ -208,9 +208,12 @@ function RolesTab() {
                 const on = form.permisos.includes(m.href)
                 return (
                   <button key={m.href} type="button" onClick={() => toggleModulo(m.href)}
-                    className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 transition-colors cursor-pointer">
-                    <span className="text-[13px] text-[var(--text)]">{m.label}</span>
-                    <div className={`w-9 h-5 rounded-full transition-colors relative ${on ? 'bg-[var(--primary)]' : 'bg-gray-200'}`}>
+                    className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 transition-colors cursor-pointer gap-3">
+                    <div className="text-left">
+                      <p className="text-[13px] font-medium text-[var(--text)]">{m.label}</p>
+                      <p className="text-[11px] text-[var(--text-muted)]">{m.sub}</p>
+                    </div>
+                    <div className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${on ? 'bg-[var(--primary)]' : 'bg-gray-200'}`}>
                       <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${on ? 'left-4' : 'left-0.5'}`} />
                     </div>
                   </button>
