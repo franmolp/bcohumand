@@ -321,8 +321,8 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
 
 export function RecibosTab() {
   const now = new Date()
-  const [anio, setAnio] = useState(now.getFullYear())
-  const [mes,  setMes]  = useState(now.getMonth() + 1)
+  const anio = now.getFullYear()
+  const mes  = now.getMonth() + 1
 
   const [firma,      setFirma]      = useState<string | null>(null)
   const [pdfFile,    setPdfFile]    = useState<File | null>(null)
@@ -330,37 +330,11 @@ export function RecibosTab() {
   const [progreso,   setProgreso]   = useState({ actual: 0, total: 0 })
   const [recibos,    setRecibos]    = useState<ReciboProcesado[]>([])
   const [subiendo,   setSubiendo]   = useState(false)
-  const [syncing,    setSyncing]    = useState(false)
-  const [syncResult, setSyncResult] = useState<{ inserted: number; skipped: number; deleted?: number } | null>(null)
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type }); setTimeout(() => setToast(null), 3500)
-  }
-
-  async function handleSync() {
-    setSyncing(true)
-    setSyncResult(null)
-    try {
-      const res  = await fetch('/api/drive/sync', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ tipo: 'liquidaciones' }),
-      })
-      const data = await res.json()
-      if (data.error) { showToast(data.error, 'error'); return }
-      const deleted = data.deleted ?? 0
-      setSyncResult({ inserted: data.inserted ?? 0, skipped: data.skipped ?? 0, deleted })
-      const msg = deleted
-        ? `Sincronización completa: ${data.inserted} nuevos, ${data.skipped} ya existían, ${deleted} eliminados de Drive`
-        : `Sincronización completa: ${data.inserted} nuevos, ${data.skipped} ya existían`
-      showToast(msg)
-    } catch {
-      showToast('Error al conectar con Drive', 'error')
-    } finally {
-      setSyncing(false)
-    }
   }
 
   // Cargar firma: localStorage como cache rápida, servidor como fuente de verdad
@@ -550,25 +524,6 @@ export function RecibosTab() {
 
   return (
     <div>
-      {/* Month */}
-      <div className="flex flex-wrap items-center gap-3 mb-5">
-        <MonthPicker anio={anio} mes={mes} onChange={(a, m) => { setAnio(a); setMes(m) }} />
-        <div className="ml-auto flex items-center gap-3">
-          {syncResult && (
-            <span className="text-[12px] text-emerald-600 font-medium">
-              {syncResult.inserted} importados · {syncResult.skipped} ya existían
-              {!!syncResult.deleted && ` · ${syncResult.deleted} eliminados`}
-            </span>
-          )}
-          <button onClick={handleSync} disabled={syncing}
-            className="h-9 px-3 rounded-xl border border-[var(--border)] bg-white text-[12px] font-medium text-[var(--text-sub)] hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer transition-colors">
-            {syncing
-              ? <><div className="w-3.5 h-3.5 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" /> Sincronizando…</>
-              : '⟳ Sincronizar con Drive'}
-          </button>
-        </div>
-      </div>
-
       {/* Setup section */}
       <div className="grid lg:grid-cols-2 gap-4 mb-5">
 

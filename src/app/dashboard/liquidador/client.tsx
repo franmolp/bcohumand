@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { RecibosTab, EmployeeRecibosView } from './recibos'
-import { Spinner } from '@/components/ui'
+import { Spinner, Toast } from '@/components/ui'
 import { IconDollar, IconFileText } from '@/components/ui/Icons'
 import type { SessionUser } from '@/types'
 import { MESES } from '@/lib/liquidador'
@@ -71,6 +71,40 @@ function LiquidacionesTab() {
   const [viewer, setViewer] = useState<{ url: string; name: string } | null>(null)
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+
+  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ msg, type }); setTimeout(() => setToast(null), 3500)
+  }
+
+  async function handleSync() {
+    setSyncing(true)
+    try {
+      const res  = await fetch('/api/drive/sync', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ tipo: 'liquidaciones' }),
+      })
+      const data = await res.json()
+      if (data.error) { showToast(data.error, 'error'); return }
+      const deleted = data.deleted ?? 0
+      const msg = deleted
+        ? `Sincronización completa: ${data.inserted} nuevos, ${data.skipped} ya existían, ${deleted} eliminados`
+        : `Sincronización completa: ${data.inserted} nuevos, ${data.skipped} ya existían`
+      showToast(msg)
+      // Recargar lista del mes actual
+      fetch(`/api/liquidador/recibos?anio=${anio}&mes=${mes}`)
+        .then(r => r.json())
+        .then(d => setRows((Array.isArray(d) ? d : []).sort((a: ReciboDB, b: ReciboDB) =>
+          a.nombre_empleada.localeCompare(b.nombre_empleada, 'es')
+        )))
+    } catch {
+      showToast('Error al conectar con Drive', 'error')
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   useEffect(() => {
     setLoading(true)
@@ -104,7 +138,15 @@ function LiquidacionesTab() {
 
   return (
     <div className="space-y-4">
-      <MonthPicker anio={anio} mes={mes} onChange={(a, m) => { setAnio(a); setMes(m) }} />
+      <div className="flex items-center gap-3">
+        <MonthPicker anio={anio} mes={mes} onChange={(a, m) => { setAnio(a); setMes(m) }} />
+        <button onClick={handleSync} disabled={syncing}
+          className="ml-auto h-9 px-3 rounded-xl border border-[var(--border)] bg-white text-[12px] font-medium text-[var(--text-sub)] hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer transition-colors">
+          {syncing
+            ? <><div className="w-3.5 h-3.5 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" /> Sincronizando…</>
+            : '⟳ Sincronizar con Drive'}
+        </button>
+      </div>
 
       {loading ? <Spinner /> : rows.length === 0 ? (
         <div className="text-center py-12">
@@ -153,6 +195,7 @@ function LiquidacionesTab() {
       )}
 
       {viewer && <FileViewer url={viewer.url} name={viewer.name} onClose={() => setViewer(null)} />}
+      <Toast message={toast?.msg ?? ''} visible={!!toast} type={toast?.type ?? 'success'} />
     </div>
   )
 }
