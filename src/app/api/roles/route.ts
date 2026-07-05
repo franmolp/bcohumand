@@ -3,9 +3,9 @@ import { supabase, supabaseAdmin } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/auth'
 
 export async function GET() {
-  const { data, error } = await supabase.from('roles').select('id, nombre, descripcion, permisos').order('nombre')
+  const { data, error } = await supabaseAdmin.from('roles').select('id, nombre, descripcion, permisos').order('nombre')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(data ?? [])
 }
 
 export async function POST(request: NextRequest) {

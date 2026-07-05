@@ -33,8 +33,13 @@ function EquiposTab() {
 
   async function load() {
     setLoading(true)
-    const r = await fetch('/api/equipos')
-    if (r.ok) setEquipos(await r.json())
+    try {
+      const r = await fetch('/api/equipos')
+      if (r.ok) {
+        const data = await r.json()
+        setEquipos(Array.isArray(data) ? data : [])
+      }
+    } catch { /* ignorar errores de red */ }
     setLoading(false)
   }
   useEffect(() => { load() }, [])
@@ -119,8 +124,13 @@ function RolesTab() {
 
   async function load() {
     setLoading(true)
-    const r = await fetch('/api/roles')
-    if (r.ok) setRoles(await r.json())
+    try {
+      const r = await fetch('/api/roles')
+      if (r.ok) {
+        const data = await r.json()
+        setRoles(Array.isArray(data) ? data : [])
+      }
+    } catch { /* ignorar errores de red */ }
     setLoading(false)
   }
   useEffect(() => { load() }, [])
@@ -180,7 +190,7 @@ function RolesTab() {
                 <p className="text-[14px] font-semibold text-[var(--text)]">{r.nombre}</p>
                 {r.descripcion && <p className="text-[12px] text-[var(--text-muted)] mt-0.5">{r.descripcion}</p>}
                 <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                  {r.permisos === null
+                  {!Array.isArray(r.permisos)
                     ? <span className="text-amber-500">Sin configurar (usa defaults)</span>
                     : r.permisos.length === 0
                       ? <span className="text-gray-400">Sin módulos asignados</span>
