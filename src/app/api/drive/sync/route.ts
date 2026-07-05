@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
+export const maxDuration = 60
+
 const GAS_URL    = process.env.GAS_DRIVE_URL ?? ''
 const GAS_SECRET = process.env.GAS_SECRET ?? ''
 
@@ -21,15 +23,25 @@ export async function POST(request: NextRequest) {
       body:    JSON.stringify({ secret: GAS_SECRET, action: 'sync_drive', tipo, mesesAtras: 36 }),
       signal:  AbortSignal.timeout(55000),
     })
-    const data = await res.json()
+
+    // GAS puede devolver HTML en caso de error — capturamos eso explícitamente
+    let data: Record<string, unknown>
+    try {
+      data = await res.json()
+    } catch {
+      const text = await res.text().catch(() => '')
+      const isHtml = text.trimStart().startsWith('<')
+      const msg = isHtml
+        ? 'Drive no respondió correctamente. Si el historial es muy extenso, intentá de nuevo en unos minutos.'
+        : 'Respuesta inesperada de Drive'
+      return NextResponse.json({ error: msg }, { status: 502 })
+    }
 
     // Si GAS devuelve la lista de archivos actuales en Drive, sincronizamos borrados
-    // GAS puede devolver data.files = string[] con los nombre_archivo vigentes
     let deleted = 0
     if (Array.isArray(data.files)) {
       const driveNames = new Set<string>(data.files as string[])
 
-      // Obtener registros DB del mismo período (últimos 3 meses)
       const cutoff = new Date()
       cutoff.setMonth(cutoff.getMonth() - 36)
       const { data: dbRows } = await supabaseAdmin
@@ -49,7 +61,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ...data, deleted })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Error al conectar con Drive'
+    const isTimeout = e instanceof Error && e.name === 'TimeoutError'
+    const msg = isTimeout
+      ? 'La sincronización tardó demasiado. Intentá de nuevo en unos minutos.'
+      : (e instanceof Error ? e.message : 'Error al conectar con Drive')
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
