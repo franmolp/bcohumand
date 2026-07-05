@@ -14,8 +14,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       .eq('id', id).select().single()
     if (error) throw error
     return NextResponse.json(data)
-  } catch {
-    return NextResponse.json({ error: 'Error al actualizar rol' }, { status: 500 })
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : (e as { message?: string })?.message ?? 'Error al actualizar rol'
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
 
