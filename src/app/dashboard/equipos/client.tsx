@@ -97,7 +97,7 @@ function EquiposTab() {
         title="Eliminar equipo"
         message={`¿Eliminás el equipo "${deleteTarget?.nombre}"? Los empleados asignados quedarán sin equipo.`}
         onConfirm={handleDelete}
-        onCancel={() => setDeleteTarget(null)}
+        onClose={() => setDeleteTarget(null)}
         loading={deleting}
         danger
       />
@@ -237,7 +237,7 @@ function RolesTab() {
         title="Eliminar rol"
         message={`¿Eliminás el rol "${deleteTarget?.nombre}"? Los empleados con este rol quedarán sin rol asignado.`}
         onConfirm={handleDelete}
-        onCancel={() => setDeleteTarget(null)}
+        onClose={() => setDeleteTarget(null)}
         loading={deleting}
         danger
       />

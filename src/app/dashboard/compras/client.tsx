@@ -471,7 +471,7 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
         title="Eliminar compra"
         message={`¿Eliminás la compra de ${deleteTarget?.proveedor?.nombre ?? deleteTarget?.proveedor_nombre ?? ''} por ${deleteTarget ? fmtMonto(deleteTarget.monto) : ''}?`}
         onConfirm={handleDelete}
-        onCancel={() => setDeleteTarget(null)}
+        onClose={() => setDeleteTarget(null)}
         loading={deleting}
         danger
       />

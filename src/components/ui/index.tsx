@@ -123,8 +123,8 @@ export function Toast({ message, visible, type = 'success', onClose }: { message
 }
 
 // ─── Confirm ───
-export function Confirm({ open, onClose, onConfirm, title, message, confirmLabel = 'Confirmar', danger = false }: {
-  open: boolean; onClose: () => void; onConfirm: () => void; title: string; message: string; confirmLabel?: string; danger?: boolean
+export function Confirm({ open, onClose, onConfirm, title, message, confirmLabel = 'Confirmar', danger = false, loading = false }: {
+  open: boolean; onClose: () => void; onConfirm: () => void; title: string; message: string; confirmLabel?: string; danger?: boolean; loading?: boolean
 }) {
   if (!open) return null
   return createPortal(
@@ -135,8 +135,8 @@ export function Confirm({ open, onClose, onConfirm, title, message, confirmLabel
         <h3 className="text-base font-bold text-center mb-1.5">{title}</h3>
         <p className="text-sm text-[var(--text-sub)] text-center mb-6">{message}</p>
         <div className="flex gap-3">
-          <Button variant="secondary" className="flex-1" onClick={onClose}>Cancelar</Button>
-          <Button variant={danger ? 'danger' : 'primary'} className="flex-1" onClick={onConfirm}>{confirmLabel}</Button>
+          <Button variant="secondary" className="flex-1" onClick={onClose} disabled={loading}>Cancelar</Button>
+          <Button variant={danger ? 'danger' : 'primary'} className="flex-1" onClick={onConfirm} loading={loading}>{confirmLabel}</Button>
         </div>
       </div>
     </div>,
