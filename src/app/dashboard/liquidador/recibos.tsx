@@ -451,7 +451,7 @@ export function RecibosTab() {
         const sigImage          = await pageDoc.embedPng(sigBytes)
         const sigWidth          = width * 0.11
         const sigHeight         = sigWidth * (sigImage.height / sigImage.width)
-        page.drawImage(sigImage, { x: width * 0.54, y: height * 0.085, width: sigWidth, height: sigHeight, opacity: 0.92 })
+        page.drawImage(sigImage, { x: width * 0.62, y: height * 0.085, width: sigWidth, height: sigHeight, opacity: 0.92 })
 
         const signedBytes  = await pageDoc.save()
         const pdfBase64    = uint8ToBase64(signedBytes)   // codificar acá, NO guardar Uint8Array en state
