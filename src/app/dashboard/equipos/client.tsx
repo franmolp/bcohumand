@@ -127,6 +127,7 @@ function RolesTab() {
   const [editTarget, setEditTarget] = useState<Rol | null>(null)
   const [form, setForm] = useState({ nombre: '', descripcion: '', permisos: [] as string[] })
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Rol | null>(null)
   const [deleting, setDeleting] = useState(false)
 
@@ -146,11 +147,13 @@ function RolesTab() {
   function openNew() {
     setEditTarget(null)
     setForm({ nombre: '', descripcion: '', permisos: [] })
+    setSaveError(null)
     setModal(true)
   }
   function openEdit(r: Rol) {
     setEditTarget(r)
     setForm({ nombre: r.nombre, descripcion: r.descripcion ?? '', permisos: r.permisos ?? [] })
+    setSaveError(null)
     setModal(true)
   }
 
@@ -166,11 +169,20 @@ function RolesTab() {
   async function handleSave(ev: React.FormEvent) {
     ev.preventDefault()
     setSaving(true)
-    const body = { nombre: form.nombre, descripcion: form.descripcion || null, permisos: form.permisos }
-    const url = editTarget ? `/api/roles/${editTarget.id}` : '/api/roles'
-    const method = editTarget ? 'PUT' : 'POST'
-    const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    if (r.ok) { await load(); setModal(false) }
+    setSaveError(null)
+    try {
+      const body = { nombre: form.nombre, descripcion: form.descripcion || null, permisos: form.permisos.length > 0 ? form.permisos : null }
+      const url = editTarget ? `/api/roles/${editTarget.id}` : '/api/roles'
+      const method = editTarget ? 'PUT' : 'POST'
+      const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      if (r.ok) { await load(); setModal(false) }
+      else {
+        const err = await r.json().catch(() => ({}))
+        setSaveError(err.error || `Error ${r.status}`)
+      }
+    } catch {
+      setSaveError('Error de red al guardar')
+    }
     setSaving(false)
   }
 
@@ -243,6 +255,7 @@ function RolesTab() {
             </p>
           </div>
 
+          {saveError && <p className="text-[12px] text-red-500 bg-red-50 rounded-lg px-3 py-2">{saveError}</p>}
           <div className="flex gap-3 pt-1">
             <Button type="submit" loading={saving} className="flex-1">Guardar</Button>
             <Button type="button" variant="secondary" onClick={() => setModal(false)}>Cancelar</Button>
