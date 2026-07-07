@@ -176,6 +176,15 @@ function isPeluqueria(equipo: string): boolean {
   return equipo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes('peluq')
 }
 
+function isMasajistaODepiladora(equipo: string): boolean {
+  const n = equipo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  return n.includes('masaj') || n.includes('depilac')
+}
+
+function isManicura(equipo: string): boolean {
+  return !isRecepcion(equipo) && !isPeluqueria(equipo) && !isMasajistaODepiladora(equipo)
+}
+
 // ── Lane label per section ─────────────────────────────────────────────────────
 function laneLabel(equipo: string, lane: number): string {
   const n = equipo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -326,7 +335,7 @@ function AvailableSection({ equipo, capacity, shifts, selectedDate }: {
 }
 
 // ── Day strip (scrollable) ────────────────────────────────────────────────────
-function DayStrip({ stripDates, loadedDates, selectedDate, todayStr, onSelect, turnos, capacidades }: {
+function DayStrip({ stripDates, loadedDates, selectedDate, todayStr, onSelect, turnos, capacidades, soloManicuras = false }: {
   stripDates: Array<{ date: string; year: number; week: number }>
   loadedDates: string[]
   selectedDate: string
@@ -334,6 +343,7 @@ function DayStrip({ stripDates, loadedDates, selectedDate, todayStr, onSelect, t
   onSelect: (date: string, year: number, week: number) => void
   turnos: Turno[]
   capacidades: Record<string, number>
+  soloManicuras?: boolean
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -362,12 +372,13 @@ function DayStrip({ stripDates, loadedDates, selectedDate, todayStr, onSelect, t
             const isToday = date === todayStr
             const isLoaded = loadedDates.includes(date)
 
-            // Dot logic (only for loaded week, only manicura+box)
+            // Dot logic (only for loaded week, only manicura+box unless soloManicuras)
             let dotColor = '', dotPing = false
             if (isLoaded) {
               const dayTurnos = turnos.filter(t => t.fecha === date)
               const equipos = [...new Set(dayTurnos.map(t => t.equipo).filter(Boolean))]
                 .filter(e => !isRecepcion(e) && !isPeluqueria(e))
+                .filter(e => !soloManicuras || isManicura(e))
               let isExcedido = false, isLibre = false
               for (const eq of equipos) {
                 const cap = capacidades[eq] ?? 8
@@ -457,9 +468,11 @@ function sectionOrder(equipoNombre: string): number {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-export default function EspacioTrabajoClient({ user: _user }: { user: SessionUser }) {
+export default function EspacioTrabajoClient({ user }: { user: SessionUser }) {
   const todayStr = new Date().toLocaleDateString('sv')
   const initIso = isoWeekOf(todayStr)
+
+  const isCompras = user.rol === 'Compras'
 
   const [weekYear, setWeekYear] = useState(initIso.year)
   const [weekNum, setWeekNum] = useState(initIso.week)
@@ -518,9 +531,10 @@ export default function EspacioTrabajoClient({ user: _user }: { user: SessionUse
     if (!apiData) return []
     const equipoNames = [...new Set(apiData.turnos.map(t => t.equipo).filter(Boolean))]
       .filter(e => !isRecepcion(e))
+      .filter(e => !isCompras || isManicura(e))
     return equipoNames
       .sort((a, b) => sectionOrder(a) - sectionOrder(b) || a.localeCompare(b, 'es'))
-  }, [apiData])
+  }, [apiData, isCompras])
 
   const hasAvailable = useMemo(() => {
     if (!apiData) return false
@@ -579,6 +593,7 @@ export default function EspacioTrabajoClient({ user: _user }: { user: SessionUse
         onSelect={handleStripSelect}
         turnos={apiData?.turnos ?? []}
         capacidades={apiData?.capacidades ?? {}}
+        soloManicuras={isCompras}
       />
 
       {/* Tabs */}
