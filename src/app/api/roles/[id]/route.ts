@@ -14,8 +14,17 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       .eq('id', id).select().single()
     if (error) throw error
     return NextResponse.json(data)
-  } catch {
-    return NextResponse.json({ error: 'Error al actualizar rol' }, { status: 500 })
+  } catch (e: unknown) {
+    let msg: string
+    if (e instanceof Error) {
+      msg = e.message
+    } else if (e && typeof e === 'object') {
+      const err = e as Record<string, unknown>
+      msg = String(err.message || err.details || err.code || JSON.stringify(e))
+    } else {
+      msg = 'Error al actualizar rol'
+    }
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
 
