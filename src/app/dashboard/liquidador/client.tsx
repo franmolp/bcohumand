@@ -139,7 +139,7 @@ function AdminView() {
       </div>
 
       {tab === 'liquidaciones' && <LiquidacionesTab />}
-      {tab === 'recibos'       && <RecibosTab />}
+      {tab === 'recibos'       && <RecibosTab onSyncDone={() => setTab('liquidaciones')} />}
     </div>
   )
 }

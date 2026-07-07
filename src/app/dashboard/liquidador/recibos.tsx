@@ -147,7 +147,7 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
 
 // ─── Admin Recibos Tab ─────────────────────────────────────────────────────────
 
-export function RecibosTab() {
+export function RecibosTab({ onSyncDone }: { onSyncDone?: () => void } = {}) {
   const now = new Date()
   const [anio, setAnio] = useState(now.getFullYear())
   const [mes,  setMes]  = useState(now.getMonth() + 1)
@@ -179,6 +179,7 @@ export function RecibosTab() {
       if (data.error) { showToast(data.error, 'error'); return }
       setSyncResult({ inserted: data.inserted ?? 0, skipped: data.skipped ?? 0 })
       showToast(`Sincronización completa: ${data.inserted} importados, ${data.skipped} ya existían`)
+      if ((data.inserted ?? 0) > 0) onSyncDone?.()
     } catch {
       showToast('Error al conectar con Drive', 'error')
     } finally {
