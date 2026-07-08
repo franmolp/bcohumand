@@ -70,16 +70,31 @@ function LiquidacionesTab() {
   const [mes,  setMes]  = useState(now.getMonth() + 1)
   const [recibos, setRecibos] = useState<ReciboDB[]>([])
   const [pagos,   setPagos]   = useState<PagoRow[]>([])
-  const [loading, setLoading] = useState(false)
-  const [loadErr, setLoadErr] = useState<string | null>(null)
-  const [viewer, setViewer]   = useState<{ url: string; name: string } | null>(null)
-  const [preview, setPreview] = useState<ParsedPago[] | null>(null)
+  const [loading, setLoading]   = useState(false)
+  const [loadErr, setLoadErr]   = useState<string | null>(null)
+  const [syncing, setSyncing]   = useState(false)
+  const [viewer, setViewer]     = useState<{ url: string; name: string } | null>(null)
+  const [preview, setPreview]   = useState<ParsedPago[] | null>(null)
   const [parseErr, setParseErr] = useState<string | null>(null)
-  const [saving, setSaving]   = useState(false)
+  const [saving, setSaving]     = useState(false)
   const [editTarget, setEditTarget] = useState<PagoRow | null>(null)
   const [editForm, setEditForm]     = useState({ total: '', efectivo: '', transferencia: '' })
   const [editSaving, setEditSaving] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  async function handleSync() {
+    setSyncing(true)
+    try {
+      const res  = await fetch('/api/drive/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: 'liquidaciones' }) })
+      const data = await res.json()
+      if (data.error) { setLoadErr(data.error); return }
+      await load()
+    } catch {
+      setLoadErr('Error al conectar con Drive')
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -190,14 +205,22 @@ function LiquidacionesTab() {
 
   return (
     <div className="space-y-4">
-      {/* Header: mes + importar */}
+      {/* Header: mes + acciones */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <MonthPicker anio={anio} mes={mes} onChange={(a, m) => { setAnio(a); setMes(m) }} />
-        <label className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--primary)] cursor-pointer hover:underline">
-          <IconUpload size={13} />
-          {pagos.length > 0 ? 'Reimportar Excel' : 'Importar Excel'}
-          <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.xls" className="hidden" onChange={handleFile} />
-        </label>
+        <div className="flex items-center gap-2">
+          <button onClick={handleSync} disabled={syncing}
+            className="h-8 px-3 rounded-xl border border-[var(--border)] bg-white text-[12px] font-medium text-[var(--text-sub)] hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer transition-colors">
+            {syncing
+              ? <><div className="w-3 h-3 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" />Sincronizando…</>
+              : '↻ Sincronizar con Drive'}
+          </button>
+          <label className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--primary)] cursor-pointer hover:underline">
+            <IconUpload size={13} />
+            {pagos.length > 0 ? 'Reimportar Excel' : 'Importar Excel'}
+            <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.xls" className="hidden" onChange={handleFile} />
+          </label>
+        </div>
       </div>
 
       {/* Errors */}
@@ -327,7 +350,7 @@ function AdminView() {
       </div>
 
       {tab === 'liquidaciones' && <LiquidacionesTab />}
-      {tab === 'recibos'       && <RecibosTab onSyncDone={() => setTab('liquidaciones')} />}
+      {tab === 'recibos'       && <RecibosTab />}
     </div>
   )
 }

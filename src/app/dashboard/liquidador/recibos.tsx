@@ -378,7 +378,7 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
 
 // ─── Admin Recibos Tab ─────────────────────────────────────────────────────────
 
-export function RecibosTab({ onSyncDone }: { onSyncDone?: () => void } = {}) {
+export function RecibosTab() {
   const now = new Date()
   const anio = now.getFullYear()
   const mes  = now.getMonth() + 1
@@ -390,30 +390,10 @@ export function RecibosTab({ onSyncDone }: { onSyncDone?: () => void } = {}) {
   const [recibos,    setRecibos]    = useState<ReciboProcesado[]>([])
   const [subiendo,   setSubiendo]   = useState(false)
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
-  const [syncing,    setSyncing]    = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type }); setTimeout(() => setToast(null), 3500)
-  }
-
-  async function handleSync() {
-    setSyncing(true)
-    try {
-      const res  = await fetch('/api/drive/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo: 'liquidaciones' }),
-      })
-      const data = await res.json()
-      if (data.error) { showToast(data.error, 'error'); return }
-      showToast(`Sincronización completa: ${data.inserted} importados, ${data.skipped} ya existían`)
-      if ((data.inserted ?? 0) > 0) onSyncDone?.()
-    } catch {
-      showToast('Error al conectar con Drive', 'error')
-    } finally {
-      setSyncing(false)
-    }
   }
 
   // Cargar firma: localStorage como cache rápida, servidor como fuente de verdad
@@ -603,16 +583,6 @@ export function RecibosTab({ onSyncDone }: { onSyncDone?: () => void } = {}) {
 
   return (
     <div>
-      {/* Sync Drive */}
-      <div className="flex justify-end mb-4">
-        <button onClick={handleSync} disabled={syncing}
-          className="h-9 px-3 rounded-xl border border-[var(--border)] bg-white text-[12px] font-medium text-[var(--text-sub)] hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer transition-colors">
-          {syncing
-            ? <><div className="w-3.5 h-3.5 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" /> Importando…</>
-            : '↑ Importar historial de Drive'}
-        </button>
-      </div>
-
       {/* Setup section */}
       <div className="grid lg:grid-cols-2 gap-4 mb-5">
 

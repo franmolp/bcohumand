@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession, requireAdmin } from '@/lib/auth'
 
@@ -14,7 +13,7 @@ export async function GET(request: NextRequest) {
     const anio = searchParams.get('anio')
     const mes = searchParams.get('mes')
     if (!anio || !mes) return NextResponse.json({ error: 'anio y mes requeridos' }, { status: 400 })
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('liquidaciones_pagos')
       .select('id, nombre_excel, usuario_id, total, efectivo, transferencia')
       .eq('anio', Number(anio))
@@ -25,7 +24,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Employee: returns all months for their own usuario_id
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('liquidaciones_pagos')
     .select('anio, mes, total, efectivo, transferencia')
     .eq('usuario_id', session.id)
