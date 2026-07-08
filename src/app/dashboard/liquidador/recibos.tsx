@@ -107,39 +107,101 @@ function StatusBadge({ status, errorMsg }: { status: ReciboProcesado['status']; 
 
 // ─── Employee View ─────────────────────────────────────────────────────────────
 
+interface PagoEmpleada {
+  anio: number
+  mes: number
+  total: number
+  efectivo: number
+  transferencia: number
+}
+
+function fmtPeso(n: number): string {
+  return '$' + Math.round(n).toLocaleString('es-AR')
+}
+
 export function EmployeeRecibosView({ user }: { user: SessionUser }) {
   const [recibos, setRecibos] = useState<ReciboDB[]>([])
+  const [pagos,   setPagos]   = useState<PagoEmpleada[]>([])
   const [loading, setLoading] = useState(true)
   const [viewer, setViewer] = useState<{ url: string; name: string } | null>(null)
 
   useEffect(() => {
-    fetch('/api/liquidador/recibos')
-      .then(r => r.json())
-      .then(d => setRecibos(Array.isArray(d) ? (d as ReciboDB[]).sort((a, b) => b.anio - a.anio || b.mes - a.mes) : []))
-      .finally(() => setLoading(false))
+    Promise.all([
+      fetch('/api/liquidador/recibos').then(r => r.json()),
+      fetch('/api/liquidador/pagos').then(r => r.json()),
+    ]).then(([rData, pData]) => {
+      setRecibos(Array.isArray(rData) ? (rData as ReciboDB[]).sort((a, b) => b.anio - a.anio || b.mes - a.mes) : [])
+      setPagos(Array.isArray(pData) ? (pData as PagoEmpleada[]) : [])
+    }).finally(() => setLoading(false))
   }, [])
 
   if (loading) return <Spinner />
 
+  // Build unified list of months: from recibos + pagos (deduplicated)
+  const keys = new Map<string, { anio: number; mes: number }>()
+  recibos.forEach(r => keys.set(`${r.anio}-${r.mes}`, { anio: r.anio, mes: r.mes }))
+  pagos.forEach(p => keys.set(`${p.anio}-${p.mes}`, { anio: p.anio, mes: p.mes }))
+  const meses = Array.from(keys.values()).sort((a, b) => b.anio - a.anio || b.mes - a.mes)
+
+  const reciboMap = new Map(recibos.map(r => [`${r.anio}-${r.mes}`, r]))
+  const pagoMap   = new Map(pagos.map(p => [`${p.anio}-${p.mes}`, p]))
+
   return (
     <div className="space-y-3 mt-4">
-      <p className="text-[13px] font-semibold text-[var(--text-sub)]">Recibos de sueldo</p>
-      {recibos.length === 0 ? (
-        <p className="text-[13px] text-[var(--text-sub)] text-center py-8">Sin recibos disponibles</p>
-      ) : recibos.map(r => (
-        <button key={r.id}
-          onClick={() => setViewer({ url: r.storage_url, name: r.nombre_archivo })}
-          className="w-full bg-white rounded-xl border border-gray-200/60 p-3.5 flex items-center gap-3 hover:bg-gray-50 transition-colors cursor-pointer text-left">
-          <div className="w-9 h-9 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
-            <IconFileText size={18} className="text-[var(--primary)]" />
+      <p className="text-[13px] font-semibold text-[var(--text-sub)]">Mis liquidaciones</p>
+      {meses.length === 0 ? (
+        <p className="text-[13px] text-[var(--text-sub)] text-center py-8">Sin liquidaciones disponibles</p>
+      ) : meses.map(({ anio, mes }) => {
+        const recibo = reciboMap.get(`${anio}-${mes}`)
+        const pago   = pagoMap.get(`${anio}-${mes}`)
+        return (
+          <div key={`${anio}-${mes}`}
+            className="w-full bg-white rounded-xl border border-gray-200/60 overflow-hidden">
+            {/* Header — clickeable si hay recibo */}
+            {recibo ? (
+              <button
+                onClick={() => setViewer({ url: recibo.storage_url, name: recibo.nombre_archivo })}
+                className="w-full p-3.5 flex items-center gap-3 hover:bg-gray-50 transition-colors cursor-pointer text-left">
+                <div className="w-9 h-9 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
+                  <IconFileText size={18} className="text-[var(--primary)]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-semibold">{MESES[mes - 1]} {anio}</p>
+                  <p className="text-[11px] text-gray-400 truncate">{recibo.nombre_archivo}</p>
+                </div>
+                <span className="text-[12px] font-semibold text-[var(--primary)] shrink-0">Ver recibo</span>
+              </button>
+            ) : (
+              <div className="p-3.5 flex items-center gap-3">
+                <div className="w-9 h-9 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
+                  <IconFileText size={18} className="text-gray-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-semibold">{MESES[mes - 1]} {anio}</p>
+                  <p className="text-[11px] text-gray-400">Recibo pendiente</p>
+                </div>
+              </div>
+            )}
+            {/* Payment breakdown */}
+            {pago && (
+              <div className="border-t border-gray-100 px-3.5 py-3 bg-gray-50/60 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-semibold text-[var(--text-main)]">Total a liquidar</span>
+                  <span className="text-[13px] font-bold text-[var(--primary)]">{fmtPeso(pago.total)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-[var(--text-sub)]">Efectivo</span>
+                  <span className="text-[11px] font-medium text-[var(--text-main)]">{fmtPeso(pago.efectivo)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-[var(--text-sub)]">Transferencia</span>
+                  <span className="text-[11px] font-medium text-[var(--text-main)]">{fmtPeso(pago.transferencia)}</span>
+                </div>
+              </div>
+            )}
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold">{MESES[r.mes - 1]} {r.anio}</p>
-            <p className="text-[11px] text-gray-400 truncate">{r.nombre_archivo}</p>
-          </div>
-          <span className="text-[12px] font-semibold text-[var(--primary)] shrink-0">Ver</span>
-        </button>
-      ))}
+        )
+      })}
       {viewer && <FileViewer url={viewer.url} name={viewer.name} onClose={() => setViewer(null)} />}
     </div>
   )
