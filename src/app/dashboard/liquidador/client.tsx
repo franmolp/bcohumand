@@ -80,6 +80,9 @@ function LiquidacionesTab() {
   const [editTarget,  setEditTarget]  = useState<{ id?: number; nombre: string } | null>(null)
   const [editForm,    setEditForm]    = useState({ total: '', efectivo: '', transferencia: '' })
   const [editSaving,  setEditSaving]  = useState(false)
+  const [urlTarget,   setUrlTarget]   = useState<ReciboDB | null>(null)
+  const [urlInput,    setUrlInput]    = useState('')
+  const [urlSaving,   setUrlSaving]   = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function loadData() {
@@ -161,6 +164,19 @@ function LiquidacionesTab() {
     if (r.ok) { setPreview(null); await loadData() }
     else { const err = await r.json().catch(() => ({})); setParseErr(err.error || 'Error al guardar') }
     setSaving(false)
+  }
+
+  async function handleUrlSave() {
+    if (!urlTarget || !urlInput.startsWith('http')) return
+    setUrlSaving(true)
+    await fetch(`/api/liquidador/recibos/${urlTarget.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storage_url: urlInput.trim() }),
+    })
+    setUrlTarget(null); setUrlInput('')
+    await loadData()
+    setUrlSaving(false)
   }
 
   async function handleEditSave() {
@@ -254,7 +270,10 @@ function LiquidacionesTab() {
                       <IconFileText size={12} />Ver recibo
                     </button>
                   ) : item.recibo ? (
-                    <span className="text-[11px] text-amber-500">Recibo sin URL · resincronizar</span>
+                    <button onClick={() => { setUrlTarget(item.recibo!); setUrlInput('') }}
+                      className="flex items-center gap-1 text-[11px] text-amber-500 hover:text-amber-700 cursor-pointer">
+                      ⚠ Sin URL · pegar link
+                    </button>
                   ) : (
                     <span className="text-[11px] text-gray-400">Sin recibo</span>
                   )}
@@ -288,6 +307,29 @@ function LiquidacionesTab() {
           ))}
         </div>
       )}
+
+      {/* Modal URL manual */}
+      <Modal open={!!urlTarget} onClose={() => setUrlTarget(null)} title={`Pegar URL Drive · ${urlTarget?.nombre_empleada}`}>
+        <div className="space-y-4">
+          <p className="text-[12px] text-[var(--text-sub)]">Abrí el archivo en Drive, copiá el link y pegalo acá.</p>
+          <Input
+            label="URL de Drive"
+            placeholder="https://drive.google.com/file/d/..."
+            value={urlInput}
+            onChange={e => setUrlInput(e.target.value)}
+          />
+          {urlInput && !urlInput.startsWith('http') && (
+            <p className="text-[11px] text-red-500">La URL debe empezar con https://</p>
+          )}
+          <div className="flex gap-3 pt-1">
+            <Button className="flex-1" loading={urlSaving} onClick={handleUrlSave}
+              disabled={!urlInput.startsWith('http')}>
+              Guardar URL
+            </Button>
+            <Button variant="secondary" onClick={() => setUrlTarget(null)}>Cancelar</Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Modal edición */}
       <Modal open={!!editTarget} onClose={() => setEditTarget(null)} title={`${editTarget?.id ? 'Editar' : 'Agregar montos'} · ${editTarget?.nombre}`}>
