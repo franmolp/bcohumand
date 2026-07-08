@@ -113,13 +113,16 @@ function LiquidacionesTab() {
     return items.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
   }, [recibos, pagos])
 
-  async function handleSync() {
+  async function handleSync(repair = false) {
     setSyncing(true); setSyncMsg(null)
     try {
-      const res  = await fetch('/api/drive/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: 'liquidaciones' }) })
+      const res  = await fetch('/api/drive/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: 'liquidaciones', repair }) })
       const data = await res.json()
       if (data.error) { setSyncMsg(data.error); return }
-      setSyncMsg(`${data.inserted} importados · ${data.skipped} ya existían`)
+      const parts = [`${data.inserted} importados`, `${data.skipped} ya existían`]
+      if (repair && data.repaired != null) parts.unshift(`${data.repaired} rotos eliminados`)
+      if (data.urlsFixed) parts.push(`${data.urlsFixed} URLs reparadas`)
+      setSyncMsg(parts.join(' · '))
       await loadData()
     } catch {
       setSyncMsg('Error al conectar con Drive')
@@ -171,6 +174,8 @@ function LiquidacionesTab() {
     setEditSaving(false)
   }
 
+  const brokenCount = useMemo(() => unified.filter(i => i.recibo && !i.recibo.storage_url.startsWith('http')).length, [unified])
+
   return (
     <div className="space-y-4">
       {/* Header: mes + acciones */}
@@ -182,7 +187,15 @@ function LiquidacionesTab() {
             {pagos.length > 0 ? 'Reimportar Excel' : 'Importar Excel'}
             <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.xls" className="hidden" onChange={handleFile} />
           </label>
-          <button onClick={handleSync} disabled={syncing}
+          {brokenCount > 0 && (
+            <button onClick={() => handleSync(true)} disabled={syncing}
+              className="h-8 px-3 rounded-xl border border-amber-300 bg-amber-50 text-[12px] font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer transition-colors">
+              {syncing
+                ? <><div className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />Reparando…</>
+                : `⚠ Reparar ${brokenCount} URL${brokenCount > 1 ? 's' : ''}`}
+            </button>
+          )}
+          <button onClick={() => handleSync()} disabled={syncing}
             className="h-8 px-3 rounded-xl border border-[var(--border)] bg-white text-[12px] font-medium text-[var(--text-sub)] hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer transition-colors">
             {syncing
               ? <><div className="w-3 h-3 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" />Sincronizando…</>

@@ -13,14 +13,25 @@ export async function POST(request: NextRequest) {
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
   if (!isAdmin) return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
 
-  const { tipo } = await request.json() as { tipo: string }
+  const { tipo, repair } = await request.json() as { tipo: string; repair?: boolean }
   if (!tipo) return NextResponse.json({ error: 'tipo requerido' }, { status: 400 })
 
   try {
+    // Modo reparación: elimina registros con URLs rotas antes de re-sincronizar
+    let repaired = 0
+    if (repair) {
+      const { count } = await supabaseAdmin
+        .from('recibos_sueldo')
+        .delete()
+        .not('storage_url', 'like', 'http%')
+        .select('id', { count: 'exact', head: true })
+      repaired = count ?? 0
+    }
+
     const res = await fetch(GAS_URL, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ secret: GAS_SECRET, action: 'sync_drive', tipo, mesesAtras: 2 }),
+      body:    JSON.stringify({ secret: GAS_SECRET, action: 'sync_drive', tipo, mesesAtras: repair ? 6 : 2 }),
       signal:  AbortSignal.timeout(55000),
     })
 
@@ -75,7 +86,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ...data, deleted, urlsFixed })
+    return NextResponse.json({ ...data, deleted, urlsFixed, repaired })
   } catch (e) {
     const isTimeout = e instanceof Error && e.name === 'TimeoutError'
     const msg = isTimeout
