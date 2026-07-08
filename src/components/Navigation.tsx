@@ -8,32 +8,27 @@ import type { SessionUser } from '@/types'
 import { IconHome, IconUsers, IconClipboard, IconLogout, IconBell, IconShoppingBag, IconWall, IconDollar, IconSettings, IconX, IconMore, IconCalendar, IconReceipt, IconShield, IconCamera, IconCalendarCheck, IconWrench, IconStar, IconLayoutGrid, IconBarChart } from '@/components/ui/Icons'
 import PhotoCropModal from '@/components/PhotoCropModal'
 
-// permiso: true  → visibilidad controlada por roles.permisos en DB (con defaultRoles como fallback)
-// admin: true     → solo Admin (hardcodeado, no configurable)
-// notAdmin: true  → solo empleados sin cargo especial
-// sin flags       → visible para todos
-
 const allNav = [
-  { href: '/dashboard',                 label: 'Inicio',             icon: IconHome,        mobile: true,  permiso: true },
-  { href: '/dashboard/asistencia',      label: 'Asistencia',         icon: IconClipboard,   mobile: true,  permiso: true, defaultRoles: ['Admin','admin','HR','Encargada'] },
-  { href: '/dashboard/solicitudes',     label: 'Solicitudes',        labelEmp: 'Mis Solicitudes',  icon: IconCalendarCheck, mobile: true, permiso: true },
-  { href: '/dashboard/empleados',       label: 'Empleados',          icon: IconUsers,                      permiso: true, defaultRoles: ['Admin','admin','HR'] },
-  { href: '/dashboard/liquidador',      label: 'Liquidaciones',      labelEmp: 'Mi Liquidación',   icon: IconDollar, permiso: true },
-  { href: '/dashboard/adelantos',       label: 'Adelantos',          labelEmp: 'Mis Adelantos',    icon: IconDollar, permiso: true },
-  { href: '/dashboard/mi-asistencia',   label: 'Mi Asistencia',      icon: IconClipboard,   notAdmin: true, mobile: true, permiso: true },
-  { href: '/dashboard/espacio-trabajo', label: 'Espacio de trabajo', icon: IconLayoutGrid,                 permiso: true, defaultRoles: ['Admin','admin','HR','Encargada'] },
-  { href: '/dashboard/compras',         label: 'Compras',            icon: IconShoppingBag,                permiso: true, defaultRoles: ['Admin','admin','Compras','Encargada'] },
-  { href: '/dashboard/monotributo',     label: 'Monotributo',        icon: IconReceipt,                    permiso: true },
-  { href: '/dashboard/calendario',      label: 'Calendario',         icon: IconCalendar,    mobile: true,  permiso: true },
-  { href: '/dashboard/muro',            label: 'Muro Social',        icon: IconWall,                       permiso: true },
-  { href: '/dashboard/reparaciones',    label: 'Reparaciones',       icon: IconWrench,                     permiso: true },
-  { href: '/dashboard/juegos',          label: 'Juegos',             icon: IconStar,        mobile: true,  permiso: true },
-  { href: '/dashboard/informes',        label: 'Informes',           icon: IconBarChart,    admin: true },
-  { href: '/dashboard/equipos',         label: 'Equipos y Roles',    icon: IconSettings,    admin: true },
-  { href: '/dashboard/seguridad',       label: 'Seguridad',          icon: IconShield,      admin: true },
+  { href: '/dashboard',              label: 'Inicio',         icon: IconHome,        mobile: true },
+  { href: '/dashboard/asistencia',   label: 'Asistencia',     icon: IconClipboard,   roles: ['Admin', 'admin', 'HR', 'Encargada'], mobile: true },
+  { href: '/dashboard/solicitudes',  label: 'Solicitudes',    labelEmp: 'Mis Solicitudes', icon: IconCalendarCheck, mobile: true },
+  { href: '/dashboard/empleados',    label: 'Empleados',      icon: IconUsers,       roles: ['Admin', 'admin', 'HR'] },
+  { href: '/dashboard/liquidador',   label: 'Liquidaciones',  labelEmp: 'Mi Liquidación', icon: IconDollar },
+  { href: '/dashboard/adelantos',    label: 'Adelantos',      labelEmp: 'Mis Adelantos', icon: IconDollar },
+  { href: '/dashboard/mi-asistencia', label: 'Mi Asistencia', icon: IconClipboard, notAdmin: true, mobile: true },
+  { href: '/dashboard/espacio-trabajo', label: 'Espacio de trabajo', icon: IconLayoutGrid, roles: ['Admin', 'admin', 'HR', 'Encargada', 'Compras'] },
+  { href: '/dashboard/compras',      label: 'Compras',        icon: IconShoppingBag, roles: ['Admin', 'admin', 'Compras', 'Encargada'] },
+  { href: '/dashboard/monotributo',  label: 'Monotributo',    icon: IconReceipt },
+  { href: '/dashboard/calendario',   label: 'Calendario',     icon: IconCalendar,    mobile: true },
+  { href: '/dashboard/muro',          label: 'Muro Social',     icon: IconWall },
+  { href: '/dashboard/reparaciones',  label: 'Reparaciones',    icon: IconWrench },
+  { href: '/dashboard/juegos',        label: 'Juegos',          icon: IconStar,        mobile: true },
+  { href: '/dashboard/informes',       label: 'Informes',        icon: IconBarChart,   roles: ['Admin', 'admin', 'HR'] },
+  { href: '/dashboard/equipos',       label: 'Equipos y Roles', icon: IconSettings,   admin: true },
+  { href: '/dashboard/seguridad',    label: 'Seguridad',      icon: IconShield,      admin: true },
 ]
 
-export default function Navigation({ user, permisos }: { user: SessionUser; permisos: string[] | null }) {
+export default function Navigation({ user }: { user: SessionUser }) {
   const path = usePathname()
   const router = useRouter()
   const isAdmin = user.rol === 'admin' || user.rol === 'Admin'
@@ -54,18 +49,8 @@ export default function Navigation({ user, permisos }: { user: SessionUser; perm
   const items = allNav.filter(i => {
     if (i.admin && !isAdmin) return false
     if ((i as {notAdmin?: boolean}).notAdmin && (isAdmin || isEncargada || isHR)) return false
-    if (isAdmin) return true
-    if ((i as {permiso?: boolean}).permiso) {
-      // HR no ve liquidador ni monotributo (regla de negocio fija)
-      if (isHR && (i.href === '/dashboard/liquidador' || i.href === '/dashboard/monotributo')) return false
-      if (permisos !== null) {
-        // Rol configurado en DB → usar esa lista
-        return permisos.includes(i.href)
-      }
-      // Sin configurar → usar defaultRoles como fallback; sin defaultRoles = visible a todos
-      const def = (i as {defaultRoles?: string[]}).defaultRoles
-      return def ? def.includes(user.rol) : true
-    }
+    if (isHR && (i.href === '/dashboard/monotributo' || i.href === '/dashboard/liquidador')) return false
+    if (i.roles && !i.roles.includes(user.rol)) return false
     return true
   })
   const mobileItems = items.filter(i => i.mobile).slice(0, 4)

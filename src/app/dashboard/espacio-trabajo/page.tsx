@@ -8,6 +8,7 @@ export default async function EspacioTrabajoPage() {
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
   const isHR = session.rol === 'HR'
   const isEncargada = session.rol === 'Encargada'
-  if (!isAdmin && !isHR && !isEncargada) redirect('/dashboard')
+  const isCompras = session.rol === 'Compras'
+  if (!isAdmin && !isHR && !isEncargada && !isCompras) redirect('/dashboard')
   return <EspacioTrabajoClient user={session} />
 }

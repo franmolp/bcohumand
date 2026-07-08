@@ -20,7 +20,8 @@ export async function GET(req: NextRequest) {
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
   const isHR = session.rol === 'HR'
   const isEncargada = session.rol === 'Encargada'
-  if (!isAdmin && !isHR && !isEncargada) {
+  const isCompras = session.rol === 'Compras'
+  if (!isAdmin && !isHR && !isEncargada && !isCompras) {
     return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
   }
 

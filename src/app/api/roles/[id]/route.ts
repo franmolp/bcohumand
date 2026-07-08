@@ -15,7 +15,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (error) throw error
     return NextResponse.json(data)
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : (e as { message?: string })?.message ?? 'Error al actualizar rol'
+    let msg: string
+    if (e instanceof Error) {
+      msg = e.message
+    } else if (e && typeof e === 'object') {
+      const err = e as Record<string, unknown>
+      msg = String(err.message || err.details || err.code || JSON.stringify(e))
+    } else {
+      msg = 'Error al actualizar rol'
+    }
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
