@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     const res = await fetch(GAS_URL, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ secret: GAS_SECRET, action: 'sync_drive', tipo, mesesAtras: repair ? 6 : 2 }),
+      body:    JSON.stringify({ secret: GAS_SECRET, action: 'sync_drive', tipo, mesesAtras: 2 }),
       signal:  AbortSignal.timeout(55000),
     })
 
