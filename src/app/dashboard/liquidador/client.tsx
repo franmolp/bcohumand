@@ -91,25 +91,31 @@ function LiquidacionesTab() {
       fetch(`/api/liquidador/recibos?anio=${anio}&mes=${mes}`).then(r => r.json()).catch(() => []),
       fetch(`/api/liquidador/pagos?anio=${anio}&mes=${mes}`).then(r => r.json()).catch(() => []),
     ])
-    setRecibos(Array.isArray(recibosRes) ? recibosRes : [])
-    setPagos(Array.isArray(pagosRes) ? pagosRes : [])
+    const r = Array.isArray(recibosRes) ? recibosRes : []
+    const p = Array.isArray(pagosRes) ? pagosRes : []
+    console.log('[liquidador] recibos nombres:', r.map((x: ReciboDB) => JSON.stringify(x.nombre_empleada)))
+    console.log('[liquidador] pagos nombres:', p.map((x: PagoRow) => JSON.stringify(x.nombre_excel)))
+    setRecibos(r)
+    setPagos(p)
     setDataLoading(false)
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadData() }, [anio, mes])
 
-  // Lista unificada: pagos como primaria, match exacto con recibos por nombre
+  // Lista unificada: pagos como primaria, match por nombre normalizado
   const unified = useMemo(() => {
+    const normKey = (s: string) => s.trim().normalize('NFC').replace(/\s+/g, ' ').toLowerCase()
+    const reciboByNorm = new Map(recibos.map(r => [normKey(r.nombre_empleada), r]))
     const seen = new Set<string>()
     const items: { nombre: string; recibo: ReciboDB | null; pago: PagoRow | null }[] = []
     for (const p of pagos) {
-      const recibo = recibos.find(r => r.nombre_empleada === p.nombre_excel) ?? null
+      const recibo = reciboByNorm.get(normKey(p.nombre_excel)) ?? null
       items.push({ nombre: p.nombre_excel, recibo, pago: p })
-      seen.add(p.nombre_excel)
+      seen.add(normKey(p.nombre_excel))
     }
     for (const r of recibos) {
-      if (!seen.has(r.nombre_empleada)) {
+      if (!seen.has(normKey(r.nombre_empleada))) {
         items.push({ nombre: r.nombre_empleada, recibo: r, pago: null })
       }
     }
@@ -125,6 +131,8 @@ function LiquidacionesTab() {
       const parts = [`${data.inserted} importados`, `${data.skipped} ya existían`]
       if (repair && data.repaired != null) parts.unshift(`${data.repaired} rotos eliminados`)
       if (data.urlsFixed) parts.push(`${data.urlsFixed} URLs reparadas`)
+      if (data.errors?.length) parts.push(`${data.errors.length} errores (ver consola)`)
+      console.log('[sync] resultado:', data)
       setSyncMsg(parts.join(' · '))
       await loadData()
     } catch {
