@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
-import { RecibosTab, EmployeeRecibosView, normalizarNombre } from './recibos'
+import { useState, useEffect, useRef } from 'react'
+import { RecibosTab, EmployeeRecibosView } from './recibos'
 import { Spinner, Modal, Button, Input } from '@/components/ui'
 import { IconDollar, IconFileText, IconEdit, IconUpload, IconCheck, IconX } from '@/components/ui/Icons'
 import type { SessionUser } from '@/types'
@@ -70,77 +70,53 @@ function LiquidacionesTab() {
   const [mes,  setMes]  = useState(now.getMonth() + 1)
   const [recibos, setRecibos] = useState<ReciboDB[]>([])
   const [pagos,   setPagos]   = useState<PagoRow[]>([])
-  const [loading, setLoading]   = useState(false)
-  const [loadErr, setLoadErr]   = useState<string | null>(null)
-  const [syncing, setSyncing]   = useState(false)
-  const [viewer, setViewer]     = useState<{ url: string; name: string } | null>(null)
-  const [preview, setPreview]   = useState<ParsedPago[] | null>(null)
+  const [recibosLoading, setRecibosLoading] = useState(false)
+  const [pagosLoading,   setPagosLoading]   = useState(false)
+  const [syncing,  setSyncing]  = useState(false)
+  const [syncMsg,  setSyncMsg]  = useState<string | null>(null)
+  const [viewer,   setViewer]   = useState<{ url: string; name: string } | null>(null)
+  const [preview,  setPreview]  = useState<ParsedPago[] | null>(null)
   const [parseErr, setParseErr] = useState<string | null>(null)
-  const [saving, setSaving]     = useState(false)
-  const [editTarget, setEditTarget] = useState<PagoRow | null>(null)
-  const [editForm, setEditForm]     = useState({ total: '', efectivo: '', transferencia: '' })
-  const [editSaving, setEditSaving] = useState(false)
+  const [pagosErr, setPagosErr] = useState<string | null>(null)
+  const [saving,   setSaving]   = useState(false)
+  const [editTarget,  setEditTarget]  = useState<PagoRow | null>(null)
+  const [editForm,    setEditForm]    = useState({ total: '', efectivo: '', transferencia: '' })
+  const [editSaving,  setEditSaving]  = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  async function loadRecibos() {
+    setRecibosLoading(true)
+    const r = await fetch(`/api/liquidador/recibos?anio=${anio}&mes=${mes}`).then(r => r.json()).catch(() => [])
+    setRecibos(Array.isArray(r) ? r.sort((a: ReciboDB, b: ReciboDB) => a.nombre_empleada.localeCompare(b.nombre_empleada, 'es')) : [])
+    setRecibosLoading(false)
+  }
+
+  async function loadPagos() {
+    setPagosLoading(true)
+    setPagosErr(null)
+    const r = await fetch(`/api/liquidador/pagos?anio=${anio}&mes=${mes}`).then(r => r.json()).catch(() => ({}))
+    if (r?.error) setPagosErr(r.error)
+    else setPagos(Array.isArray(r) ? r : [])
+    setPagosLoading(false)
+  }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadRecibos(); loadPagos() }, [anio, mes])
+
   async function handleSync() {
-    setSyncing(true)
+    setSyncing(true); setSyncMsg(null)
     try {
       const res  = await fetch('/api/drive/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo: 'liquidaciones' }) })
       const data = await res.json()
-      if (data.error) { setLoadErr(data.error); return }
-      await load()
+      if (data.error) { setSyncMsg(data.error); return }
+      setSyncMsg(`${data.inserted} importados · ${data.skipped} ya existían`)
+      await loadRecibos()
     } catch {
-      setLoadErr('Error al conectar con Drive')
+      setSyncMsg('Error al conectar con Drive')
     } finally {
       setSyncing(false)
     }
   }
-
-  async function load() {
-    setLoading(true)
-    setLoadErr(null)
-    try {
-      const [rRes, pRes] = await Promise.all([
-        fetch(`/api/liquidador/recibos?anio=${anio}&mes=${mes}`).then(r => r.json()),
-        fetch(`/api/liquidador/pagos?anio=${anio}&mes=${mes}`).then(r => r.json()),
-      ])
-      setRecibos(Array.isArray(rRes) ? rRes : [])
-      if (pRes?.error) setLoadErr(pRes.error)
-      else setPagos(Array.isArray(pRes) ? pRes : [])
-    } catch {
-      setLoadErr('Error al cargar datos')
-    }
-    setLoading(false)
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { load() }, [anio, mes])
-
-  // Build unified list: one entry per employee, merging recibo + pago
-  const empleadas = useMemo(() => {
-    const map = new Map<string, { nombre: string; recibo: ReciboDB | null; pago: PagoRow | null }>()
-    for (const r of recibos) {
-      map.set(r.nombre_empleada, { nombre: r.nombre_empleada, recibo: r, pago: null })
-    }
-    for (const p of pagos) {
-      const key = normalizarNombre(p.nombre_excel)
-      if (map.has(key)) {
-        map.get(key)!.pago = p
-      } else {
-        // try first-name match as fallback
-        const firstName = key.split(' ')[0]
-        let matched = false
-        for (const [k, entry] of map) {
-          if (!entry.pago && k.startsWith(firstName + ' ')) {
-            entry.pago = p
-            matched = true
-            break
-          }
-        }
-        if (!matched) map.set(key, { nombre: p.nombre_excel, recibo: null, pago: p })
-      }
-    }
-    return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
-  }, [recibos, pagos])
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -156,12 +132,7 @@ function LiquidacionesTab() {
       const SKIP = new Set(['TOTAL', 'DISPONIBLE', 'FALTA/SOBRA'])
       const parsed: ParsedPago[] = rows
         .filter(r => r.A && !SKIP.has(String(r.A).trim().toUpperCase()))
-        .map(r => ({
-          nombre: String(r.A).trim(),
-          total: Math.round(Number(r.B) || 0),
-          efectivo: Math.round(Number(r.C) || 0),
-          transferencia: Math.round(Number(r.D) || 0),
-        }))
+        .map(r => ({ nombre: String(r.A).trim(), total: Math.round(Number(r.B) || 0), efectivo: Math.round(Number(r.C) || 0), transferencia: Math.round(Number(r.D) || 0) }))
       if (!parsed.length) throw new Error('No se encontraron filas de empleadas en la hoja')
       setPreview(parsed)
     } catch (err) {
@@ -173,28 +144,17 @@ function LiquidacionesTab() {
   async function handleSaveImport() {
     if (!preview) return
     setSaving(true)
-    const r = await fetch('/api/liquidador/pagos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ anio, mes, filas: preview }),
-    })
-    if (r.ok) { setPreview(null); await load() }
-    else {
-      const err = await r.json().catch(() => ({}))
-      setParseErr(err.error || 'Error al guardar')
-    }
+    const r = await fetch('/api/liquidador/pagos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ anio, mes, filas: preview }) })
+    if (r.ok) { setPreview(null); await loadPagos() }
+    else { const err = await r.json().catch(() => ({})); setParseErr(err.error || 'Error al guardar') }
     setSaving(false)
   }
 
   async function handleEditSave() {
     if (!editTarget) return
     setEditSaving(true)
-    const r = await fetch(`/api/liquidador/pagos/${editTarget.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ total: Number(editForm.total), efectivo: Number(editForm.efectivo), transferencia: Number(editForm.transferencia) }),
-    })
-    if (r.ok) { setEditTarget(null); await load() }
+    const r = await fetch(`/api/liquidador/pagos/${editTarget.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ total: Number(editForm.total), efectivo: Number(editForm.efectivo), transferencia: Number(editForm.transferencia) }) })
+    if (r.ok) { setEditTarget(null); await loadPagos() }
     setEditSaving(false)
   }
 
@@ -204,116 +164,128 @@ function LiquidacionesTab() {
   }
 
   return (
-    <div className="space-y-4">
-      {/* Header: mes + acciones */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+    <div className="space-y-5">
+      {/* Header: mes + sync */}
+      <div className="flex items-center gap-3 flex-wrap">
         <MonthPicker anio={anio} mes={mes} onChange={(a, m) => { setAnio(a); setMes(m) }} />
-        <div className="flex items-center gap-2">
-          <button onClick={handleSync} disabled={syncing}
-            className="h-8 px-3 rounded-xl border border-[var(--border)] bg-white text-[12px] font-medium text-[var(--text-sub)] hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer transition-colors">
-            {syncing
-              ? <><div className="w-3 h-3 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" />Sincronizando…</>
-              : '↻ Sincronizar con Drive'}
-          </button>
+        <button onClick={handleSync} disabled={syncing}
+          className="ml-auto h-8 px-3 rounded-xl border border-[var(--border)] bg-white text-[12px] font-medium text-[var(--text-sub)] hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer transition-colors">
+          {syncing
+            ? <><div className="w-3 h-3 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" />Sincronizando…</>
+            : '↻ Sincronizar con Drive'}
+        </button>
+      </div>
+
+      {syncMsg && (
+        <p className={`text-[12px] ${syncMsg.includes('importados') ? 'text-emerald-600' : 'text-red-600'}`}>{syncMsg}</p>
+      )}
+
+      {/* Sección recibos firmados */}
+      <div>
+        <p className="text-[13px] font-semibold text-[var(--text-sub)] mb-3">
+          Recibos firmados
+          {!recibosLoading && recibos.length > 0 && <span className="ml-1.5 text-gray-400 font-normal">· {recibos.length}</span>}
+        </p>
+        {recibosLoading ? <Spinner /> : recibos.length === 0 ? (
+          <div className="bg-gray-50 rounded-xl border border-dashed border-gray-200 py-6 text-center">
+            <p className="text-[13px] text-[var(--text-sub)]">Sin recibos para {MESES[mes - 1]} {anio}</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-200/60 divide-y divide-gray-100">
+            {recibos.map(r => (
+              <button key={r.id} onClick={() => setViewer({ url: r.storage_url, name: r.nombre_archivo })}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left cursor-pointer">
+                <IconFileText size={18} className="text-[var(--primary)] shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium truncate">{r.nombre_empleada}</p>
+                  <p className="text-[11px] text-[var(--text-sub)] truncate">{r.nombre_archivo}</p>
+                </div>
+                <span className="text-[11px] text-[var(--text-sub)] shrink-0">{fmtDate(r.subido_el)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Sección pagos del mes */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[13px] font-semibold text-[var(--text-sub)]">
+            Pagos {MESES[mes - 1]} {anio}
+            {!pagosLoading && pagos.length > 0 && <span className="ml-1.5 text-gray-400 font-normal">· {pagos.length}</span>}
+          </p>
           <label className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--primary)] cursor-pointer hover:underline">
             <IconUpload size={13} />
             {pagos.length > 0 ? 'Reimportar Excel' : 'Importar Excel'}
             <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.xls" className="hidden" onChange={handleFile} />
           </label>
         </div>
-      </div>
 
-      {/* Errors */}
-      {(parseErr || loadErr) && (
-        <div className="flex items-center gap-2 text-[12px] text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
-          <IconX size={13} />{parseErr || loadErr}
-        </div>
-      )}
+        {parseErr && (
+          <div className="flex items-center gap-2 text-[12px] text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2 mb-3">
+            <IconX size={13} />{parseErr}
+          </div>
+        )}
+        {pagosErr && (
+          <div className="flex items-center gap-2 text-[12px] text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2 mb-3">
+            <IconX size={13} />{pagosErr}
+          </div>
+        )}
 
-      {/* Preview de importación */}
-      {preview && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
-          <p className="text-[12px] font-semibold text-amber-800">
-            Vista previa — {preview.length} empleadas · Confirmar para guardar
-          </p>
-          <div className="max-h-48 overflow-y-auto space-y-1">
-            {preview.map((p, i) => (
-              <div key={i} className="flex items-center justify-between text-[12px] py-1 border-b border-amber-100 last:border-0">
-                <span className="font-medium text-amber-900">{p.nombre}</span>
-                <span className="text-amber-700 tabular-nums">{fmtPeso(p.total)} · Ef {fmtPeso(p.efectivo)} · Tr {fmtPeso(p.transferencia)}</span>
+        {/* Preview */}
+        {preview && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2 mb-3">
+            <p className="text-[12px] font-semibold text-amber-800">Vista previa — {preview.length} empleadas · Confirmar para guardar</p>
+            <div className="max-h-48 overflow-y-auto space-y-1">
+              {preview.map((p, i) => (
+                <div key={i} className="flex items-center justify-between text-[12px] py-1 border-b border-amber-100 last:border-0">
+                  <span className="font-medium text-amber-900">{p.nombre}</span>
+                  <span className="text-amber-700 tabular-nums">{fmtPeso(p.total)} · Ef {fmtPeso(p.efectivo)} · Tr {fmtPeso(p.transferencia)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button size="sm" loading={saving} onClick={handleSaveImport} icon={<IconCheck size={13} />}>
+                Guardar {preview.length} registros
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setPreview(null)}>Cancelar</Button>
+            </div>
+          </div>
+        )}
+
+        {/* Tabla de pagos */}
+        {pagosLoading ? <Spinner /> : pagos.length === 0 && !preview ? (
+          <div className="bg-gray-50 rounded-xl border border-dashed border-gray-200 py-6 text-center">
+            <p className="text-[13px] text-[var(--text-sub)]">Sin datos de pago para {MESES[mes - 1]} {anio}</p>
+            <p className="text-[11px] text-gray-400 mt-1">Importá el Excel de sueldos para cargar los montos</p>
+          </div>
+        ) : !preview && (
+          <div className="bg-white rounded-xl border border-gray-200/60 overflow-hidden">
+            <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-3 px-4 py-2 bg-gray-50 border-b border-gray-100 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+              <span>Empleada</span><span className="text-right">Total</span><span className="text-right">Efectivo</span><span className="text-right">Transf.</span><span />
+            </div>
+            {pagos.map(p => (
+              <div key={p.id} className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-3 items-center px-4 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50/50">
+                <span className="text-[13px] font-medium truncate">{p.nombre_excel}</span>
+                <span className="text-[13px] tabular-nums text-right font-semibold">{fmtPeso(p.total)}</span>
+                <span className="text-[12px] tabular-nums text-right text-gray-500">{p.efectivo > 0 ? fmtPeso(p.efectivo) : '—'}</span>
+                <span className="text-[12px] tabular-nums text-right text-gray-500">{p.transferencia > 0 ? fmtPeso(p.transferencia) : '—'}</span>
+                <button onClick={() => { setEditTarget(p); setEditForm({ total: String(p.total), efectivo: String(p.efectivo), transferencia: String(p.transferencia) }) }}
+                  className="p-1.5 rounded-lg text-[var(--primary)] hover:bg-indigo-50 transition-colors cursor-pointer">
+                  <IconEdit size={13} />
+                </button>
               </div>
             ))}
           </div>
-          <div className="flex gap-2 pt-1">
-            <Button size="sm" loading={saving} onClick={handleSaveImport} icon={<IconCheck size={13} />}>
-              Guardar {preview.length} registros
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => setPreview(null)}>Cancelar</Button>
-          </div>
-        </div>
-      )}
-
-      {/* Lista unificada de empleadas */}
-      {loading ? <Spinner /> : empleadas.length === 0 && !preview ? (
-        <div className="text-center py-10">
-          <IconFileText size={30} className="mx-auto text-gray-300 mb-2" />
-          <p className="text-sm text-[var(--text-sub)]">Sin datos para {MESES[mes - 1]} {anio}</p>
-          <p className="text-[12px] text-gray-400 mt-1">Importá el Excel o sincronizá con Drive</p>
-        </div>
-      ) : !preview && (
-        <div className="bg-white rounded-xl border border-gray-200/60 divide-y divide-gray-100">
-          {empleadas.map(({ nombre, recibo, pago }) => (
-            <div key={nombre} className="px-4 py-3 hover:bg-gray-50/60 transition-colors">
-              <div className="flex items-center gap-3">
-                {/* PDF icon */}
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${recibo ? 'bg-indigo-50' : 'bg-gray-100'}`}>
-                  <IconFileText size={16} className={recibo ? 'text-[var(--primary)]' : 'text-gray-300'} />
-                </div>
-                {/* Nombre */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-semibold truncate">{nombre}</p>
-                  {recibo ? (
-                    <button
-                      onClick={() => setViewer({ url: recibo.storage_url, name: recibo.nombre_archivo })}
-                      className="text-[11px] text-[var(--primary)] hover:underline cursor-pointer">
-                      Ver recibo · {fmtDate(recibo.subido_el)}
-                    </button>
-                  ) : (
-                    <p className="text-[11px] text-gray-400">Sin recibo</p>
-                  )}
-                </div>
-                {/* Montos */}
-                {pago && (
-                  <div className="text-right shrink-0">
-                    <p className="text-[13px] font-bold tabular-nums text-[var(--text)]">{fmtPeso(pago.total)}</p>
-                    <p className="text-[11px] text-gray-400 tabular-nums">
-                      Ef {fmtPeso(pago.efectivo)} · Tr {fmtPeso(pago.transferencia)}
-                    </p>
-                  </div>
-                )}
-                {/* Edit */}
-                {pago && (
-                  <button
-                    onClick={() => { setEditTarget(pago); setEditForm({ total: String(pago.total), efectivo: String(pago.efectivo), transferencia: String(pago.transferencia) }) }}
-                    className="p-1.5 rounded-lg text-[var(--primary)] hover:bg-indigo-50 transition-colors cursor-pointer shrink-0">
-                    <IconEdit size={13} />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Modal edición */}
       <Modal open={!!editTarget} onClose={() => setEditTarget(null)} title={`Editar · ${editTarget?.nombre_excel}`}>
         <div className="space-y-4">
-          <Input label="Total a cobrar" type="number" value={editForm.total}
-            onChange={e => setEditForm(f => ({ ...f, total: e.target.value }))} />
-          <Input label="Efectivo" type="number" value={editForm.efectivo}
-            onChange={e => setEditForm(f => ({ ...f, efectivo: e.target.value }))} />
-          <Input label="Transferencia" type="number" value={editForm.transferencia}
-            onChange={e => setEditForm(f => ({ ...f, transferencia: e.target.value }))} />
+          <Input label="Total a cobrar" type="number" value={editForm.total} onChange={e => setEditForm(f => ({ ...f, total: e.target.value }))} />
+          <Input label="Efectivo" type="number" value={editForm.efectivo} onChange={e => setEditForm(f => ({ ...f, efectivo: e.target.value }))} />
+          <Input label="Transferencia" type="number" value={editForm.transferencia} onChange={e => setEditForm(f => ({ ...f, transferencia: e.target.value }))} />
           <div className="flex gap-3 pt-1">
             <Button className="flex-1" loading={editSaving} onClick={handleEditSave}>Guardar</Button>
             <Button variant="secondary" onClick={() => setEditTarget(null)}>Cancelar</Button>
