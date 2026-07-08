@@ -245,7 +245,7 @@ function LiquidacionesTab() {
               {item.pago ? (
                 <div className="flex items-center gap-3 shrink-0">
                   <div className="text-right">
-                    <p className="text-[13px] font-bold tabular-nums">{fmtPeso(item.pago.total)}</p>
+                    <p className={`text-[13px] font-bold tabular-nums ${item.pago.efectivo + item.pago.transferencia !== item.pago.total ? 'text-red-500' : ''}`}>{fmtPeso(item.pago.total)}</p>
                     <p className="text-[10px] text-gray-500 tabular-nums">
                       {[
                         item.pago.efectivo > 0 ? `Ef ${fmtPeso(item.pago.efectivo)}` : '',
