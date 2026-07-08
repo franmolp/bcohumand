@@ -235,11 +235,13 @@ function LiquidacionesTab() {
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-semibold">{item.nombre}</p>
                 <div className="mt-0.5">
-                  {item.recibo ? (
+                  {item.recibo && item.recibo.storage_url.startsWith('http') ? (
                     <button onClick={() => setViewer({ url: item.recibo!.storage_url, name: item.recibo!.nombre_archivo })}
                       className="flex items-center gap-1 text-[11px] text-[var(--primary)] hover:underline cursor-pointer">
                       <IconFileText size={12} />Ver recibo
                     </button>
+                  ) : item.recibo ? (
+                    <span className="text-[11px] text-amber-500">Recibo sin URL · resincronizar</span>
                   ) : (
                     <span className="text-[11px] text-gray-400">Sin recibo</span>
                   )}

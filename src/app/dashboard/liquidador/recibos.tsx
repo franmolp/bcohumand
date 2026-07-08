@@ -328,7 +328,7 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
         const pago   = pagoMap.get(`${anio}-${mes}`)
         return (
           <div key={`${anio}-${mes}`} className="w-full bg-white rounded-xl border border-gray-200/60 overflow-hidden">
-            {recibo ? (
+            {recibo && recibo.storage_url.startsWith('http') ? (
               <button
                 onClick={() => setViewer({ url: recibo.storage_url, name: recibo.nombre_archivo })}
                 className="w-full p-3.5 flex items-center gap-3 hover:bg-gray-50 transition-colors cursor-pointer text-left">
