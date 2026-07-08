@@ -36,9 +36,23 @@ export async function GET(request: NextRequest) {
       if (--tm === 0) { tm = 12; ty-- }
     }
     const nombreNorm = normNombre(session.nombre)
-    query = query
-      .eq('nombre_empleada', nombreNorm)
-      .or(months.map(({ anio, mes }) => `and(anio.eq.${anio},mes.eq.${mes})`).join(','))
+    // Intentar obtener el nombre exacto usado en recibos a través de pagos (por usuario_id)
+    const { data: pagoRef } = await supabaseAdmin
+      .from('liquidaciones_pagos')
+      .select('nombre_excel')
+      .eq('usuario_id', session.id)
+      .limit(1)
+    const nombreExcel = pagoRef?.[0]?.nombre_excel as string | undefined
+    // Armar OR de nombres: normNombre + nombre_excel (si existe y es distinto)
+    const nameFilters = new Set<string>([nombreNorm])
+    if (nombreExcel) nameFilters.add(nombreExcel)
+    const nameOrParts = Array.from(nameFilters).map(n => `nombre_empleada.eq.${n}`)
+    // Fallback: primer nombre coincide (para casos donde el admin usó abreviatura distinta)
+    const firstName = session.nombre.trim().split(/\s+/)[0] ?? ''
+    const firstNameCap = firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase()
+    if (firstNameCap.length >= 3) nameOrParts.push(`nombre_empleada.ilike.${firstNameCap} *`)
+    const monthOr = months.map(({ anio, mes }) => `and(anio.eq.${anio},mes.eq.${mes})`).join(',')
+    query = query.or(nameOrParts.join(',')).or(monthOr)
   }
 
   const { data, error } = await query
