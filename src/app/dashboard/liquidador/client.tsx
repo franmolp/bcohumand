@@ -80,9 +80,10 @@ function LiquidacionesTab() {
   const [editTarget,  setEditTarget]  = useState<{ id?: number; nombre: string } | null>(null)
   const [editForm,    setEditForm]    = useState({ total: '', efectivo: '', transferencia: '' })
   const [editSaving,  setEditSaving]  = useState(false)
-  const [urlTarget,   setUrlTarget]   = useState<ReciboDB | null>(null)
-  const [urlInput,    setUrlInput]    = useState('')
-  const [urlSaving,   setUrlSaving]   = useState(false)
+  const [urlTarget,    setUrlTarget]   = useState<ReciboDB | null>(null)
+  const [createNombre, setCreateNombre] = useState<string | null>(null)
+  const [urlInput,     setUrlInput]   = useState('')
+  const [urlSaving,    setUrlSaving]  = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function loadData() {
@@ -187,6 +188,20 @@ function LiquidacionesTab() {
     setUrlSaving(false)
   }
 
+  async function handleUrlCreate() {
+    if (!createNombre || !urlInput.startsWith('http')) return
+    setUrlSaving(true)
+    const nombreArchivo = `${createNombre} Liquidación ${MESES[mes - 1]}.pdf`
+    await fetch('/api/liquidador/recibos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ anio, mes, nombre_empleada: createNombre, nombre_archivo: nombreArchivo, storage_url: urlInput.trim() }),
+    })
+    setCreateNombre(null); setUrlInput('')
+    await loadData()
+    setUrlSaving(false)
+  }
+
   async function handleEditSave() {
     if (!editTarget) return
     setEditSaving(true)
@@ -283,7 +298,10 @@ function LiquidacionesTab() {
                       ⚠ Sin URL · pegar link
                     </button>
                   ) : (
-                    <span className="text-[11px] text-gray-400">Sin recibo</span>
+                    <button onClick={() => { setCreateNombre(item.nombre); setUrlInput('') }}
+                      className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-[var(--primary)] cursor-pointer transition-colors">
+                      + Agregar recibo
+                    </button>
                   )}
                 </div>
               </div>
@@ -335,6 +353,29 @@ function LiquidacionesTab() {
               Guardar URL
             </Button>
             <Button variant="secondary" onClick={() => setUrlTarget(null)}>Cancelar</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal agregar recibo (sin registro previo) */}
+      <Modal open={!!createNombre} onClose={() => setCreateNombre(null)} title={`Agregar recibo · ${createNombre}`}>
+        <div className="space-y-4">
+          <p className="text-[12px] text-[var(--text-sub)]">Abrí el archivo en Drive, copiá el link y pegalo acá.</p>
+          <Input
+            label="URL de Drive"
+            placeholder="https://drive.google.com/file/d/..."
+            value={urlInput}
+            onChange={e => setUrlInput(e.target.value)}
+          />
+          {urlInput && !urlInput.startsWith('http') && (
+            <p className="text-[11px] text-red-500">La URL debe empezar con https://</p>
+          )}
+          <div className="flex gap-3 pt-1">
+            <Button className="flex-1" loading={urlSaving} onClick={handleUrlCreate}
+              disabled={!urlInput.startsWith('http')}>
+              Guardar URL
+            </Button>
+            <Button variant="secondary" onClick={() => setCreateNombre(null)}>Cancelar</Button>
           </div>
         </div>
       </Modal>
