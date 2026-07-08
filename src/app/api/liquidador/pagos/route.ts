@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     await requireAdmin()
-    const { anio, mes, filas } = await request.json()
+    const { anio, mes, filas, replace } = await request.json()
     if (!anio || !mes || !Array.isArray(filas) || filas.length === 0) {
       return NextResponse.json({ error: 'Parámetros inválidos' }, { status: 400 })
     }
@@ -61,11 +61,23 @@ export async function POST(request: NextRequest) {
       transferencia: Math.round(f.transferencia),
     }))
 
-    const { error } = await supabaseAdmin
-      .from('liquidaciones_pagos')
-      .upsert(rows, { onConflict: 'anio,mes,nombre_excel' })
+    if (replace) {
+      // Reimport: borrar todo el mes y reinsertar
+      const { error: delErr } = await supabaseAdmin
+        .from('liquidaciones_pagos')
+        .delete()
+        .eq('anio', Number(anio))
+        .eq('mes', Number(mes))
+      if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 })
+      const { error } = await supabaseAdmin.from('liquidaciones_pagos').insert(rows)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    } else {
+      const { error } = await supabaseAdmin
+        .from('liquidaciones_pagos')
+        .upsert(rows, { onConflict: 'anio,mes,nombre_excel' })
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true, importados: rows.length })
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Error al importar'

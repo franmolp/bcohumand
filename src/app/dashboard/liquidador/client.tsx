@@ -77,7 +77,7 @@ function LiquidacionesTab() {
   const [preview,  setPreview]  = useState<ParsedPago[] | null>(null)
   const [parseErr, setParseErr] = useState<string | null>(null)
   const [saving,   setSaving]   = useState(false)
-  const [editTarget,  setEditTarget]  = useState<PagoRow | null>(null)
+  const [editTarget,  setEditTarget]  = useState<{ id?: number; nombre: string } | null>(null)
   const [editForm,    setEditForm]    = useState({ total: '', efectivo: '', transferencia: '' })
   const [editSaving,  setEditSaving]  = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -154,7 +154,7 @@ function LiquidacionesTab() {
   async function handleSaveImport() {
     if (!preview) return
     setSaving(true)
-    const r = await fetch('/api/liquidador/pagos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ anio, mes, filas: preview }) })
+    const r = await fetch('/api/liquidador/pagos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ anio, mes, filas: preview, replace: true }) })
     if (r.ok) { setPreview(null); await loadData() }
     else { const err = await r.json().catch(() => ({})); setParseErr(err.error || 'Error al guardar') }
     setSaving(false)
@@ -163,7 +163,10 @@ function LiquidacionesTab() {
   async function handleEditSave() {
     if (!editTarget) return
     setEditSaving(true)
-    const r = await fetch(`/api/liquidador/pagos/${editTarget.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ total: Number(editForm.total), efectivo: Number(editForm.efectivo), transferencia: Number(editForm.transferencia) }) })
+    const payload = { total: Number(editForm.total), efectivo: Number(editForm.efectivo), transferencia: Number(editForm.transferencia) }
+    const r = editTarget.id
+      ? await fetch(`/api/liquidador/pagos/${editTarget.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      : await fetch('/api/liquidador/pagos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ anio, mes, filas: [{ nombre: editTarget.nombre, ...payload }] }) })
     if (r.ok) { setEditTarget(null); await loadData() }
     setEditSaving(false)
   }
@@ -254,13 +257,17 @@ function LiquidacionesTab() {
                     </p>
                   </div>
                   <button
-                    onClick={() => { setEditTarget(item.pago!); setEditForm({ total: String(item.pago!.total), efectivo: String(item.pago!.efectivo), transferencia: String(item.pago!.transferencia) }) }}
+                    onClick={() => { setEditTarget({ id: item.pago!.id, nombre: item.pago!.nombre_excel }); setEditForm({ total: String(item.pago!.total), efectivo: String(item.pago!.efectivo), transferencia: String(item.pago!.transferencia) }) }}
                     className="p-1.5 rounded-lg text-[var(--primary)] hover:bg-indigo-50 transition-colors cursor-pointer">
                     <IconEdit size={13} />
                   </button>
                 </div>
               ) : (
-                <span className="text-[11px] text-gray-400 shrink-0">Sin montos</span>
+                <button
+                  onClick={() => { setEditTarget({ nombre: item.nombre }); setEditForm({ total: '', efectivo: '', transferencia: '' }) }}
+                  className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-[var(--primary)] transition-colors cursor-pointer shrink-0">
+                  <IconEdit size={12} />Sin montos
+                </button>
               )}
             </div>
           ))}
@@ -268,7 +275,7 @@ function LiquidacionesTab() {
       )}
 
       {/* Modal edición */}
-      <Modal open={!!editTarget} onClose={() => setEditTarget(null)} title={`Editar · ${editTarget?.nombre_excel}`}>
+      <Modal open={!!editTarget} onClose={() => setEditTarget(null)} title={`${editTarget?.id ? 'Editar' : 'Agregar montos'} · ${editTarget?.nombre}`}>
         <div className="space-y-4">
           <Input label="Total a cobrar" type="number" value={editForm.total} onChange={e => setEditForm(f => ({ ...f, total: e.target.value }))} />
           <Input label="Efectivo" type="number" value={editForm.efectivo} onChange={e => setEditForm(f => ({ ...f, efectivo: e.target.value }))} />
