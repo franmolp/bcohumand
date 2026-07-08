@@ -37,6 +37,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: msg }, { status: 502 })
     }
 
+    // Si GAS devuelve fileUrls (mapa nombre→url), reparamos storage_url rotos en la DB
+    let urlsFixed = 0
+    if (data.fileUrls && typeof data.fileUrls === 'object' && !Array.isArray(data.fileUrls)) {
+      const entries = Object.entries(data.fileUrls as Record<string, string>)
+        .filter(([, url]) => url.startsWith('http'))
+      for (const [nombre_archivo, url] of entries) {
+        const { count } = await supabaseAdmin
+          .from('recibos_sueldo')
+          .update({ storage_url: url })
+          .eq('nombre_archivo', nombre_archivo)
+          .not('storage_url', 'like', 'http%')
+          .select('id', { count: 'exact', head: true })
+        urlsFixed += count ?? 0
+      }
+    }
+
     // Si GAS devuelve la lista de archivos actuales en Drive, sincronizamos borrados
     let deleted = 0
     if (Array.isArray(data.files)) {
@@ -59,7 +75,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ...data, deleted })
+    return NextResponse.json({ ...data, deleted, urlsFixed })
   } catch (e) {
     const isTimeout = e instanceof Error && e.name === 'TimeoutError'
     const msg = isTimeout
