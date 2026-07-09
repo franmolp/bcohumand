@@ -283,7 +283,7 @@ export default function Navigation({ user }: { user: SessionUser }) {
       {/* ─── MOBILE: Bottom nav ─── */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
-        <div className="flex px-3 h-[76px]">
+        <div className="flex px-3 h-[90px]">
           {mobileItems.map(item => {
             const active = path === item.href; const Icon = item.icon
             const fullLabel = (!isAdminOrHR && (item as {labelEmp?: string}).labelEmp) || item.label
