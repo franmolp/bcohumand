@@ -294,8 +294,7 @@ function fmtPeso(n: number): string {
 }
 
 function fmtBruto(n: number): string {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
-  return `$${Math.round(n / 1000)}k`
+  return '$' + Math.round(n).toLocaleString('es-AR')
 }
 
 const MESES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
@@ -316,13 +315,16 @@ function HistorialChart({ data, visible }: { data: BrutoMes[]; visible: boolean 
 
   return (
     <div className="bg-white rounded-xl border border-gray-200/60 px-4 pt-4 pb-3 mb-3">
-      <p className="text-[11px] font-semibold text-[var(--text-sub)] mb-3">Historial de cobros</p>
+      <p className="text-[11px] font-semibold text-[var(--text-sub)] mb-3">Historial de liquidaciones</p>
 
-      {/* Labels de monto */}
+      {/* Labels de monto — rotados verticalmente */}
       <div className="flex gap-1.5 mb-1">
         {cerrados.map(d => (
-          <div key={`lbl-${d.anio}-${d.mes}`} className="flex-1 text-center">
-            <span className="text-[8px] font-medium text-gray-500 leading-none">
+          <div key={`lbl-${d.anio}-${d.mes}`} className="flex-1 flex items-end justify-center" style={{ height: 60 }}>
+            <span
+              className="text-[8px] font-medium text-gray-500 leading-none"
+              style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', whiteSpace: 'nowrap' }}
+            >
               {visible ? fmtBruto(d.bruto) : ''}
             </span>
           </div>
@@ -330,9 +332,9 @@ function HistorialChart({ data, visible }: { data: BrutoMes[]; visible: boolean 
       </div>
 
       {/* Barras */}
-      <div className="flex items-end gap-1.5" style={{ height: 52 }}>
+      <div className="flex items-end gap-1.5" style={{ height: 80 }}>
         {cerrados.map((d, idx) => {
-          const h = maxBruto > 0 ? Math.max(Math.round((d.bruto / maxBruto) * 52), 4) : 4
+          const h = maxBruto > 0 ? Math.max(Math.round((d.bruto / maxBruto) * 80), 4) : 4
           const isLatest = idx === cerrados.length - 1
           return (
             <div
