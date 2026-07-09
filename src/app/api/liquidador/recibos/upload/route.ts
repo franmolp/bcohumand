@@ -78,17 +78,25 @@ export async function POST(request: NextRequest) {
     if (dbError) {
       console.error('DB register error:', dbError.message)
     } else {
-      // Notificar al empleado — buscar por nombre normalizado
+      // Notificar al empleado — primero por nombre_excel en liquidaciones_pagos, fallback normNombre
       try {
-        const { data: users } = await supabaseAdmin
-          .from('usuarios')
-          .select('id, nombre')
-          .eq('estado_cuenta', 'activo')
-        const emp = users?.find(u => normNombre(u.nombre) === nombre)
-        if (emp?.id) {
+        const { data: pagoRef } = await supabaseAdmin
+          .from('liquidaciones_pagos')
+          .select('usuario_id')
+          .eq('nombre_excel', nombre)
+          .limit(1)
+        let empId = pagoRef?.[0]?.usuario_id as string | undefined
+        if (!empId) {
+          const { data: users } = await supabaseAdmin
+            .from('usuarios')
+            .select('id, nombre')
+            .eq('estado_cuenta', 'activo')
+          empId = users?.find(u => normNombre(u.nombre) === nombre)?.id
+        }
+        if (empId) {
           const mesNombre = MESES_ES[mes - 1] ?? String(mes)
           await crearNotificacion({
-            usuario_id: emp.id,
+            usuario_id: empId,
             titulo:     'Nuevo recibo de sueldo',
             mensaje:    `Tu recibo de ${mesNombre} ${anio} ya está disponible`,
             tipo:       'recibo',

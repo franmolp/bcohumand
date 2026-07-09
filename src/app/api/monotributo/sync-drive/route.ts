@@ -13,12 +13,7 @@ function normStr(s: string): string {
 
 function matchEmployee(driveName: string, usuarios: { id: string; nombre: string }[]) {
   const norm = normStr(driveName)
-  return (
-    usuarios.find(u => normStr(u.nombre) === norm) ??
-    usuarios.find(u => normStr(u.nombre).startsWith(norm)) ??
-    usuarios.find(u => norm.startsWith(normStr(u.nombre))) ??
-    null
-  )
+  return usuarios.find(u => normStr(u.nombre) === norm) ?? null
 }
 
 export async function POST() {
