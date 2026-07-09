@@ -53,7 +53,12 @@ export default function Navigation({ user }: { user: SessionUser }) {
     if (i.roles && !i.roles.includes(user.rol)) return false
     return true
   })
-  const mobileItems = items.filter(i => i.mobile).slice(0, 4)
+  const mobileHrefs = isAdmin
+    ? ['/dashboard', '/dashboard/asistencia', '/dashboard/solicitudes', '/dashboard/calendario', '/dashboard/informes']
+    : isHR
+    ? ['/dashboard', '/dashboard/asistencia', '/dashboard/solicitudes', '/dashboard/empleados', '/dashboard/calendario']
+    : ['/dashboard', '/dashboard/mi-asistencia', '/dashboard/solicitudes', '/dashboard/liquidador', '/dashboard/calendario']
+  const mobileItems = mobileHrefs.map(href => items.find(i => i.href === href)).filter(Boolean) as typeof items
   const initials = user.nombre.split(' ').map(n => n[0]).join('').slice(0, 2)
 
   async function logout() { await fetch('/api/auth/logout', { method: 'POST' }); router.push('/login') }
