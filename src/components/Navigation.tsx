@@ -286,7 +286,8 @@ export default function Navigation({ user }: { user: SessionUser }) {
         <div className="flex px-3 h-[76px]">
           {mobileItems.map(item => {
             const active = path === item.href; const Icon = item.icon
-            const label = (!isAdminOrHR && (item as {labelEmp?: string}).labelEmp) || item.label
+            const fullLabel = (!isAdminOrHR && (item as {labelEmp?: string}).labelEmp) || item.label
+            const label = fullLabel.replace(/^Mi[s]? /, '')
             const badge = modulos[item.href] ?? 0
             return (
               <Link key={item.href} href={item.href}
