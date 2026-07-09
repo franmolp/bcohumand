@@ -1951,18 +1951,36 @@ function AjustesTab({ configDraft, setConfigDraft, saveConfig, savingCfg, empLis
     )
   }
 
-  function InputCsv({ label, field, hint }: { label: string; field: 'equiposPorTurnos' | 'equiposHorarioEstricto'; hint?: string }) {
+  const equiposUnicos = useMemo(() => {
+    const seen = new Set<string>()
+    const result: string[] = []
+    for (const e of empList) if (e.equipo?.nombre && !seen.has(e.equipo.nombre)) { seen.add(e.equipo.nombre); result.push(e.equipo.nombre) }
+    return result.sort((a, b) => a.localeCompare(b, 'es'))
+  }, [empList])
+
+  function CheckboxEquipos({ label, field }: { label: string; field: 'equiposPorTurnos' | 'equiposHorarioEstricto' }) {
+    const selected = configDraft[field] as string[]
     return (
       <div>
-        <label className="block text-xs font-medium text-[var(--text-sub)] mb-1">{label}</label>
-        {hint && <div className="text-[11px] text-[var(--text-muted)] mb-1">{hint}</div>}
-        <input
-          type="text"
-          value={(configDraft[field] as string[]).join(', ')}
-          onChange={e => setField(field, e.target.value.split(',').map(s => s.trim()).filter(Boolean) as AsistenciaConfig[typeof field])}
-          className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-          style={{ fontSize: 16 }}
-        />
+        <label className="block text-xs font-medium text-[var(--text-sub)] mb-2">{label}</label>
+        {equiposUnicos.length === 0
+          ? <p className="text-xs text-[var(--text-muted)]">No hay equipos cargados.</p>
+          : <div className="space-y-2">
+              {equiposUnicos.map(nombre => (
+                <label key={nombre} className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(nombre)}
+                    onChange={ev => setField(field, (ev.target.checked
+                      ? [...selected, nombre]
+                      : selected.filter(n => n !== nombre)) as AsistenciaConfig[typeof field])}
+                    className="w-4 h-4 rounded accent-[var(--primary)] cursor-pointer flex-shrink-0"
+                  />
+                  <span className="text-sm text-[var(--text)]">{nombre}</span>
+                </label>
+              ))}
+            </div>
+        }
       </div>
     )
   }
@@ -1989,16 +2007,8 @@ function AjustesTab({ configDraft, setConfigDraft, saveConfig, savingCfg, empLis
 
       <div className="bg-white rounded-2xl border border-[var(--border)] p-4 space-y-5">
         <h2 className="text-sm font-semibold text-[var(--text)]">Categorías de equipos</h2>
-        <InputCsv
-          label="Equipos por turnos (sin salida temprana)"
-          field="equiposPorTurnos"
-          hint="Masajistas, depiladoras. Separar con coma."
-        />
-        <InputCsv
-          label="Equipos horario estricto"
-          field="equiposHorarioEstricto"
-          hint="Peluqueras. Separar con coma."
-        />
+        <CheckboxEquipos label="Equipos por turnos (sin salida temprana)" field="equiposPorTurnos" />
+        <CheckboxEquipos label="Equipos horario estricto" field="equiposHorarioEstricto" />
       </div>
 
       <div className="bg-white rounded-2xl border border-[var(--border)] p-4 space-y-3">
