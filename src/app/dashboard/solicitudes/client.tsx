@@ -595,7 +595,7 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
   const [tipoFilter, setTipoFilter]         = useState('')
   const [empleadoFilter, setEmpleadoFilter] = useState('')
   const [empleados, setEmpleados]           = useState<Empleado[]>([])
-  const [subFilter, setSubFilter]           = useState<'todas' | 'en_curso' | 'futuras' | 'archivadas'>('todas')
+  const [subFilter, setSubFilter]           = useState<'todas' | 'en_curso' | 'futuras' | 'archivadas'>('en_curso')
   const [fotosMap, setFotosMap]             = useState<Record<string, string | null>>({})
 
   // Modal nueva / edición
@@ -990,7 +990,7 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
               {tabs.map(s => {
                 const active = estadoFilter === s || (s === 'todos' && !estadoFilter)
                 return (
-                  <button key={s} onClick={() => { setEstadoFilter(s === 'todos' ? '' : s); setSubFilter('todas') }}
+                  <button key={s} onClick={() => { setEstadoFilter(s === 'todos' ? '' : s); setSubFilter('en_curso') }}
                     className={`px-2 lg:px-3 py-2 text-[10px] lg:text-[11px] font-medium rounded-[10px] cursor-pointer transition-all whitespace-nowrap ${active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
                     {tabLabel[s]}
                   </button>
