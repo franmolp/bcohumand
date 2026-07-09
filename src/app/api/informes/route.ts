@@ -201,18 +201,25 @@ export async function GET(request: NextRequest) {
     }))
     .sort((a, b) => b.ventaNeta - a.ventaNeta)
 
-  const srvMap = new Map<string, { categoria: string; cantidad: number; ventaNeta: number; duracionMin: number }>()
+  // Para servicios usamos solo duracion_min (columna K de Fresha), no la franja
+  const srvMap = new Map<string, { categoria: string; cantidad: number; ventaNeta: number; duracionMin: number; cantConDur: number }>()
   for (const c of citasNoCanc) {
     const key = c.servicio || 'Sin servicio'
-    const dur = citaDurMin(c)
-    const prev = srvMap.get(key) ?? { categoria: c.categoria || '', cantidad: 0, ventaNeta: 0, duracionMin: 0 }
+    const dur = (c.duracion_min && c.duracion_min > 0) ? c.duracion_min : 0
+    const prev = srvMap.get(key) ?? { categoria: c.categoria || '', cantidad: 0, ventaNeta: 0, duracionMin: 0, cantConDur: 0 }
     srvMap.set(key, {
       categoria: prev.categoria || c.categoria || '',
       cantidad: prev.cantidad + 1,
       ventaNeta: prev.ventaNeta + (c.venta_neta || 0),
       duracionMin: prev.duracionMin + dur,
+      cantConDur: prev.cantConDur + (dur > 0 ? 1 : 0),
     })
   }
+
+  const calcPrecioPorHora = (d: { ventaNeta: number; cantidad: number; duracionMin: number; cantConDur: number }) =>
+    d.cantConDur > 0
+      ? Math.round((d.ventaNeta / d.cantidad) / ((d.duracionMin / d.cantConDur) / 60))
+      : null
 
   const servicios = [...srvMap.entries()]
     .map(([servicio, d]) => ({
@@ -220,10 +227,8 @@ export async function GET(request: NextRequest) {
       categoria: d.categoria,
       cantidad: d.cantidad,
       ventaNeta: Math.round(d.ventaNeta),
-      duracionMin: d.duracionMin,
-      precioPorHora: d.duracionMin > 0
-        ? Math.round((d.ventaNeta / d.cantidad) / ((d.duracionMin / d.cantidad) / 60))
-        : null,
+      duracionMin: d.cantConDur > 0 ? Math.round(d.duracionMin / d.cantConDur) : null,
+      precioPorHora: calcPrecioPorHora(d),
     }))
     .sort((a, b) => b.cantidad - a.cantidad)
     .slice(0, 15)
@@ -234,10 +239,8 @@ export async function GET(request: NextRequest) {
       categoria: d.categoria,
       cantidad: d.cantidad,
       ventaNeta: Math.round(d.ventaNeta),
-      duracionMin: d.duracionMin,
-      precioPorHora: d.duracionMin > 0
-        ? Math.round((d.ventaNeta / d.cantidad) / ((d.duracionMin / d.cantidad) / 60))
-        : null,
+      duracionMin: d.cantConDur > 0 ? Math.round(d.duracionMin / d.cantConDur) : null,
+      precioPorHora: calcPrecioPorHora(d),
     }))
     .filter(s => s.precioPorHora !== null)
     .sort((a, b) => (b.precioPorHora ?? 0) - (a.precioPorHora ?? 0))

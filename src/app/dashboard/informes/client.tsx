@@ -35,7 +35,7 @@ interface ServicioRow {
   categoria: string
   cantidad: number
   ventaNeta: number
-  duracionMin: number
+  duracionMin: number | null
   precioPorHora: number | null
 }
 
@@ -298,6 +298,7 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                     <tr className="border-b border-[var(--border)] text-[var(--text-muted)]">
                       <th className="text-left px-4 py-2.5 font-medium">Servicio</th>
                       <th className="text-right px-3 py-2.5 font-medium">Citas</th>
+                      <th className="text-right px-3 py-2.5 font-medium">Duración</th>
                       <th className="text-right px-3 py-2.5 font-medium">Precio prom.</th>
                       <th className="text-right px-4 py-2.5 font-medium">$/hora</th>
                     </tr>
@@ -310,6 +311,9 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                           {s.categoria && <p className="text-[10px] text-[var(--text-muted)]">{s.categoria}</p>}
                         </td>
                         <td className="px-3 py-3 text-right text-[var(--text-muted)]">{s.cantidad}</td>
+                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">
+                          {s.duracionMin !== null ? `${s.duracionMin}m` : <span className="text-gray-300">—</span>}
+                        </td>
                         <td className="px-3 py-3 text-right text-[var(--text-muted)]">{fmt$(s.ventaNeta / s.cantidad)}</td>
                         <td className="px-4 py-3 text-right">
                           <span className="font-semibold text-[var(--primary)]">{fmt$(s.precioPorHora!)}</span>
