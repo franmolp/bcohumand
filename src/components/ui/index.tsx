@@ -32,16 +32,18 @@ export function Button({ variant = 'primary', size = 'md', loading, icon, childr
 // ─── Input ───
 interface InpProps extends InputHTMLAttributes<HTMLInputElement> { label?: string; error?: string; icon?: ReactNode }
 
-export const Input = forwardRef<HTMLInputElement, InpProps>(({ label, error, icon, type, className = '', ...r }, ref) => {
+export const Input = forwardRef<HTMLInputElement, InpProps>(({ label, error, icon, type, className = '', style, ...r }, ref) => {
   const [show, setShow] = useState(false)
   const isPw = type === 'password'
+  const isDate = type === 'date'
   return (
-    <div>
+    <div className="min-w-0">
       {label && <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">{label}</label>}
       <div className="relative">
         {icon && <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]">{icon}</div>}
         <input ref={ref} type={isPw && show ? 'text' : type}
-          className={`w-full h-11 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] placeholder:text-[var(--text-muted)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] ${icon ? 'pl-11' : 'pl-4'} ${isPw ? 'pr-11' : 'pr-4'} ${error ? 'border-red-300' : ''} ${className}`}
+          style={{ fontSize: 16, ...(isDate ? { WebkitAppearance: 'none' } : {}), ...style }}
+          className={`w-full min-w-0 h-11 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] placeholder:text-[var(--text-muted)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] ${icon ? 'pl-11' : 'pl-3'} ${isPw ? 'pr-11' : 'pr-3'} ${error ? 'border-red-300' : ''} ${className}`}
           {...r} />
         {isPw && <button type="button" onClick={() => setShow(!show)} tabIndex={-1}
           className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-sub)] cursor-pointer">
