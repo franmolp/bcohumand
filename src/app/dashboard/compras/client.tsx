@@ -5,6 +5,7 @@ import type { SessionUser, Compra, Proveedor } from '@/types'
 import { Modal, Button, Input, Confirm, Spinner } from '@/components/ui'
 import { IconShoppingBag, IconEdit, IconTrash, IconPlus, IconAlertCircle } from '@/components/ui/Icons'
 import { compressImage } from '@/lib/compress-image'
+import FileViewer from '@/components/FileViewer'
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 const ESTADOS: { value: string; label: string }[] = [
@@ -22,14 +23,20 @@ function fmtMonto(n: number) {
 }
 
 function formatMontoInput(value: string): string {
-  // Strip dots (separadores de miles que el usuario no debe escribir)
-  const withoutDots = value.replace(/\./g, '')
-  // Solo dígitos y una coma
-  const clean = withoutDots.replace(/[^0-9,]/g, '')
+  let v = value
+  // Aceptar . como separador decimal (teclado inglés/iOS en inglés)
+  // Si no hay coma y hay un punto al final o seguido de 1-2 dígitos al final,
+  // convertirlo a coma
+  if (!v.includes(',') && /\.\d{0,2}$/.test(v)) {
+    const lastDot = v.lastIndexOf('.')
+    v = v.slice(0, lastDot) + ',' + v.slice(lastDot + 1)
+  }
+  // Quitar todos los puntos restantes (eran separadores de miles que el usuario no debe ingresar)
+  v = v.replace(/\./g, '')
+  const clean = v.replace(/[^0-9,]/g, '')
   const commaIdx = clean.indexOf(',')
   let intPart = commaIdx >= 0 ? clean.slice(0, commaIdx) : clean
   const decPart = commaIdx >= 0 ? clean.slice(commaIdx + 1, commaIdx + 3) : undefined
-  // Agregar puntos de miles
   intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
   return decPart !== undefined ? `${intPart},${decPart}` : intPart
 }
@@ -98,6 +105,7 @@ function CompraModal({ open, editTarget, proveedores, onClose, onSaved, onProvee
   const [fotoFile, setFotoFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -172,6 +180,7 @@ function CompraModal({ open, editTarget, proveedores, onClose, onSaved, onProvee
   }
 
   return (
+    <>
     <Modal open={open} onClose={onClose} title={editTarget ? 'Editar Compra' : '+ Nueva Compra'}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
@@ -215,7 +224,7 @@ function CompraModal({ open, editTarget, proveedores, onClose, onSaved, onProvee
         <Input
           label="Monto *"
           type="text"
-          inputMode="numeric"
+          inputMode="decimal"
           value={form.monto}
           onChange={e => set('monto', formatMontoInput(e.target.value))}
           placeholder="0"
@@ -256,8 +265,8 @@ function CompraModal({ open, editTarget, proveedores, onClose, onSaved, onProvee
           <label className="block text-[13px] font-medium text-[var(--text)] mb-1">Foto de Factura (opcional)</label>
           {editTarget?.foto_url && !fotoFile && (
             <div className="mb-2 flex items-center gap-2">
-              <a href={editTarget.foto_url} target="_blank" rel="noopener noreferrer"
-                className="text-[12px] text-[var(--primary)] hover:underline">Ver factura actual</a>
+              <button type="button" onClick={() => editTarget?.foto_url && setViewerUrl(editTarget.foto_url)}
+                className="text-[12px] text-[var(--primary)] hover:underline">Ver factura actual</button>
               <span className="text-[11px] text-gray-400">· subí otra para reemplazarla</span>
             </div>
           )}
@@ -283,6 +292,8 @@ function CompraModal({ open, editTarget, proveedores, onClose, onSaved, onProvee
         </div>
       </form>
     </Modal>
+    {viewerUrl && <FileViewer url={viewerUrl} name="Factura" onClose={() => setViewerUrl(null)} />}
+    </>
   )
 }
 
@@ -303,6 +314,7 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
   const [editTarget, setEditTarget] = useState<Compra | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Compra | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [viewer, setViewer] = useState<string | null>(null)
 
   const isSearching = search.trim().length > 0
 
@@ -465,7 +477,7 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
                       <td className="px-4 py-3">{estadoBadge(c.estado_pago)}</td>
                       <td className="px-4 py-3 text-center">
                         {c.foto_url
-                          ? <a href={c.foto_url} target="_blank" rel="noopener noreferrer" className="text-[var(--primary)] hover:underline text-[12px]">Ver</a>
+                          ? <button onClick={() => setViewer(c.foto_url!)} className="text-[var(--primary)] hover:underline text-[12px]">Ver</button>
                           : <span className="text-gray-300">—</span>}
                       </td>
                       {isAdmin && <td className="px-4 py-3 text-[var(--text-muted)]">{(c.cargado_por as {nombre:string}|null)?.nombre ?? c.usuario_email ?? '—'}</td>}
@@ -498,7 +510,7 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       {estadoBadge(c.estado_pago)}
-                      {c.foto_url && <a href={c.foto_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-[var(--primary)]">Ver factura</a>}
+                      {c.foto_url && <button onClick={() => setViewer(c.foto_url!)} className="text-[11px] text-[var(--primary)]">Ver factura</button>}
                     </div>
                     {isAdmin && (
                       <div className="flex gap-2">
@@ -534,6 +546,7 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
         loading={deleting}
         danger
       />
+      {viewer && <FileViewer url={viewer} name="Factura" onClose={() => setViewer(null)} />}
     </div>
   )
 }
