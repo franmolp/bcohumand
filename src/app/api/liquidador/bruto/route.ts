@@ -28,10 +28,8 @@ export async function POST(request: NextRequest) {
   const filas = body.filas
   if (!Array.isArray(filas) || !filas.length) return NextResponse.json({ error: 'Sin datos' }, { status: 400 })
 
-  const nombres = [...new Set(filas.map(f => f.nombre))]
-  const { data: usuarios } = await supabaseAdmin.from('usuarios').select('id, nombre').in('nombre', nombres)
-
   const norm = (s: string) => s.trim().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  const { data: usuarios } = await supabaseAdmin.from('usuarios').select('id, nombre')
   const userMap = new Map((usuarios ?? []).map((u: { id: string; nombre: string }) => [norm(u.nombre), u.id]))
 
   const records = filas.map(f => ({
