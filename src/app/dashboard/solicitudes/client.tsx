@@ -1003,11 +1003,11 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
 
       {/* ─── Sub-filtro período ─── */}
       {isAdminOrHR && estadoFilter !== 'pending' && (
-        <div className="flex bg-white border border-gray-200/60 rounded-xl p-0.5 mb-4 w-fit">
-          {(['todas', 'en_curso', 'futuras', 'archivadas'] as const).map(sf => (
-            <button key={sf} onClick={() => setSubFilter(sf)}
-              className={`px-3 lg:px-4 py-2 text-[11px] lg:text-[12px] font-medium rounded-[10px] cursor-pointer transition-all whitespace-nowrap ${subFilter === sf ? 'bg-[var(--primary)] text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>
-              {sf === 'todas' ? 'Todas' : sf === 'en_curso' ? 'En curso' : sf === 'futuras' ? 'Futuras' : 'Archivadas'}
+        <div className="flex gap-1.5 mb-4">
+          {(['en_curso', 'futuras', 'archivadas'] as const).map(sf => (
+            <button key={sf} onClick={() => setSubFilter(subFilter === sf ? 'todas' : sf)}
+              className={`px-3 py-1.5 text-[11px] lg:text-[12px] font-medium rounded-lg cursor-pointer transition-all whitespace-nowrap border ${subFilter === sf ? 'bg-[var(--primary)] text-white border-[var(--primary)] shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:text-gray-800'}`}>
+              {sf === 'en_curso' ? 'En curso' : sf === 'futuras' ? 'Futuras' : 'Archivadas'}
             </button>
           ))}
         </div>
