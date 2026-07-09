@@ -85,7 +85,7 @@ export function Modal({ open, onClose, title, children, footer }: {
   return createPortal(
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div onClick={e => e.stopPropagation()}
-        className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl max-h-[85vh] flex flex-col">
+        className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90dvh] flex flex-col" style={{ overflow: 'hidden', overflowX: 'hidden' }}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
           <h2 className="font-bold text-[17px]">{title}</h2>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 cursor-pointer"><IconX size={16} /></button>

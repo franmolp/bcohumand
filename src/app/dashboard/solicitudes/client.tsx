@@ -173,15 +173,16 @@ function FormFields({
   const motivoRequired = !isAdminOrHR && !editMode && (form.tipo === 'Solicitud de Días' || isHorario)
 
   const inp = (label: string, k: keyof Form, type = 'text', placeholder = '') => {
-    const isDateField = type === 'date' && (k === 'fecha_inicio' || k === 'fecha_compensacion')
+    const isDateField = type === 'date'
     return (
-      <div>
+      <div className="min-w-0">
         <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">{label}</label>
         <input type={type} value={form[k] as string}
           onChange={e => setForm({ ...form, [k]: e.target.value })}
-          placeholder={placeholder} style={{ fontSize: 16 }}
-          min={isDateField && dateMin ? dateMin : undefined}
-          className="w-full h-11 px-4 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] placeholder:text-[var(--text-muted)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] lg:text-sm" />
+          placeholder={placeholder}
+          style={{ fontSize: 16, WebkitAppearance: 'none' }}
+          min={isDateField && (k === 'fecha_inicio' || k === 'fecha_compensacion') && dateMin ? dateMin : undefined}
+          className="w-full min-w-0 h-11 px-3 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] placeholder:text-[var(--text-muted)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] lg:text-sm" />
       </div>
     )
   }
