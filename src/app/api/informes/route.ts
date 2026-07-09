@@ -39,13 +39,18 @@ export async function GET(request: NextRequest) {
   const fin = `${y}-${String(m).padStart(2, '0')}-${String(diasDelMes).padStart(2, '0')}`
 
   const tz = 'America/Argentina/Buenos_Aires'
-  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: tz })
-  const diasTranscurridos = hoy >= fin
-    ? diasDelMes
-    : Math.max(1, parseInt(hoy.substring(8)))
+  const ahora = new Date()
+  const horaArg = parseInt(ahora.toLocaleString('en-CA', { timeZone: tz, hour: 'numeric', hour12: false }))
+  // El trigger de importación corre a las 6am. Antes de eso, ayer todavía no está disponible.
+  const offsetDias = horaArg < 6 ? 2 : 1
+  const ultDiaCerrado = new Date(ahora)
+  ultDiaCerrado.setDate(ultDiaCerrado.getDate() - offsetDias)
+  const finCitas = ultDiaCerrado.toLocaleDateString('en-CA', { timeZone: tz })
 
-  // Para meses en curso solo traer citas hasta hoy, no turnos futuros pre-agendados
-  const finCitas = hoy < fin ? hoy : fin
+  const hoy = ahora.toLocaleDateString('en-CA', { timeZone: tz })
+  const diasTranscurridos = finCitas >= fin
+    ? diasDelMes
+    : Math.max(1, parseInt(finCitas.substring(8)))
 
   const [
     { data: citas },
