@@ -42,11 +42,23 @@ export async function POST(req: NextRequest) {
 
   const records = [...recordMap.values()]
 
+  // Borrar el rango completo de fechas del import para que empleadas sin horas
+  // (día inhabilitado en Fresha) no queden como filas fantasma del import anterior
+  const rawFechas = rows.map(r => r.fecha)
+  const fechaMin = rawFechas.reduce((a, b) => a < b ? a : b)
+  const fechaMax = rawFechas.reduce((a, b) => a > b ? a : b)
+  const { error: delErr } = await supabaseAdmin
+    .from('horarios_base')
+    .delete()
+    .gte('fecha', fechaMin)
+    .lte('fecha', fechaMax)
+  if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 })
+
   const BATCH = 500
   for (let i = 0; i < records.length; i += BATCH) {
     const { error } = await supabaseAdmin
       .from('horarios_base')
-      .upsert(records.slice(i, i + BATCH), { onConflict: 'usuario_id,fecha' })
+      .insert(records.slice(i, i + BATCH))
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
