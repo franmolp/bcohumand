@@ -4,6 +4,7 @@ import type { SessionUser } from '@/types'
 import { supabase, supabaseAdmin } from '@/lib/supabase'
 import { IconUsers, IconFileText, IconCalendar, IconChevronRight, IconCheck, IconX, IconAlertCircle, IconWall, IconShoppingBag, IconDollar, IconCamera, IconWrench } from '@/components/ui/Icons'
 import GoogleReviewsCarousel from '@/components/GoogleReviewsCarousel'
+import AdminKpiCard from './AdminKpiCard'
 
 
 function timeAgo(dateStr: string | null): string {
@@ -416,6 +417,9 @@ export default async function AdminDashboard({ session }: { session: SessionUser
             </div>
           </div>
         </div>
+
+        {/* KPI mes en curso — solo admin */}
+        {isAdminRole && <AdminKpiCard />}
 
         {/* Próximos cumpleaños */}
         <div className="col-span-2 lg:col-span-1 bg-white rounded-2xl border border-gray-100 shadow-sm p-4">

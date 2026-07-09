@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Button, Spinner, Toast } from '@/components/ui'
-import { IconPlus, IconFileText, IconCheck, IconAlertCircle, IconX } from '@/components/ui/Icons'
+import { IconPlus, IconFileText, IconCheck, IconAlertCircle, IconX, IconEye, IconEyeOff } from '@/components/ui/Icons'
 import { MESES } from '@/lib/liquidador'
 import type { SessionUser } from '@/types'
 import FileViewer from '@/components/FileViewer'
@@ -291,11 +291,19 @@ function fmtPeso(n: number): string {
   return '$' + Math.round(n).toLocaleString('es-AR')
 }
 
+const LS_MONTOS = 'liquidaciones_montos_visible'
+
 export function EmployeeRecibosView({ user }: { user: SessionUser }) {
   const [recibos, setRecibos] = useState<ReciboDB[]>([])
   const [pagos,   setPagos]   = useState<PagoEmpleada[]>([])
   const [loading, setLoading] = useState(true)
-  const [viewer, setViewer] = useState<{ url: string; name: string } | null>(null)
+  const [viewer,  setViewer]  = useState<{ url: string; name: string } | null>(null)
+  const [montosVisible, setMontosVisible] = useState(true)
+
+  useEffect(() => {
+    const stored = localStorage.getItem(LS_MONTOS)
+    if (stored === 'false') setMontosVisible(false)
+  }, [])
 
   useEffect(() => {
     Promise.all([
@@ -306,6 +314,12 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
       setPagos(Array.isArray(pData) ? (pData as PagoEmpleada[]) : [])
     }).finally(() => setLoading(false))
   }, [])
+
+  function toggleMontos() {
+    const next = !montosVisible
+    setMontosVisible(next)
+    localStorage.setItem(LS_MONTOS, String(next))
+  }
 
   if (loading) return <Spinner />
 
@@ -320,7 +334,12 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
 
   return (
     <div className="space-y-3 mt-4">
-      <p className="text-[13px] font-semibold text-[var(--text-sub)]">Mis liquidaciones</p>
+      <div className="flex items-center justify-between">
+        <p className="text-[13px] font-semibold text-[var(--text-sub)]">Mis liquidaciones</p>
+        <button onClick={toggleMontos} className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer transition-colors" aria-label="Mostrar/ocultar montos">
+          {montosVisible ? <IconEye size={16} /> : <IconEyeOff size={16} />}
+        </button>
+      </div>
       {meses.length === 0 ? (
         <p className="text-[13px] text-[var(--text-sub)] text-center py-8">Sin liquidaciones disponibles</p>
       ) : meses.map(({ anio, mes }) => {
@@ -356,16 +375,26 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
               <div className="border-t border-gray-100 px-3.5 py-3 bg-gray-50/60 space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[12px] font-semibold text-[var(--text-main)]">Total a liquidar</span>
-                  <span className="text-[13px] font-bold text-[var(--primary)]">{fmtPeso(pago.total)}</span>
+                  <span className="text-[13px] font-bold text-[var(--primary)]">
+                    {montosVisible ? fmtPeso(pago.total) : '••••••'}
+                  </span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-[var(--text-sub)]">Efectivo</span>
-                  <span className="text-[11px] font-medium text-[var(--text-main)]">{fmtPeso(pago.efectivo)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-[var(--text-sub)]">Transferencia</span>
-                  <span className="text-[11px] font-medium text-[var(--text-main)]">{fmtPeso(pago.transferencia)}</span>
-                </div>
+                {(pago.efectivo > 0 || pago.transferencia > 0) && montosVisible && (
+                  <>
+                    {pago.efectivo > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-[var(--text-sub)]">Efectivo</span>
+                        <span className="text-[11px] font-medium text-[var(--text-main)]">{fmtPeso(pago.efectivo)}</span>
+                      </div>
+                    )}
+                    {pago.transferencia > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-[var(--text-sub)]">Transferencia</span>
+                        <span className="text-[11px] font-medium text-[var(--text-main)]">{fmtPeso(pago.transferencia)}</span>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>
