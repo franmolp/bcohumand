@@ -23,19 +23,17 @@ if (!APP_URL) throw new Error('Falta APP_URL')
 if (!CRON_SECRET) throw new Error('Falta CRON_SECRET')
 if (!FRESHA_SESSION) throw new Error('Falta FRESHA_SESSION')
 
-// ─── Rango de fechas: lunes de la semana actual → último día del mes siguiente ──
+// ─── Rango de fechas: primer día del mes actual → último día del mes siguiente ──
 
 function getDateRange() {
   if (process.env.FROM && process.env.TO) {
     return { from: process.env.FROM, to: process.env.TO }
   }
   const now = new Date()
-  const dow = now.getDay() === 0 ? 7 : now.getDay()
-  const monday = new Date(now)
-  monday.setDate(now.getDate() - dow + 1)
+  const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
   const lastDayNextMonth = new Date(now.getFullYear(), now.getMonth() + 2, 0)
   const fmt = d => d.toLocaleDateString('sv') // YYYY-MM-DD en zona horaria local
-  return { from: fmt(monday), to: fmt(lastDayNextMonth) }
+  return { from: fmt(firstDayThisMonth), to: fmt(lastDayNextMonth) }
 }
 
 // ─── Parsers CSV (equivalentes a parseTurnosFresha / parseCitasFresha del cliente) ──
