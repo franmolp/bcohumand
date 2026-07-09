@@ -13,6 +13,18 @@ function citaDurMin(c: { duracion_min: number | null; franja_inicio: string | nu
   return 0
 }
 
+// Fresha puede exportar el estado de cancelación con distintas variantes
+const ESTADOS_CANCELADOS = new Set([
+  'cancelado', 'cancelada', 'cancelled', 'canceled',
+  'no_presentado', 'no presentado', 'no show', 'no-show', 'noshow',
+])
+function esCancelada(estado: string | null) {
+  return ESTADOS_CANCELADOS.has((estado ?? '').toLowerCase().trim())
+}
+
+// 'Sin fichada' tiene present=true en CHIP_INFO pero la empleada no concurrió realmente
+const ESTADO_NO_CONTAR_PRESENTE = new Set(['Sin fichada'])
+
 export async function GET(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
@@ -34,6 +46,7 @@ export async function GET(request: NextRequest) {
 
   const [
     { data: citas },
+    { data: atenciones },   // liquidacion_atenciones: fuente verificada de ventas/comisiones
     { data: asistencia },
     { data: comprasData },
     { data: usuarios },
@@ -43,6 +56,11 @@ export async function GET(request: NextRequest) {
       .select('usuario_id, nombre_empleada, estado, categoria, servicio, duracion_min, franja_inicio, franja_fin, venta_neta')
       .gte('fecha', inicio)
       .lte('fecha', fin),
+    supabaseAdmin
+      .from('liquidacion_atenciones')
+      .select('usuario_id, venta_neta, comision, articulo, categoria')
+      .eq('anio', y)
+      .eq('mes', m),
     supabaseAdmin
       .from('asistencia_procesada')
       .select('usuario_id, estado, horas_fichadas, horas_base, minutos_tarde')
@@ -58,19 +76,41 @@ export async function GET(request: NextRequest) {
 
   const nombreMap = new Map((usuarios ?? []).map(u => [u.id, u.nombre]))
 
-  const citasNoCanc = (citas ?? []).filter(c => c.estado !== 'cancelado' && c.estado !== 'Cancelado')
-  const citasCanceladas = (citas ?? []).filter(c => c.estado === 'cancelado' || c.estado === 'Cancelado')
-  const ventasNetas = citasNoCanc.reduce((s, c) => s + (c.venta_neta || 0), 0)
+  // Citas: excluir canceladas/no-show con filtro normalizado
+  const citasTodas = citas ?? []
+  const citasNoCanc = citasTodas.filter(c => !esCancelada(c.estado))
+  const citasCanceladas = citasTodas.filter(c => esCancelada(c.estado))
+
+  // Fuente de ventas: liquidacion_atenciones (verificada por admin) si existe,
+  // si no fallback a fresha_citas_detalle (estimado para mes en curso sin liquidar)
+  const tieneAtenciones = (atenciones ?? []).length > 0
+  const fuenteVentas: 'liquidacion' | 'fresha' = tieneAtenciones ? 'liquidacion' : 'fresha'
+
+  const ventasNetas = tieneAtenciones
+    ? (atenciones ?? []).reduce((s, a) => s + (a.venta_neta || 0), 0)
+    : citasNoCanc.reduce((s, c) => s + (c.venta_neta || 0), 0)
+
   const gastos = (comprasData ?? []).reduce((s, c) => s + (c.monto || 0), 0)
   const proyeccion = diasTranscurridos < diasDelMes && diasTranscurridos > 0
     ? Math.round(ventasNetas / diasTranscurridos * diasDelMes)
     : null
+
+  // Agregar ventas/comisiones por empleada desde liquidacion_atenciones
+  const atencionByUid = new Map<string, { ventaNeta: number; comision: number }>()
+  for (const a of (atenciones ?? [])) {
+    const prev = atencionByUid.get(a.usuario_id) ?? { ventaNeta: 0, comision: 0 }
+    atencionByUid.set(a.usuario_id, {
+      ventaNeta: prev.ventaNeta + (a.venta_neta || 0),
+      comision: prev.comision + (a.comision || 0),
+    })
+  }
 
   interface EmpData {
     nombre: string
     citas: number
     duracionMin: number
     ventaNeta: number
+    comision: number
     diasPresente: number
     diasAusente: number
     tardanzas: number
@@ -78,21 +118,34 @@ export async function GET(request: NextRequest) {
   }
   const empMap = new Map<string, EmpData>()
   const getEmp = (uid: string, nombre: string) => {
-    if (!empMap.has(uid)) empMap.set(uid, { nombre, citas: 0, duracionMin: 0, ventaNeta: 0, diasPresente: 0, diasAusente: 0, tardanzas: 0, horasBase: 0 })
+    if (!empMap.has(uid)) empMap.set(uid, { nombre, citas: 0, duracionMin: 0, ventaNeta: 0, comision: 0, diasPresente: 0, diasAusente: 0, tardanzas: 0, horasBase: 0 })
     return empMap.get(uid)!
   }
 
+  // Citas: count + duración (siempre desde fresha)
   for (const c of citasNoCanc) {
     const e = getEmp(c.usuario_id, c.nombre_empleada)
     e.citas++
-    e.ventaNeta += c.venta_neta || 0
     e.duracionMin += citaDurMin(c)
+    if (!tieneAtenciones) e.ventaNeta += c.venta_neta || 0
   }
+
+  // Ventas/comisiones verificadas desde liquidacion_atenciones
+  if (tieneAtenciones) {
+    for (const [uid, data] of atencionByUid) {
+      const nombre = nombreMap.get(uid) ?? '—'
+      const e = getEmp(uid, nombre)
+      e.ventaNeta = data.ventaNeta
+      e.comision = data.comision
+    }
+  }
+
+  // Asistencia: 'Sin fichada' NO cuenta como presente aunque CHIP_INFO.present = true
   for (const a of (asistencia ?? [])) {
     const nombre = nombreMap.get(a.usuario_id) ?? '—'
     const e = getEmp(a.usuario_id, nombre)
     const chip = CHIP_INFO[a.estado ?? '']
-    if (chip?.present) {
+    if (chip?.present && !ESTADO_NO_CONTAR_PRESENTE.has(a.estado ?? '')) {
       e.diasPresente++
       e.horasBase += a.horas_base || a.horas_fichadas || 0
     }
@@ -106,7 +159,9 @@ export async function GET(request: NextRequest) {
       nombre: e.nombre,
       citas: e.citas,
       ventaNeta: Math.round(e.ventaNeta),
+      comision: tieneAtenciones ? Math.round(e.comision) : null,
       diasPresente: e.diasPresente,
+      diasAusente: e.diasAusente,
       tardanzas: e.tardanzas,
       duracionMin: e.duracionMin,
       horasBase: Math.round(e.horasBase * 10) / 10,
@@ -114,6 +169,7 @@ export async function GET(request: NextRequest) {
     }))
     .sort((a, b) => b.ventaNeta - a.ventaNeta)
 
+  // Servicios más pedidos y rentabilidad (siempre desde fresha — tiene duración)
   const srvMap = new Map<string, { categoria: string; cantidad: number; ventaNeta: number; duracionMin: number }>()
   for (const c of citasNoCanc) {
     const key = c.servicio || 'Sin servicio'
@@ -127,7 +183,6 @@ export async function GET(request: NextRequest) {
     })
   }
 
-  // Más pedidos: top 15 por cantidad
   const servicios = [...srvMap.entries()]
     .map(([servicio, d]) => ({
       servicio,
@@ -142,7 +197,6 @@ export async function GET(request: NextRequest) {
     .sort((a, b) => b.cantidad - a.cantidad)
     .slice(0, 15)
 
-  // Rentabilidad: top 10 por $/hora
   const rentabilidad = [...srvMap.entries()]
     .map(([servicio, d]) => ({
       servicio,
@@ -162,13 +216,14 @@ export async function GET(request: NextRequest) {
     kpis: {
       totalCitas: citasNoCanc.length,
       canceladas: citasCanceladas.length,
-      tasaCancelacion: (citas?.length ?? 0) > 0 ? Math.round(citasCanceladas.length / citas!.length * 100) : 0,
+      tasaCancelacion: citasTodas.length > 0 ? Math.round(citasCanceladas.length / citasTodas.length * 100) : 0,
       ventasNetas: Math.round(ventasNetas),
       gastos: Math.round(gastos),
       balance: Math.round(ventasNetas - gastos),
       proyeccion,
       diasTranscurridos,
       diasDelMes,
+      fuenteVentas,
     },
     productividad,
     servicios,

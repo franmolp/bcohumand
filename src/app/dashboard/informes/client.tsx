@@ -15,13 +15,16 @@ interface Kpis {
   proyeccion: number | null
   diasTranscurridos: number
   diasDelMes: number
+  fuenteVentas: 'liquidacion' | 'fresha'
 }
 
 interface EmpleadaRow {
   nombre: string
   citas: number
   ventaNeta: number
+  comision: number | null
   diasPresente: number
+  diasAusente: number
   tardanzas: number
   duracionMin: number
   horasBase: number
@@ -149,7 +152,7 @@ export default function InformesClient({ user }: { user: SessionUser }) {
           {/* KPI cards principales */}
           <div className="grid grid-cols-2 gap-3">
             <KpiCard label="Citas realizadas" value={String(k.totalCitas)} sub={k.canceladas > 0 ? `${k.canceladas} canceladas (${k.tasaCancelacion}%)` : undefined} />
-            <KpiCard label="Ventas netas" value={fmt$(k.ventasNetas)} />
+            <KpiCard label="Ventas netas" value={fmt$(k.ventasNetas)} sub={k.fuenteVentas === 'fresha' ? 'Estimado (Fresha)' : undefined} />
             <KpiCard label="Gastos" value={fmt$(k.gastos)} />
             <KpiCard
               label="Balance estimado"
@@ -181,10 +184,13 @@ export default function InformesClient({ user }: { user: SessionUser }) {
           {/* Productividad por empleada */}
           {datos.productividad.length > 0 && (
             <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
-              <div className="px-4 py-3 border-b border-[var(--border)]">
+              <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between">
                 <p className="text-[13px] font-semibold text-[var(--text)] flex items-center gap-2">
                   <IconUsers size={15} className="text-[var(--primary)]" /> Productividad por empleada
                 </p>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${k.fuenteVentas === 'liquidacion' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                  {k.fuenteVentas === 'liquidacion' ? 'Desde liquidación' : 'Estimado (Fresha)'}
+                </span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-[12px]">
@@ -193,6 +199,9 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                       <th className="text-left px-4 py-2.5 font-medium">Empleada</th>
                       <th className="text-right px-3 py-2.5 font-medium">Citas</th>
                       <th className="text-right px-3 py-2.5 font-medium">Ventas</th>
+                      {datos.productividad.some(e => e.comision !== null) && (
+                        <th className="text-right px-3 py-2.5 font-medium">Comisión</th>
+                      )}
                       <th className="text-right px-3 py-2.5 font-medium">Asist.</th>
                       <th className="text-right px-4 py-2.5 font-medium">Ocup.</th>
                     </tr>
@@ -203,7 +212,14 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                         <td className="px-4 py-3 font-medium text-[var(--text)]">{e.nombre}</td>
                         <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.citas}</td>
                         <td className="px-3 py-3 text-right font-semibold text-[var(--text)]">{fmt$(e.ventaNeta)}</td>
-                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.diasPresente}d{e.tardanzas > 0 ? ` ·${e.tardanzas}t` : ''}</td>
+                        {datos.productividad.some(e => e.comision !== null) && (
+                          <td className="px-3 py-3 text-right text-[var(--primary)] font-medium">
+                            {e.comision !== null ? fmt$(e.comision) : <span className="text-gray-300">—</span>}
+                          </td>
+                        )}
+                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">
+                          {e.diasPresente}d{e.tardanzas > 0 ? ` · ${e.tardanzas}t` : ''}{e.diasAusente > 0 ? ` · ${e.diasAusente}a` : ''}
+                        </td>
                         <td className="px-4 py-3 text-right">
                           {e.ocupacionPct !== null ? (
                             <span className={`font-semibold ${e.ocupacionPct >= 70 ? 'text-green-600' : e.ocupacionPct >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
@@ -217,7 +233,7 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                 </table>
               </div>
               <p className="px-4 py-2 text-[10px] text-[var(--text-muted)] border-t border-gray-50">
-                Ocup. = tiempo en citas / horas base del turno
+                Asist. = días presentes · t tardanzas · a ausencias · Ocup. = tiempo en citas / horas base
               </p>
             </div>
           )}
