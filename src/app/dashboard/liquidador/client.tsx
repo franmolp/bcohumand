@@ -206,12 +206,21 @@ function LiquidacionesTab() {
       // Enviar brutos históricos de la hoja "Todas" en tandas de 500
       if (brutaHistorial.length > 0) {
         const BATCH = 500
+        let brutaErr: string | null = null
         for (let i = 0; i < brutaHistorial.length; i += BATCH) {
-          await fetch('/api/liquidador/bruto', {
+          const rb = await fetch('/api/liquidador/bruto', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ filas: brutaHistorial.slice(i, i + BATCH) }),
-          }).catch(() => {})
+          }).catch(e => { brutaErr = String(e); return null })
+          if (rb && !rb.ok) {
+            const bd = await rb.json().catch(() => ({}))
+            brutaErr = bd.error || `Error HTTP ${rb.status}`
+            break
+          }
+        }
+        if (brutaErr) {
+          setParseErr(`Pagos guardados, pero error en historial bruto: ${brutaErr}`)
         }
         setBrutaHistorial([])
       }
