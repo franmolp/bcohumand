@@ -291,8 +291,8 @@ export default function Navigation({ user }: { user: SessionUser }) {
             const badge = modulos[item.href] ?? 0
             return (
               <Link key={item.href} href={item.href}
-                className={`flex-1 flex flex-col items-center pt-4 gap-1 ${active ? 'text-[var(--primary)]' : 'text-gray-400'}`}>
-                <span className="relative">
+                className={`flex-1 flex flex-col items-center pt-4 gap-1 overflow-hidden ${active ? 'text-[var(--primary)]' : 'text-gray-400'}`}>
+                <span className="relative flex-shrink-0">
                   <Icon size={20} />
                   {badge > 0 && !active && (
                     <span className="absolute -top-1 -right-1.5 min-w-[14px] h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5">
@@ -300,12 +300,12 @@ export default function Navigation({ user }: { user: SessionUser }) {
                     </span>
                   )}
                 </span>
-                <span className="text-[10px] font-medium">{label}</span>
+                <span className="text-[10px] font-medium w-full text-center truncate px-0.5">{label}</span>
               </Link>
             )
           })}
-          <button onClick={() => setDrawer(true)} className="flex-1 flex flex-col items-center pt-4 gap-1 text-gray-400 cursor-pointer">
-            <IconMore size={20} /><span className="text-[10px] font-medium">Más</span>
+          <button onClick={() => setDrawer(true)} className="flex-1 flex flex-col items-center pt-4 gap-1 overflow-hidden text-gray-400 cursor-pointer">
+            <IconMore size={20} className="flex-shrink-0" /><span className="text-[10px] font-medium w-full text-center truncate px-0.5">Más</span>
           </button>
         </div>
       </nav>
