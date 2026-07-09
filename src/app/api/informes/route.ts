@@ -44,6 +44,9 @@ export async function GET(request: NextRequest) {
     ? diasDelMes
     : Math.max(1, parseInt(hoy.substring(8)))
 
+  // Para meses en curso solo traer citas hasta hoy, no turnos futuros pre-agendados
+  const finCitas = hoy < fin ? hoy : fin
+
   const [
     { data: citas },
     { data: atenciones },   // liquidacion_atenciones: fuente verificada de ventas/comisiones
@@ -55,7 +58,7 @@ export async function GET(request: NextRequest) {
       .from('fresha_citas_detalle')
       .select('usuario_id, nombre_empleada, estado, categoria, servicio, duracion_min, franja_inicio, franja_fin, venta_neta')
       .gte('fecha', inicio)
-      .lte('fecha', fin),
+      .lte('fecha', finCitas),
     supabaseAdmin
       .from('liquidacion_atenciones')
       .select('usuario_id, venta_neta, comision, articulo, categoria')
