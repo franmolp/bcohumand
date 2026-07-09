@@ -46,13 +46,15 @@ export async function GET(request: NextRequest) {
     // Armar OR de nombres: normNombre + nombre_excel (si existe y es distinto)
     const nameFilters = new Set<string>([nombreNorm])
     if (nombreExcel) nameFilters.add(nombreExcel)
-    const nameOrParts = Array.from(nameFilters).map(n => `nombre_empleada.eq.${n}`)
-    // Fallback: primer nombre coincide (para casos donde el admin usó abreviatura distinta)
-    const firstName = session.nombre.trim().split(/\s+/)[0] ?? ''
-    const firstNameCap = firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase()
-    if (firstNameCap.length >= 3) nameOrParts.push(`nombre_empleada.ilike.${firstNameCap} *`)
-    const monthOr = months.map(({ anio, mes }) => `and(anio.eq.${anio},mes.eq.${mes})`).join(',')
-    query = query.or(nameOrParts.join(',')).or(monthOr)
+    // Construir pares (nombre AND mes) para evitar cross-match entre empleadas con igual primer nombre
+    const orParts: string[] = []
+    for (const { anio, mes } of months) {
+      for (const nombre of nameFilters) {
+        orParts.push(`and(nombre_empleada.eq.${nombre},anio.eq.${anio},mes.eq.${mes})`)
+      }
+    }
+    if (!orParts.length) return NextResponse.json([])
+    query = query.or(orParts.join(','))
   }
 
   const { data, error } = await query
