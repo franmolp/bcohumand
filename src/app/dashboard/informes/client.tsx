@@ -23,12 +23,11 @@ interface EmpleadaRow {
   citas: number
   ventaNeta: number
   comision: number | null
-  diasPresente: number
-  diasAusente: number
-  tardanzas: number
-  duracionMin: number
-  horasBase: number
+  minOcupada: number
+  minLibre: number
   ocupacionPct: number | null
+  diasPresente: number
+  diasHabiles: number
 }
 
 interface ServicioRow {
@@ -49,6 +48,14 @@ interface ApiData {
 
 function fmt$(n: number) {
   return '$' + Math.round(n).toLocaleString('es-AR')
+}
+
+function fmtMin(m: number) {
+  const h = Math.floor(m / 60)
+  const min = m % 60
+  if (h === 0) return `${min}m`
+  if (min === 0) return `${h}h`
+  return `${h}h ${min}m`
 }
 
 function fmtMes(mes: string) {
@@ -202,8 +209,10 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                       {datos.productividad.some(e => e.comision !== null) && (
                         <th className="text-right px-3 py-2.5 font-medium">Comisión</th>
                       )}
-                      <th className="text-right px-3 py-2.5 font-medium">Asist.</th>
-                      <th className="text-right px-4 py-2.5 font-medium">Ocup.</th>
+                      <th className="text-right px-3 py-2.5 font-medium">T. ocup.</th>
+                      <th className="text-right px-3 py-2.5 font-medium">T. libre</th>
+                      <th className="text-right px-3 py-2.5 font-medium">% ocup.</th>
+                      <th className="text-right px-4 py-2.5 font-medium">Asist.</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -218,14 +227,20 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                           </td>
                         )}
                         <td className="px-3 py-3 text-right text-[var(--text-muted)]">
-                          {e.diasPresente}d{e.tardanzas > 0 ? ` · ${e.tardanzas}t` : ''}{e.diasAusente > 0 ? ` · ${e.diasAusente}a` : ''}
+                          {e.minOcupada > 0 ? fmtMin(e.minOcupada) : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">
+                          {e.minLibre > 0 ? fmtMin(e.minLibre) : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-3 py-3 text-right">
                           {e.ocupacionPct !== null ? (
                             <span className={`font-semibold ${e.ocupacionPct >= 70 ? 'text-green-600' : e.ocupacionPct >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
                               {e.ocupacionPct}%
                             </span>
                           ) : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right text-[var(--text-muted)]">
+                          {e.diasHabiles > 0 ? `${e.diasPresente}/${e.diasHabiles}d` : <span className="text-gray-300">—</span>}
                         </td>
                       </tr>
                     ))}
@@ -233,7 +248,7 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                 </table>
               </div>
               <p className="px-4 py-2 text-[10px] text-[var(--text-muted)] border-t border-gray-50">
-                Asist. = días presentes · t tardanzas · a ausencias · Ocup. = tiempo en citas / horas base
+                T. ocup. / T. libre = tiempo de citas vs tiempo libre dentro del horario base · Asist. = días presentes / días hábiles
               </p>
             </div>
           )}
