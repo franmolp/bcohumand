@@ -189,69 +189,113 @@ export default function InformesClient({ user }: { user: SessionUser }) {
           )}
 
           {/* Productividad por empleada */}
-          {datos.productividad.length > 0 && (
-            <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
-              <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between">
-                <p className="text-[13px] font-semibold text-[var(--text)] flex items-center gap-2">
-                  <IconUsers size={15} className="text-[var(--primary)]" /> Productividad por empleada
-                </p>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${k.fuenteVentas === 'liquidacion' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
-                  {k.fuenteVentas === 'liquidacion' ? 'Desde liquidación' : 'Estimado (Fresha)'}
-                </span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-[12px]">
-                  <thead>
-                    <tr className="border-b border-[var(--border)] text-[var(--text-muted)]">
-                      <th className="text-left px-4 py-2.5 font-medium">Empleada</th>
-                      <th className="text-right px-3 py-2.5 font-medium">Citas</th>
-                      <th className="text-right px-3 py-2.5 font-medium">Ventas</th>
-                      {datos.productividad.some(e => e.comision !== null) && (
-                        <th className="text-right px-3 py-2.5 font-medium">Comisión</th>
-                      )}
-                      <th className="text-right px-3 py-2.5 font-medium">T. ocup.</th>
-                      <th className="text-right px-3 py-2.5 font-medium">T. libre</th>
-                      <th className="text-right px-3 py-2.5 font-medium">% ocup.</th>
-                      <th className="text-right px-4 py-2.5 font-medium">Asist.</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {datos.productividad.map((e, i) => (
-                      <tr key={i} className="border-b border-gray-50 last:border-0">
-                        <td className="px-4 py-3 font-medium text-[var(--text)]">{e.nombre}</td>
-                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.citas}</td>
-                        <td className="px-3 py-3 text-right font-semibold text-[var(--text)]">{fmt$(e.ventaNeta)}</td>
-                        {datos.productividad.some(e => e.comision !== null) && (
-                          <td className="px-3 py-3 text-right text-[var(--primary)] font-medium">
-                            {e.comision !== null ? fmt$(e.comision) : <span className="text-gray-300">—</span>}
-                          </td>
+          {datos.productividad.length > 0 && (() => {
+            const tieneComision = datos.productividad.some(e => e.comision !== null)
+            return (
+              <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
+                <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between">
+                  <p className="text-[13px] font-semibold text-[var(--text)] flex items-center gap-2">
+                    <IconUsers size={15} className="text-[var(--primary)]" /> Productividad por empleada
+                  </p>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${k.fuenteVentas === 'liquidacion' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                    {k.fuenteVentas === 'liquidacion' ? 'Desde liquidación' : 'Estimado (Fresha)'}
+                  </span>
+                </div>
+
+                {/* Mobile: cards */}
+                <div className="lg:hidden divide-y divide-gray-50">
+                  {datos.productividad.map((e, i) => (
+                    <div key={i} className="px-4 py-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[13px] font-semibold text-[var(--text)]">{e.nombre}</p>
+                        {e.diasHabiles > 0 && (
+                          <span className="text-[11px] text-[var(--text-muted)]">{e.diasPresente}/{e.diasHabiles}d</span>
                         )}
-                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">
-                          {e.minOcupada > 0 ? fmtMin(e.minOcupada) : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">
-                          {e.minLibre > 0 ? fmtMin(e.minLibre) : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-3 py-3 text-right">
+                      </div>
+                      <div className={`grid gap-x-2 gap-y-1 ${tieneComision ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                        <div>
+                          <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wide">Citas</p>
+                          <p className="text-[13px] font-semibold text-[var(--text)]">{e.citas}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wide">Ventas</p>
+                          <p className="text-[12px] font-semibold text-[var(--text)]">{fmt$(e.ventaNeta)}</p>
+                        </div>
+                        {tieneComision && (
+                          <div>
+                            <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wide">Comisión</p>
+                            <p className="text-[12px] font-medium text-[var(--primary)]">
+                              {e.comision !== null ? fmt$(e.comision) : <span className="text-gray-300">—</span>}
+                            </p>
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wide">% Ocup.</p>
                           {e.ocupacionPct !== null ? (
-                            <span className={`font-semibold ${e.ocupacionPct >= 70 ? 'text-green-600' : e.ocupacionPct >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
+                            <p className={`text-[13px] font-semibold ${e.ocupacionPct >= 70 ? 'text-green-600' : e.ocupacionPct >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
                               {e.ocupacionPct}%
-                            </span>
-                          ) : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-4 py-3 text-right text-[var(--text-muted)]">
-                          {e.diasHabiles > 0 ? `${e.diasPresente}/${e.diasHabiles}d` : <span className="text-gray-300">—</span>}
-                        </td>
+                            </p>
+                          ) : <p className="text-[13px] text-gray-300">—</p>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop: tabla completa */}
+                <div className="hidden lg:block overflow-x-auto">
+                  <table className="w-full text-[12px]">
+                    <thead>
+                      <tr className="border-b border-[var(--border)] text-[var(--text-muted)]">
+                        <th className="text-left px-4 py-2.5 font-medium">Empleada</th>
+                        <th className="text-right px-3 py-2.5 font-medium">Citas</th>
+                        <th className="text-right px-3 py-2.5 font-medium">Ventas</th>
+                        {tieneComision && <th className="text-right px-3 py-2.5 font-medium">Comisión</th>}
+                        <th className="text-right px-3 py-2.5 font-medium">T. ocup.</th>
+                        <th className="text-right px-3 py-2.5 font-medium">T. libre</th>
+                        <th className="text-right px-3 py-2.5 font-medium">% ocup.</th>
+                        <th className="text-right px-4 py-2.5 font-medium">Asist.</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {datos.productividad.map((e, i) => (
+                        <tr key={i} className="border-b border-gray-50 last:border-0">
+                          <td className="px-4 py-3 font-medium text-[var(--text)]">{e.nombre}</td>
+                          <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.citas}</td>
+                          <td className="px-3 py-3 text-right font-semibold text-[var(--text)]">{fmt$(e.ventaNeta)}</td>
+                          {tieneComision && (
+                            <td className="px-3 py-3 text-right text-[var(--primary)] font-medium">
+                              {e.comision !== null ? fmt$(e.comision) : <span className="text-gray-300">—</span>}
+                            </td>
+                          )}
+                          <td className="px-3 py-3 text-right text-[var(--text-muted)]">
+                            {e.minOcupada > 0 ? fmtMin(e.minOcupada) : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-3 py-3 text-right text-[var(--text-muted)]">
+                            {e.minLibre > 0 ? fmtMin(e.minLibre) : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-3 py-3 text-right">
+                            {e.ocupacionPct !== null ? (
+                              <span className={`font-semibold ${e.ocupacionPct >= 70 ? 'text-green-600' : e.ocupacionPct >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
+                                {e.ocupacionPct}%
+                              </span>
+                            ) : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-4 py-3 text-right text-[var(--text-muted)]">
+                            {e.diasHabiles > 0 ? `${e.diasPresente}/${e.diasHabiles}d` : <span className="text-gray-300">—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <p className="px-4 py-2 text-[10px] text-[var(--text-muted)] border-t border-gray-50">
+                  T. ocup. / T. libre = tiempo de citas vs tiempo libre dentro del horario base · Asist. = días presentes / días hábiles
+                </p>
               </div>
-              <p className="px-4 py-2 text-[10px] text-[var(--text-muted)] border-t border-gray-50">
-                T. ocup. / T. libre = tiempo de citas vs tiempo libre dentro del horario base · Asist. = días presentes / días hábiles
-              </p>
-            </div>
-          )}
+            )
+          })()}
 
           {/* Servicios más pedidos */}
           {datos.servicios.length > 0 && (
@@ -292,7 +336,39 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                   <IconDollar size={15} className="text-[var(--primary)]" /> Rentabilidad por servicio
                 </p>
               </div>
-              <div className="overflow-x-auto">
+
+              {/* Mobile: cards */}
+              <div className="lg:hidden divide-y divide-gray-50">
+                {datos.rentabilidad.map((s, i) => (
+                  <div key={i} className="px-4 py-3 space-y-1.5">
+                    <div>
+                      <p className="text-[13px] font-medium text-[var(--text)]">{s.servicio}</p>
+                      {s.categoria && <p className="text-[10px] text-[var(--text-muted)]">{s.categoria}</p>}
+                    </div>
+                    <div className="grid grid-cols-4 gap-x-2">
+                      <div>
+                        <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wide">Citas</p>
+                        <p className="text-[12px] font-semibold text-[var(--text)]">{s.cantidad}</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wide">Duración</p>
+                        <p className="text-[12px] text-[var(--text-muted)]">{s.duracionMin !== null ? `${s.duracionMin}m` : '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wide">P. prom.</p>
+                        <p className="text-[12px] text-[var(--text-muted)]">{fmt$(s.ventaNeta / s.cantidad)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wide">$/hora</p>
+                        <p className="text-[12px] font-semibold text-[var(--primary)]">{fmt$(s.precioPorHora!)}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop: tabla completa */}
+              <div className="hidden lg:block overflow-x-auto">
                 <table className="w-full text-[12px]">
                   <thead>
                     <tr className="border-b border-[var(--border)] text-[var(--text-muted)]">
@@ -323,6 +399,7 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                   </tbody>
                 </table>
               </div>
+
               <p className="px-4 py-2 text-[10px] text-[var(--text-muted)] border-t border-gray-50">
                 $/hora = precio promedio del servicio ÷ duración promedio en horas
               </p>
