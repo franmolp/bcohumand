@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import type { SessionUser } from '@/types'
 import {
   IconDollar, IconPlus, IconX, IconCheck, IconSettings, IconAlertCircle, IconChevronLeft, IconChevronRight, IconTrash,
@@ -224,7 +225,7 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
   }
 
   // ── Action modal ──
-  const ActionModal = actionAdelanto && actionType ? (
+  const ActionModal = actionAdelanto && actionType ? createPortal(
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closeAction}>
       <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
@@ -310,7 +311,8 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   ) : null
 
   // ─────────────────────────────────────────────
@@ -513,7 +515,7 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
         )}
 
         {/* Create modal */}
-        {showCreate && (
+        {showCreate && createPortal(
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowCreate(false)}>
             <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
@@ -559,7 +561,8 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
                 </div>
               </form>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {ActionModal}
