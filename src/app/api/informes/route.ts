@@ -41,7 +41,6 @@ function esCancelada(estado: string | null) {
 }
 
 const ESTADO_NO_CONTAR_PRESENTE = new Set(['Sin fichada'])
-const ESTADOS_NO_HABILES = new Set(['Sin turnos', 'Feriado/Local cerrado'])
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -171,17 +170,18 @@ export async function GET(request: NextRequest) {
     const chip = CHIP_INFO[a.estado ?? '']
     const esPresente = chip?.present && !ESTADO_NO_CONTAR_PRESENTE.has(a.estado ?? '')
 
-    if (!ESTADOS_NO_HABILES.has(a.estado ?? '')) e.diasHabiles++
-
-    if (esPresente && a.horario_base_entrada && a.horario_base_salida) {
-      e.diasPresente++
+    if (a.horario_base_entrada && a.horario_base_salida) {
       const baseIni = toMin(a.horario_base_entrada)
       const baseFin = toMin(a.horario_base_salida)
       const baseMin = baseFin - baseIni
       if (baseMin > 0) {
-        e.minBase += baseMin
-        const franjas = citasFranjaMap.get(`${a.usuario_id}|${a.fecha}`) ?? []
-        e.minOcupada += calcOcupado(franjas, baseIni, baseFin)
+        e.diasHabiles++
+        if (esPresente) {
+          e.diasPresente++
+          e.minBase += baseMin
+          const franjas = citasFranjaMap.get(`${a.usuario_id}|${a.fecha}`) ?? []
+          e.minOcupada += calcOcupado(franjas, baseIni, baseFin)
+        }
       }
     }
   }
