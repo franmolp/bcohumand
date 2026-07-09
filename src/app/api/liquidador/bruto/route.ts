@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/auth'
 
 interface BrutaFila { anio: number; mes: number; nombre: string; bruto: number }
+interface BrutaBody { filas?: BrutaFila[]; truncate?: boolean }
 
 export async function GET() {
   const session = await getSession()
@@ -24,9 +25,14 @@ export async function POST(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   if (!['admin', 'Admin'].includes(session.rol)) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
 
-  const body = await request.json().catch(() => ({})) as { filas?: BrutaFila[] }
+  const body = await request.json().catch(() => ({})) as BrutaBody
   const filas = body.filas
   if (!Array.isArray(filas) || !filas.length) return NextResponse.json({ error: 'Sin datos' }, { status: 400 })
+
+  if (body.truncate) {
+    const { error: delErr } = await supabaseAdmin.from('liquidaciones_bruto').delete().neq('anio', 0)
+    if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 })
+  }
 
   const norm = (s: string) => s.trim().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
   const { data: usuarios } = await supabaseAdmin.from('usuarios').select('id, nombre')

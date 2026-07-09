@@ -211,7 +211,7 @@ function LiquidacionesTab() {
           const rb = await fetch('/api/liquidador/bruto', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ filas: brutaHistorial.slice(i, i + BATCH) }),
+            body: JSON.stringify({ filas: brutaHistorial.slice(i, i + BATCH), truncate: i === 0 }),
           }).catch(e => { brutaErr = String(e); return null })
           if (rb && !rb.ok) {
             const bd = await rb.json().catch(() => ({}))
