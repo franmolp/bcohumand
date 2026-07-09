@@ -335,7 +335,7 @@ export default function AsistenciaClient({ user }: Props) {
     <div className="pt-[100px] lg:pt-0">
 
       {/* Header + Tabs — fixed on mobile (sticky doesn't work inside overflow-y-auto on iOS Safari), sticky on desktop */}
-      <div className="fixed top-12 left-0 right-0 z-20 lg:sticky lg:top-14 lg:left-auto lg:right-auto">
+      <div className="fixed top-12 left-0 right-0 z-20 bg-[var(--background)] lg:sticky lg:top-14 lg:left-auto lg:right-auto">
         {/* Header row */}
         <div className="px-4 lg:px-0 pt-4 pb-2 flex items-center justify-between bg-[var(--background)]">
           <div className="flex items-center gap-3">
