@@ -287,8 +287,75 @@ interface PagoEmpleada {
   transferencia: number
 }
 
+interface BrutoMes { anio: number; mes: number; bruto: number }
+
 function fmtPeso(n: number): string {
   return '$' + Math.round(n).toLocaleString('es-AR')
+}
+
+function fmtBruto(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
+  return `$${Math.round(n / 1000)}k`
+}
+
+const MESES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+
+function HistorialChart({ data, visible }: { data: BrutoMes[]; visible: boolean }) {
+  const now = new Date()
+  const curAnio = now.getFullYear()
+  const curMes  = now.getMonth() + 1
+
+  const cerrados = data
+    .filter(d => !(d.anio === curAnio && d.mes === curMes))
+    .sort((a, b) => a.anio !== b.anio ? a.anio - b.anio : a.mes - b.mes)
+    .slice(-6)
+
+  if (!cerrados.length) return null
+
+  const maxBruto = Math.max(...cerrados.map(d => d.bruto))
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200/60 px-4 pt-4 pb-3 mb-3">
+      <p className="text-[11px] font-semibold text-[var(--text-sub)] mb-3">Historial de cobros</p>
+
+      {/* Labels de monto */}
+      <div className="flex gap-1.5 mb-1">
+        {cerrados.map(d => (
+          <div key={`lbl-${d.anio}-${d.mes}`} className="flex-1 text-center">
+            <span className="text-[8px] font-medium text-gray-500 leading-none">
+              {visible ? fmtBruto(d.bruto) : ''}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Barras */}
+      <div className="flex items-end gap-1.5" style={{ height: 52 }}>
+        {cerrados.map((d, idx) => {
+          const h = maxBruto > 0 ? Math.max(Math.round((d.bruto / maxBruto) * 52), 4) : 4
+          const isLatest = idx === cerrados.length - 1
+          return (
+            <div
+              key={`bar-${d.anio}-${d.mes}`}
+              className={`flex-1 rounded-t-sm ${isLatest ? 'bg-[var(--primary)]' : 'bg-indigo-200'}`}
+              style={{ height: h }}
+              title={visible ? fmtPeso(d.bruto) : ''}
+            />
+          )
+        })}
+      </div>
+
+      {/* Labels de mes */}
+      <div className="flex gap-1.5 mt-1.5">
+        {cerrados.map(d => (
+          <div key={`ml-${d.anio}-${d.mes}`} className="flex-1 text-center">
+            <span className="text-[9px] text-gray-400 block leading-none">{MESES_CORTOS[d.mes - 1]}</span>
+            <span className="text-[8px] text-gray-300 block leading-none mt-0.5">'{String(d.anio).slice(2)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 const LS_MONTOS = 'liquidaciones_montos_visible'
@@ -296,6 +363,7 @@ const LS_MONTOS = 'liquidaciones_montos_visible'
 export function EmployeeRecibosView({ user }: { user: SessionUser }) {
   const [recibos, setRecibos] = useState<ReciboDB[]>([])
   const [pagos,   setPagos]   = useState<PagoEmpleada[]>([])
+  const [brutos,  setBrutos]  = useState<BrutoMes[]>([])
   const [loading, setLoading] = useState(true)
   const [viewer,  setViewer]  = useState<{ url: string; name: string } | null>(null)
   const [montosVisible, setMontosVisible] = useState(true)
@@ -309,9 +377,11 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
     Promise.all([
       fetch('/api/liquidador/recibos').then(r => r.json()),
       fetch('/api/liquidador/pagos').then(r => r.json()),
-    ]).then(([rData, pData]) => {
+      fetch('/api/liquidador/bruto').then(r => r.json()).catch(() => []),
+    ]).then(([rData, pData, bData]) => {
       setRecibos(Array.isArray(rData) ? (rData as ReciboDB[]).sort((a, b) => b.anio - a.anio || b.mes - a.mes) : [])
       setPagos(Array.isArray(pData) ? (pData as PagoEmpleada[]) : [])
+      setBrutos(Array.isArray(bData) ? (bData as BrutoMes[]) : [])
     }).finally(() => setLoading(false))
   }, [])
 
@@ -334,6 +404,7 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
 
   return (
     <div className="space-y-3 mt-4">
+      <HistorialChart data={brutos} visible={montosVisible} />
       <div className="flex items-center justify-between">
         <p className="text-[13px] font-semibold text-[var(--text-sub)]">Mis liquidaciones</p>
         <button onClick={toggleMontos} className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer transition-colors" aria-label="Mostrar/ocultar montos">
@@ -376,7 +447,7 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
                 <div className="flex items-center justify-between">
                   <span className="text-[12px] font-semibold text-[var(--text-main)]">Total a liquidar</span>
                   <span className="text-[13px] font-bold text-[var(--primary)]">
-                    {montosVisible ? fmtPeso(pago.total) : '••••••'}
+                    {montosVisible ? fmtPeso(pago.total) : '$••••••'}
                   </span>
                 </div>
                 {(pago.efectivo > 0 || pago.transferencia > 0) && montosVisible && (

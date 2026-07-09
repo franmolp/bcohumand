@@ -77,6 +77,7 @@ function LiquidacionesTab() {
   const [preview,  setPreview]  = useState<ParsedPago[] | null>(null)
   const [parseErr, setParseErr] = useState<string | null>(null)
   const [saving,   setSaving]   = useState(false)
+  const [brutaHistorial, setBrutaHistorial] = useState<{ anio: number; mes: number; nombre: string; bruto: number }[]>([])
   const [editTarget,  setEditTarget]  = useState<{ id?: number; nombre: string } | null>(null)
   const [editForm,    setEditForm]    = useState({ total: '', efectivo: '', transferencia: '' })
   const [editSaving,  setEditSaving]  = useState(false)
@@ -146,11 +147,13 @@ function LiquidacionesTab() {
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    setParseErr(null); setPreview(null)
+    setParseErr(null); setPreview(null); setBrutaHistorial([])
     try {
       const XLSX = (await import('xlsx')).default ?? await import('xlsx')
       const buf = await file.arrayBuffer()
       const wb = XLSX.read(buf, { type: 'array' })
+
+      // Hoja "Pagos mes en curso" — comportamiento existente
       const sheet = wb.Sheets['Pagos mes en curso']
       if (!sheet) throw new Error('No se encontró la hoja "Pagos mes en curso" en el archivo')
       const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { header: ['A','B','C','D','E','F'], range: 1, defval: null })
@@ -160,6 +163,35 @@ function LiquidacionesTab() {
         .map(r => ({ nombre: String(r.A).trim(), total: Math.round(Number(r.B) || 0), efectivo: Math.round(Number(r.C) || 0), transferencia: Math.round(Number(r.D) || 0) }))
       if (!parsed.length) throw new Error('No se encontraron filas de empleadas en la hoja')
       setPreview(parsed)
+
+      // Hoja "Todas" — brutos históricos por empleada
+      const sheetTodas = wb.Sheets['Todas']
+      if (sheetTodas) {
+        const rowsTodas = XLSX.utils.sheet_to_json<(string | number | null)[]>(sheetTodas, { header: 1, defval: null })
+        const headers = rowsTodas[0] as (string | null)[]
+        const now2 = new Date()
+        const curAnio = now2.getFullYear()
+        const curMes = now2.getMonth() + 1
+        const SKIP_COLS = new Set(['APORTES', 'APORTES MAI', '$ Sueldos', 'Ventas', 'Resto', '% Sueldos/Ventas'])
+        const filas: { anio: number; mes: number; nombre: string; bruto: number }[] = []
+        for (let i = 1; i < rowsTodas.length; i++) {
+          const row = rowsTodas[i] as (string | number | null)[]
+          const col0 = row[0]
+          if (typeof col0 !== 'number') continue // ignora BONO/AGUIN y vacías
+          const d = new Date(Math.round((col0 - 25569) * 86400 * 1000))
+          const anio = d.getUTCFullYear()
+          const mes = d.getUTCMonth() + 1
+          if (anio === curAnio && mes === curMes) continue // mes en curso: no tomar
+          for (let j = 1; j < headers.length; j++) {
+            const nombre = headers[j]
+            if (!nombre || SKIP_COLS.has(nombre)) continue
+            const bruto = row[j]
+            if (typeof bruto !== 'number' || bruto <= 0) continue
+            filas.push({ anio, mes, nombre, bruto })
+          }
+        }
+        setBrutaHistorial(filas)
+      }
     } catch (err) {
       setParseErr(err instanceof Error ? err.message : 'Error al leer el archivo')
     }
@@ -170,8 +202,25 @@ function LiquidacionesTab() {
     if (!preview) return
     setSaving(true)
     const r = await fetch('/api/liquidador/pagos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ anio, mes, filas: preview, replace: true }) })
-    if (r.ok) { setPreview(null); await loadData() }
-    else { const err = await r.json().catch(() => ({})); setParseErr(err.error || 'Error al guardar') }
+    if (r.ok) {
+      // Enviar brutos históricos de la hoja "Todas" en tandas de 500
+      if (brutaHistorial.length > 0) {
+        const BATCH = 500
+        for (let i = 0; i < brutaHistorial.length; i += BATCH) {
+          await fetch('/api/liquidador/bruto', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filas: brutaHistorial.slice(i, i + BATCH) }),
+          }).catch(() => {})
+        }
+        setBrutaHistorial([])
+      }
+      setPreview(null)
+      await loadData()
+    } else {
+      const err = await r.json().catch(() => ({}))
+      setParseErr(err.error || 'Error al guardar')
+    }
     setSaving(false)
   }
 

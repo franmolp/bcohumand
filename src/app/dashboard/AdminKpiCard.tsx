@@ -37,7 +37,7 @@ export default function AdminKpiCard() {
   const mesLabel = MESES[new Date().getMonth()]
   const fmtPesos = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
   const montoCitas = data ? String(data.totalCitas) : '—'
-  const montoVentas = data ? (visible ? fmtPesos(data.ventasNetas) : '••••••') : '—'
+  const montoVentas = data ? (visible ? fmtPesos(data.ventasNetas) : '$••••••') : '—'
 
   return (
     <Link href="/dashboard/informes"
