@@ -121,8 +121,12 @@ export default function SeguridadClient() {
   // Stats
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
   const logsHoy = logs.filter(l => new Date(l.created_at) >= hoy)
-  const exitososHoy = logsHoy.filter(l => l.accion === 'login_exitoso').length
-  const fallidosHoy = logsHoy.filter(l => l.accion === 'contrasena_incorrecta').length
+  const ingresosHoy = new Set(
+    logsHoy
+      .filter(l => l.accion === 'Ingresó a la app')
+      .map(l => l.usuario?.usuario ?? l.usuario_texto ?? l.ip ?? 'anon')
+  ).size
+  const fallidosHoy = logsHoy.filter(l => l.accion === 'contrasena_incorrecta' || l.accion === 'usuario_no_encontrado').length
   const bloqueadosHoy = logsHoy.filter(l => l.accion === 'cuenta_bloqueada').length
 
   return (
@@ -151,8 +155,8 @@ export default function SeguridadClient() {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 mb-5">
         <div className="bg-white rounded-2xl border border-[var(--border)] shadow-sm p-3 text-center">
-          <p className="text-[22px] font-bold text-green-600">{exitososHoy}</p>
-          <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Exitosos hoy</p>
+          <p className="text-[22px] font-bold text-green-600">{ingresosHoy}</p>
+          <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Ingresos hoy</p>
         </div>
         <div className="bg-white rounded-2xl border border-[var(--border)] shadow-sm p-3 text-center">
           <p className="text-[22px] font-bold text-amber-500">{fallidosHoy}</p>
