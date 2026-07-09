@@ -290,7 +290,7 @@ export default function Navigation({ user }: { user: SessionUser }) {
             const badge = modulos[item.href] ?? 0
             return (
               <Link key={item.href} href={item.href}
-                className={`flex-1 flex flex-col items-center pt-2.5 pb-5 gap-0.5 min-h-[64px] ${active ? 'text-[var(--primary)]' : 'text-gray-400'}`}>
+                className={`flex-1 flex flex-col items-center pt-2.5 pb-6 gap-0.5 min-h-[68px] ${active ? 'text-[var(--primary)]' : 'text-gray-400'}`}>
                 <span className="relative">
                   <Icon size={20} />
                   {badge > 0 && !active && (
@@ -303,7 +303,7 @@ export default function Navigation({ user }: { user: SessionUser }) {
               </Link>
             )
           })}
-          <button onClick={() => setDrawer(true)} className="flex-1 flex flex-col items-center pt-2.5 pb-5 gap-0.5 min-h-[64px] text-gray-400 cursor-pointer">
+          <button onClick={() => setDrawer(true)} className="flex-1 flex flex-col items-center pt-2.5 pb-6 gap-0.5 min-h-[68px] text-gray-400 cursor-pointer">
             <IconMore size={20} /><span className="text-[10px] font-medium">Más</span>
           </button>
         </div>
