@@ -283,14 +283,14 @@ export default function Navigation({ user }: { user: SessionUser }) {
       {/* ─── MOBILE: Bottom nav ─── */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
-        <div className="flex px-3 h-[68px]">
+        <div className="flex px-3 h-[76px]">
           {mobileItems.map(item => {
             const active = path === item.href; const Icon = item.icon
             const label = (!isAdminOrHR && (item as {labelEmp?: string}).labelEmp) || item.label
             const badge = modulos[item.href] ?? 0
             return (
               <Link key={item.href} href={item.href}
-                className={`flex-1 flex flex-col items-center justify-center gap-1 ${active ? 'text-[var(--primary)]' : 'text-gray-400'}`}>
+                className={`flex-1 flex flex-col items-center pt-4 gap-1 ${active ? 'text-[var(--primary)]' : 'text-gray-400'}`}>
                 <span className="relative">
                   <Icon size={20} />
                   {badge > 0 && !active && (
@@ -303,7 +303,7 @@ export default function Navigation({ user }: { user: SessionUser }) {
               </Link>
             )
           })}
-          <button onClick={() => setDrawer(true)} className="flex-1 flex flex-col items-center justify-center gap-1 text-gray-400 cursor-pointer">
+          <button onClick={() => setDrawer(true)} className="flex-1 flex flex-col items-center pt-4 gap-1 text-gray-400 cursor-pointer">
             <IconMore size={20} /><span className="text-[10px] font-medium">Más</span>
           </button>
         </div>
