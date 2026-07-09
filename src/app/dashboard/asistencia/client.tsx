@@ -1958,11 +1958,12 @@ function AjustesTab({ configDraft, setConfigDraft, saveConfig, savingCfg, empLis
     return result.sort((a, b) => a.localeCompare(b, 'es'))
   }, [empList])
 
-  function CheckboxEquipos({ label, field }: { label: string; field: 'equiposPorTurnos' | 'equiposHorarioEstricto' }) {
+  function CheckboxEquipos({ label, hint, field }: { label: string; hint: string; field: 'equiposPorTurnos' | 'equiposHorarioEstricto' }) {
     const selected = configDraft[field] as string[]
     return (
       <div>
-        <label className="block text-xs font-medium text-[var(--text-sub)] mb-2">{label}</label>
+        <p className="text-xs font-medium text-[var(--text-sub)] mb-0.5">{label}</p>
+        <p className="text-[11px] text-[var(--text-muted)] mb-2">{hint}</p>
         {equiposUnicos.length === 0
           ? <p className="text-xs text-[var(--text-muted)]">No hay equipos cargados.</p>
           : <div className="space-y-2">
@@ -2007,8 +2008,16 @@ function AjustesTab({ configDraft, setConfigDraft, saveConfig, savingCfg, empLis
 
       <div className="bg-white rounded-2xl border border-[var(--border)] p-4 space-y-5">
         <h2 className="text-sm font-semibold text-[var(--text)]">Categorías de equipos</h2>
-        <CheckboxEquipos label="Equipos por turnos (sin salida temprana)" field="equiposPorTurnos" />
-        <CheckboxEquipos label="Equipos horario estricto" field="equiposHorarioEstricto" />
+        <CheckboxEquipos
+          label="Horario por turnos"
+          hint="Sin penalización de salida temprana. La entrada se ajusta al primer turno del día si arranca más de 30 min después del horario base."
+          field="equiposPorTurnos"
+        />
+        <CheckboxEquipos
+          label="Horario estricto"
+          hint="Se evalúan entrada Y salida contra el horario base exacto, sin flexibilidad por turnos."
+          field="equiposHorarioEstricto"
+        />
       </div>
 
       <div className="bg-white rounded-2xl border border-[var(--border)] p-4 space-y-3">
