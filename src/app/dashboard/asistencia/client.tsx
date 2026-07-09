@@ -2010,14 +2010,15 @@ function AjustesTab({ configDraft, setConfigDraft, saveConfig, savingCfg, empLis
         <h2 className="text-sm font-semibold text-[var(--text)]">Categorías de equipos</h2>
         <CheckboxEquipos
           label="Horario por turnos"
-          hint="Sin penalización de salida temprana. La entrada se ajusta al primer turno del día si arranca más de 30 min después del horario base."
+          hint="Entrada: se toma como referencia el primer turno si empieza más de 30 min después del horario base. Salida: nunca se penaliza (el horario depende de los clientes)."
           field="equiposPorTurnos"
         />
         <CheckboxEquipos
           label="Horario estricto"
-          hint="Se evalúan entrada Y salida contra el horario base exacto, sin flexibilidad por turnos."
+          hint="Entrada: evaluada contra el horario base fijo, sin ajuste por turnos. Salida: se permite retirarse dentro de la tolerancia de salida configurada."
           field="equiposHorarioEstricto"
         />
+        <p className="text-[11px] text-[var(--text-muted)]">Los equipos sin categoría usan la regla por defecto: entrada justificada si el turno empieza más de 30 min tarde, y salida evaluada con la tolerancia configurada.</p>
       </div>
 
       <div className="bg-white rounded-2xl border border-[var(--border)] p-4 space-y-3">
