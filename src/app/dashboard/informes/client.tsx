@@ -202,42 +202,28 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                   </span>
                 </div>
 
-                {/* Mobile: cards */}
-                <div className="lg:hidden divide-y divide-gray-50">
+                {/* Mobile: tabla compacta una línea por empleada */}
+                <div className="lg:hidden">
+                  <div className="flex items-center px-4 py-2 border-b border-gray-100 text-[9px] text-[var(--text-muted)] uppercase tracking-wide">
+                    <span className="flex-1">Empleada</span>
+                    <span className="w-8 text-right">Citas</span>
+                    <span className="w-[78px] text-right">Ventas</span>
+                    <span className="w-10 text-right">% Oc.</span>
+                    <span className="w-10 text-right">Asist.</span>
+                  </div>
                   {datos.productividad.map((e, i) => (
-                    <div key={i} className="px-4 py-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="text-[13px] font-semibold text-[var(--text)]">{e.nombre}</p>
-                        {e.diasHabiles > 0 && (
-                          <span className="text-[11px] text-[var(--text-muted)]">{e.diasPresente}/{e.diasHabiles}d</span>
-                        )}
-                      </div>
-                      <div className={`grid gap-x-2 gap-y-1 ${tieneComision ? 'grid-cols-4' : 'grid-cols-3'}`}>
-                        <div>
-                          <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wide">Citas</p>
-                          <p className="text-[13px] font-semibold text-[var(--text)]">{e.citas}</p>
-                        </div>
-                        <div>
-                          <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wide">Ventas</p>
-                          <p className="text-[12px] font-semibold text-[var(--text)]">{fmt$(e.ventaNeta)}</p>
-                        </div>
-                        {tieneComision && (
-                          <div>
-                            <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wide">Comisión</p>
-                            <p className="text-[12px] font-medium text-[var(--primary)]">
-                              {e.comision !== null ? fmt$(e.comision) : <span className="text-gray-300">—</span>}
-                            </p>
-                          </div>
-                        )}
-                        <div>
-                          <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wide">% Ocup.</p>
-                          {e.ocupacionPct !== null ? (
-                            <p className={`text-[13px] font-semibold ${e.ocupacionPct >= 70 ? 'text-green-600' : e.ocupacionPct >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
-                              {e.ocupacionPct}%
-                            </p>
-                          ) : <p className="text-[13px] text-gray-300">—</p>}
-                        </div>
-                      </div>
+                    <div key={i} className="flex items-center px-4 py-2.5 border-b border-gray-50 last:border-0">
+                      <span className="flex-1 text-[12px] font-semibold text-[var(--text)] truncate pr-2">{e.nombre}</span>
+                      <span className="w-8 text-right text-[12px] text-[var(--text-muted)]">{e.citas}</span>
+                      <span className="w-[78px] text-right text-[12px] font-semibold text-[var(--text)]">{fmt$(e.ventaNeta)}</span>
+                      <span className="w-10 text-right text-[12px]">
+                        {e.ocupacionPct !== null
+                          ? <span className={`font-semibold ${e.ocupacionPct >= 70 ? 'text-green-600' : e.ocupacionPct >= 40 ? 'text-amber-500' : 'text-red-500'}`}>{e.ocupacionPct}%</span>
+                          : <span className="text-gray-300">—</span>}
+                      </span>
+                      <span className="w-10 text-right text-[11px] text-[var(--text-muted)]">
+                        {e.diasHabiles > 0 ? `${e.diasPresente}/${e.diasHabiles}d` : <span className="text-gray-300">—</span>}
+                      </span>
                     </div>
                   ))}
                 </div>
