@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { SessionUser, Compra, Proveedor } from '@/types'
 import { Modal, Button, Input, Confirm, Spinner } from '@/components/ui'
 import { IconShoppingBag, IconEdit, IconTrash, IconPlus, IconAlertCircle } from '@/components/ui/Icons'
@@ -276,10 +276,14 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
   const [total, setTotal] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
+  const [search, setSearch] = useState('')
+  const [allCompras, setAllCompras] = useState<Compra[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<Compra | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Compra | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  const isSearching = search.trim().length > 0
 
   const mesStr = `${anio}-${String(mes + 1).padStart(2, '0')}`
 
@@ -294,7 +298,30 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
     setLoading(false)
   }, [mesStr])
 
+  const fetchAllCompras = useCallback(async () => {
+    const res = await fetch('/api/compras')
+    if (res.ok) {
+      const d = await res.json()
+      setAllCompras(d.compras || [])
+    }
+  }, [])
+
   useEffect(() => { fetchCompras() }, [fetchCompras])
+
+  useEffect(() => {
+    if (isSearching) fetchAllCompras()
+  }, [isSearching, fetchAllCompras])
+
+  const displayed = useMemo(() => {
+    if (!isSearching) return compras
+    const q = search.trim().toLowerCase()
+    return allCompras.filter(c => {
+      const prov = ((c.proveedor as { nombre: string } | null)?.nombre ?? c.proveedor_nombre ?? '').toLowerCase()
+      const det = (c.detalle ?? '').toLowerCase()
+      const monto = String(Math.round(c.monto))
+      return prov.includes(q) || det.includes(q) || monto.includes(q)
+    })
+  }, [search, isSearching, compras, allCompras])
 
   useEffect(() => {
     fetch('/api/proveedores').then(r => r.json()).then(d => { if (Array.isArray(d)) setProveedores(d) })
@@ -339,45 +366,56 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
         </Button>
       </div>
 
-      {/* Filtros */}
-      <div className="bg-white rounded-2xl border border-[var(--border)] shadow-sm p-4 mb-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-[13px] text-[var(--text-muted)] font-medium">Filtrar por mes:</span>
-          <select
-            value={mes}
-            onChange={e => setMes(Number(e.target.value))}
-            className="rounded-xl border border-[var(--border)] px-3 py-2 text-[14px] bg-white"
-          >
-            {MESES.map((m, i) => <option key={i} value={i}>{m}</option>)}
-          </select>
-          <select
-            value={anio}
-            onChange={e => setAnio(Number(e.target.value))}
-            className="rounded-xl border border-[var(--border)] px-3 py-2 text-[14px] bg-white"
-          >
-            {anios.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </div>
+      {/* Búsqueda + Filtros */}
+      <div className="bg-white rounded-2xl border border-[var(--border)] shadow-sm p-4 mb-4 space-y-3">
+        <input
+          type="search"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar por proveedor, detalle o monto…"
+          className="w-full rounded-xl border border-[var(--border)] px-3 py-2.5 text-[14px] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+        />
+        {!isSearching && (
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-[13px] text-[var(--text-muted)] font-medium">Filtrar por mes:</span>
+            <select
+              value={mes}
+              onChange={e => setMes(Number(e.target.value))}
+              className="rounded-xl border border-[var(--border)] px-3 py-2 text-[14px] bg-white"
+            >
+              {MESES.map((m, i) => <option key={i} value={i}>{m}</option>)}
+            </select>
+            <select
+              value={anio}
+              onChange={e => setAnio(Number(e.target.value))}
+              className="rounded-xl border border-[var(--border)] px-3 py-2 text-[14px] bg-white"
+            >
+              {anios.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+        )}
       </div>
 
-      {/* Total del mes — solo admin */}
-      {isAdmin && total !== null && (
+      {/* Total — solo admin */}
+      {isAdmin && (isSearching ? displayed.length > 0 : total !== null) && (
         <div className="rounded-2xl p-5 mb-4" style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
-          <p className="text-white/70 text-[12px] font-medium mb-1">Total del mes</p>
-          <p className="text-white text-[28px] font-bold leading-none">{fmtMonto(total)}</p>
-          <p className="text-white/60 text-[12px] mt-1">{compras.length} compra{compras.length !== 1 ? 's' : ''} registrada{compras.length !== 1 ? 's' : ''}</p>
+          <p className="text-white/70 text-[12px] font-medium mb-1">{isSearching ? 'Total encontrado' : 'Total del mes'}</p>
+          <p className="text-white text-[28px] font-bold leading-none">{fmtMonto(isSearching ? displayed.reduce((s, c) => s + Number(c.monto), 0) : total!)}</p>
+          <p className="text-white/60 text-[12px] mt-1">{displayed.length} compra{displayed.length !== 1 ? 's' : ''} registrada{displayed.length !== 1 ? 's' : ''}</p>
         </div>
       )}
 
       {/* Tabla */}
       <div className="bg-white rounded-2xl border border-[var(--border)] shadow-sm overflow-hidden">
-        {loading ? (
+        {loading && !isSearching ? (
           <div className="py-16"><Spinner /></div>
-        ) : compras.length === 0 ? (
-          <div className="py-16 text-center text-[var(--text-muted)] text-sm">Sin compras en {MESES[mes]} {anio}</div>
+        ) : displayed.length === 0 ? (
+          <div className="py-16 text-center text-[var(--text-muted)] text-sm">
+            {isSearching ? `Sin resultados para "${search}"` : `Sin compras en ${MESES[mes]} ${anio}`}
+          </div>
         ) : (
           <>
-            <p className="px-4 pt-3 pb-2 text-[12px] text-[var(--text-muted)]">Mostrando {compras.length} compra{compras.length !== 1 ? 's' : ''}</p>
+            <p className="px-4 pt-3 pb-2 text-[12px] text-[var(--text-muted)]">Mostrando {displayed.length} compra{displayed.length !== 1 ? 's' : ''}{isSearching ? ` · todos los tiempos` : ''}</p>
 
             {/* Desktop table */}
             <div className="hidden lg:block overflow-x-auto">
@@ -395,7 +433,7 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
-                  {compras.map(c => (
+                  {displayed.map(c => (
                     <tr key={c.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-[var(--text-muted)]">{fmtFecha(c.fecha)}</td>
                       <td className="px-4 py-3 font-medium text-[var(--text)]">{(c.proveedor as {nombre:string}|null)?.nombre ?? c.proveedor_nombre ?? '—'}</td>
@@ -426,7 +464,7 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
 
             {/* Mobile cards */}
             <div className="lg:hidden divide-y divide-[var(--border)]">
-              {compras.map(c => (
+              {displayed.map(c => (
                 <div key={c.id} className="p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1 min-w-0">
