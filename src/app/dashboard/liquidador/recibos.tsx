@@ -300,6 +300,7 @@ function fmtBruto(n: number): string {
 const MESES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
 function HistorialChart({ data, visible }: { data: BrutoMes[]; visible: boolean }) {
+  const [selected, setSelected] = useState<number | null>(null)
   const now = new Date()
   const curAnio = now.getFullYear()
   const curMes  = now.getMonth() + 1
@@ -312,36 +313,32 @@ function HistorialChart({ data, visible }: { data: BrutoMes[]; visible: boolean 
   if (!cerrados.length) return null
 
   const maxBruto = Math.max(...cerrados.map(d => d.bruto))
+  const activeIdx = selected ?? cerrados.length - 1
+  const activeData = cerrados[activeIdx]
 
   return (
     <div className="bg-white rounded-xl border border-gray-200/60 px-4 pt-4 pb-3 mb-3">
-      <p className="text-[11px] font-semibold text-[var(--text-sub)] mb-3">Historial de liquidaciones</p>
+      <p className="text-[11px] font-semibold text-[var(--text-sub)] mb-2">Historial de liquidaciones</p>
 
-      {/* Labels de monto — rotados verticalmente */}
-      <div className="flex gap-1.5 mb-1">
-        {cerrados.map(d => (
-          <div key={`lbl-${d.anio}-${d.mes}`} className="flex-1 flex items-end justify-center" style={{ height: 60 }}>
-            <span
-              className="text-[8px] font-medium text-gray-500 leading-none"
-              style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', whiteSpace: 'nowrap' }}
-            >
-              {visible ? fmtBruto(d.bruto) : ''}
-            </span>
-          </div>
-        ))}
+      {/* Info del mes seleccionado */}
+      <div className="h-6 flex items-center justify-center mb-2">
+        <span className="text-[12px] font-semibold text-[var(--primary)]">
+          {MESES[activeData.mes - 1]} {activeData.anio} · {visible ? fmtBruto(activeData.bruto) : '$••••••'}
+        </span>
       </div>
 
       {/* Barras */}
       <div className="flex items-end gap-1.5" style={{ height: 80 }}>
         {cerrados.map((d, idx) => {
           const h = maxBruto > 0 ? Math.max(Math.round((d.bruto / maxBruto) * 80), 4) : 4
-          const isLatest = idx === cerrados.length - 1
+          const isActive = idx === activeIdx
           return (
-            <div
+            <button
               key={`bar-${d.anio}-${d.mes}`}
-              className={`flex-1 rounded-t-sm ${isLatest ? 'bg-[var(--primary)]' : 'bg-indigo-200'}`}
-              style={{ height: h }}
-              title={visible ? fmtPeso(d.bruto) : ''}
+              className={`flex-1 rounded-t-sm transition-colors cursor-pointer ${isActive ? 'bg-[var(--primary)]' : 'bg-indigo-200 active:bg-indigo-300'}`}
+              style={{ height: h, alignSelf: 'flex-end' }}
+              onClick={() => setSelected(idx)}
+              aria-label={`${MESES[d.mes - 1]} ${d.anio}`}
             />
           )
         })}
@@ -349,10 +346,10 @@ function HistorialChart({ data, visible }: { data: BrutoMes[]; visible: boolean 
 
       {/* Labels de mes */}
       <div className="flex gap-1.5 mt-1.5">
-        {cerrados.map(d => (
+        {cerrados.map((d, idx) => (
           <div key={`ml-${d.anio}-${d.mes}`} className="flex-1 text-center">
-            <span className="text-[9px] text-gray-400 block leading-none">{MESES_CORTOS[d.mes - 1]}</span>
-            <span className="text-[8px] text-gray-300 block leading-none mt-0.5">'{String(d.anio).slice(2)}</span>
+            <span className={`text-[9px] block leading-none ${idx === activeIdx ? 'text-[var(--primary)] font-semibold' : 'text-gray-400'}`}>{MESES_CORTOS[d.mes - 1]}</span>
+            <span className={`text-[8px] block leading-none mt-0.5 ${idx === activeIdx ? 'text-[var(--primary)]' : 'text-gray-300'}`}>'{String(d.anio).slice(2)}</span>
           </div>
         ))}
       </div>
