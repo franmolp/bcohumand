@@ -130,12 +130,12 @@ function parseCitasDetalle(text) {
     const durRaw = iDur >= 0 ? (r[iDur] ?? '').trim() : ''
     const duracion_min = (() => {
       if (!durRaw) return 0
-      // Formato "H:MM" → horas*60 + minutos (ej. "0:45" → 45, "1:30" → 90)
+      // Formato "H:MM" → ej. "0:45" → 45, "1:30" → 90
       const hm = durRaw.match(/^(\d+):(\d{2})$/)
       if (hm) return parseInt(hm[1]) * 60 + parseInt(hm[2])
-      // Entero sin ":" → Fresha exporta horas completas así (ej. "1" = 1h = 60min)
-      // Los sub-hora siempre vienen como "0:XX", así que un entero suelto = horas
-      if (/^\d+$/.test(durRaw)) return parseInt(durRaw) * 60
+      // Formato "Xh Ymin" → ej. "1h 15min" → 75, "2h 0min" → 120
+      const hmin = durRaw.match(/^(\d+)h\s+(\d+)min$/i)
+      if (hmin) return parseInt(hmin[1]) * 60 + parseInt(hmin[2])
       return parseInt(durRaw) || 0
     })()
     const ventaRaw    = iVnt >= 0 ? (r[iVnt] ?? '').replace(/[^0-9.,-]/g, '').replace(',', '.') : '0'
