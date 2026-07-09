@@ -5,7 +5,13 @@ on:
     # Lunes a sábado a las 07:00 ART (10:00 UTC — Argentina no usa horario de verano)
     - cron: '0 10 * * 1-6'
   workflow_dispatch:
-    # También se puede correr manualmente desde GitHub Actions
+    inputs:
+      from:
+        description: 'Fecha inicio (YYYY-MM-DD). Vacío = 1° del mes actual'
+        required: false
+      to:
+        description: 'Fecha fin (YYYY-MM-DD). Vacío = fin del mes siguiente'
+        required: false
 
 jobs:
   import:
@@ -34,6 +40,8 @@ jobs:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           FRESHA_SESSION: ${{ secrets.FRESHA_SESSION }}
+          FROM: ${{ inputs.from }}
+          TO: ${{ inputs.to }}
         run: node scripts/fresha-scraper.mjs
 
       - name: Subir screenshots de debug si el job falló
