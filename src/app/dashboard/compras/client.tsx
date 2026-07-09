@@ -20,6 +20,27 @@ function fmtFecha(iso: string) {
 function fmtMonto(n: number) {
   return '$' + n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
+
+function formatMontoInput(value: string): string {
+  // Strip dots (separadores de miles que el usuario no debe escribir)
+  const withoutDots = value.replace(/\./g, '')
+  // Solo dígitos y una coma
+  const clean = withoutDots.replace(/[^0-9,]/g, '')
+  const commaIdx = clean.indexOf(',')
+  let intPart = commaIdx >= 0 ? clean.slice(0, commaIdx) : clean
+  const decPart = commaIdx >= 0 ? clean.slice(commaIdx + 1, commaIdx + 3) : undefined
+  // Agregar puntos de miles
+  intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return decPart !== undefined ? `${intPart},${decPart}` : intPart
+}
+
+function numToMontoStr(n: number): string {
+  const rounded = Math.round(n * 100)
+  const cents = rounded % 100
+  const intPart = Math.floor(rounded / 100)
+  const intStr = String(intPart).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return cents > 0 ? `${intStr},${String(cents).padStart(2, '0')}` : intStr
+}
 function estadoBadge(e: string) {
   if (e === 'efectivo') return <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-green-50 text-green-700 border border-green-100">Efectivo</span>
   if (e === 'transferencia') return <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-100">Transferencia</span>
@@ -55,7 +76,7 @@ function compraToForm(c: Compra): FormState {
     fecha: c.fecha,
     proveedor_id: c.proveedor_id ? String(c.proveedor_id) : '',
     proveedor_nombre_nuevo: '',
-    monto: String(c.monto),
+    monto: numToMontoStr(c.monto),
     numero_factura: c.numero_factura ?? '',
     detalle: c.detalle ?? '',
     estado_pago: c.estado_pago,
@@ -194,10 +215,10 @@ function CompraModal({ open, editTarget, proveedores, onClose, onSaved, onProvee
         <Input
           label="Monto *"
           type="text"
-          inputMode="decimal"
+          inputMode="numeric"
           value={form.monto}
-          onChange={e => set('monto', e.target.value.replace(/[^0-9,.]/g, ''))}
-          placeholder="0,00"
+          onChange={e => set('monto', formatMontoInput(e.target.value))}
+          placeholder="0"
           required
         />
 
