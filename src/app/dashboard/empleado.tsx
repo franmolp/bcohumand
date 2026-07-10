@@ -326,7 +326,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   }
   for (const b of proxCumple) {
     unifiedItems.push({ key: `bd-${b.nombre}`, kind: 'cumple', fecha: b.fecha, diasHasta: b.dias, titulo: b.nombre,
-      subtitulo: b.dias === 0 ? '¡Hoy cumple años! 🎂' : b.dias === 1 ? 'Mañana cumple 🎂' : `en ${b.dias} días · ${fmtFecha(b.fecha)}`,
+      subtitulo: b.dias === 0 ? 'Hoy' : b.dias === 1 ? 'Mañana' : fmtFecha(b.fecha),
       fotoPerfil: b.foto_perfil, isThisWeek: b.isThisWeek })
   }
   for (const ef of efemerides) {
@@ -565,45 +565,23 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
                 <p className="text-center text-[13px] text-gray-400 py-6">Sin eventos próximos</p>
               )}
               {unifiedItems.slice(0, 8).map(item => {
-                if (item.kind === 'evento') {
-                  return (
-                    <div key={item.key} className="flex items-start gap-2.5 p-2.5 rounded-xl bg-violet-50/60">
-                      <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0 text-sm">
-                        {item.emoji ?? <IconCalendar size={14} className="text-violet-500" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-semibold truncate">{item.titulo}</p>
-                        <p className="text-[11px] text-gray-400">{item.subtitulo}</p>
-                      </div>
-                    </div>
-                  )
-                }
-                if (item.kind === 'cumple') {
-                  return (
-                    <div key={item.key} className={`flex items-center gap-2.5 p-2.5 rounded-xl ${item.isThisWeek ? 'bg-pink-50' : 'bg-gray-50/60'}`}>
-                      {item.fotoPerfil
-                        ? <img src={item.fotoPerfil} alt={item.titulo} className={`w-8 h-8 rounded-full object-cover flex-shrink-0 ${item.isThisWeek ? 'ring-2 ring-pink-300' : ''}`} />
-                        : <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-[image:var(--gradient)] shadow-sm ${item.isThisWeek ? 'ring-2 ring-pink-300' : ''}`}>
-                            <span className="text-[10px] font-bold text-white">
-                              {item.titulo.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
-                            </span>
-                          </div>
-                      }
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-[13px] truncate ${item.isThisWeek ? 'font-bold text-gray-900' : 'font-semibold text-gray-700'}`}>{item.titulo}</p>
-                        <p className={`text-[11px] ${item.isThisWeek ? 'text-pink-500 font-medium' : 'text-gray-400'}`}>{item.subtitulo}</p>
-                      </div>
-                    </div>
-                  )
-                }
+                const isEvento = item.kind === 'evento'
+                const isCumple = item.kind === 'cumple'
+                const bgRow   = isEvento ? 'bg-violet-100' : isCumple ? 'bg-pink-100' : 'bg-blue-100'
+                const bgIcon  = isEvento ? 'bg-violet-200' : isCumple ? 'bg-pink-200' : 'bg-blue-200'
+                const textSub = isEvento ? 'text-violet-600' : isCumple ? 'text-pink-600' : 'text-blue-600'
+                const iconNode = isEvento
+                  ? (item.emoji ?? <IconCalendar size={14} className="text-violet-600" />)
+                  : isCumple ? '🎂' : '📅'
+                const titulo = isCumple ? `Cumpleaños de ${item.titulo}` : item.titulo
                 return (
-                  <div key={item.key} className="flex items-start gap-2.5 p-2.5 rounded-xl bg-blue-50/60">
-                    <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0 text-[16px]">
-                      📅
+                  <div key={item.key} className={`flex items-center gap-2.5 p-2.5 rounded-xl ${bgRow}`}>
+                    <div className={`w-8 h-8 rounded-lg ${bgIcon} flex items-center justify-center flex-shrink-0 text-[16px]`}>
+                      {iconNode}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-semibold truncate">{item.titulo}</p>
-                      <p className="text-[11px] text-gray-400">{item.subtitulo}</p>
+                      <p className="text-[13px] font-semibold truncate">{titulo}</p>
+                      <p className={`text-[11px] font-medium ${textSub}`}>{item.subtitulo}</p>
                     </div>
                   </div>
                 )
