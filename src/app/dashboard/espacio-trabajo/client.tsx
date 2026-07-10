@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import type { SessionUser } from '@/types'
 import { Spinner } from '@/components/ui'
 import { IconLayoutGrid, IconChevronLeft, IconChevronRight, IconClock } from '@/components/ui/Icons'
@@ -176,6 +176,15 @@ function isPeluqueria(equipo: string): boolean {
   return equipo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes('peluq')
 }
 
+function isMasajistaODepiladora(equipo: string): boolean {
+  const n = equipo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  return n.includes('masaj') || n.includes('depilac')
+}
+
+function isManicura(equipo: string): boolean {
+  return !isRecepcion(equipo) && !isPeluqueria(equipo) && !isMasajistaODepiladora(equipo)
+}
+
 // ── Lane label per section ─────────────────────────────────────────────────────
 function laneLabel(equipo: string, lane: number): string {
   const n = equipo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -325,110 +334,78 @@ function AvailableSection({ equipo, capacity, shifts, selectedDate }: {
   )
 }
 
-// ── Day strip (scrollable) ────────────────────────────────────────────────────
-function DayStrip({ stripDates, loadedDates, selectedDate, todayStr, onSelect, turnos, capacidades }: {
-  stripDates: Array<{ date: string; year: number; week: number }>
-  loadedDates: string[]
+// ── Week day chips (6 fixed chips for loaded week) ───────────────────────────
+function WeekDayChips({ dates, selectedDate, todayStr, onSelect, turnos, capacidades, soloManicuras = false }: {
+  dates: string[]
   selectedDate: string
   todayStr: string
-  onSelect: (date: string, year: number, week: number) => void
+  onSelect: (date: string) => void
   turnos: Turno[]
   capacidades: Record<string, number>
+  soloManicuras?: boolean
 }) {
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  // Scroll to selected date (smooth on change, instant on first mount)
-  const isFirstMount = useRef(true)
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-    const el = container.querySelector(`[data-date="${selectedDate}"]`) as HTMLElement | null
-    if (!el) return
-    el.scrollIntoView({
-      behavior: isFirstMount.current ? 'instant' : 'smooth',
-      block: 'nearest',
-      inline: 'center',
-    })
-    isFirstMount.current = false
-  }, [selectedDate])
-
   return (
     <div className="space-y-2">
-      <div ref={containerRef} className="overflow-x-auto -mx-4 px-4 pb-1">
-        <div className="flex gap-1.5" style={{ width: 'max-content' }}>
-          {stripDates.map(({ date, year, week }) => {
-            const { dia, num, mes } = dayLabel(date)
-            const isSelected = date === selectedDate
-            const isToday = date === todayStr
-            const isLoaded = loadedDates.includes(date)
+      <div className="flex gap-1.5">
+        {dates.map(date => {
+          const { dia, num } = dayLabel(date)
+          const isSelected = date === selectedDate
+          const isToday = date === todayStr
 
-            // Dot logic (only for loaded week, only manicura+box)
-            let dotColor = '', dotPing = false
-            if (isLoaded) {
-              const dayTurnos = turnos.filter(t => t.fecha === date)
-              const equipos = [...new Set(dayTurnos.map(t => t.equipo).filter(Boolean))]
-                .filter(e => !isRecepcion(e) && !isPeluqueria(e))
-              let isExcedido = false, isLibre = false
-              for (const eq of equipos) {
-                const cap = capacidades[eq] ?? 8
-                const eqShifts = dayTurnos.filter(t => t.equipo === eq)
-                if (!eqShifts.length) continue
-                if (peakConcurrent(eqShifts) > cap) isExcedido = true
-                if (findGaps(eqShifts, cap).length > 0) isLibre = true
-              }
-              const hasTurnos = equipos.some(eq => dayTurnos.some(t => t.equipo === eq))
-              dotColor = !hasTurnos ? '' : isExcedido ? 'bg-red-500' : isLibre ? 'bg-emerald-400' : 'bg-red-400'
-              dotPing = isExcedido
+          const dayTurnos = turnos.filter(t => t.fecha === date)
+          const equipos = [...new Set(dayTurnos.map(t => t.equipo).filter(Boolean))]
+            .filter(e => !isRecepcion(e) && !isPeluqueria(e))
+            .filter(e => !soloManicuras || isManicura(e))
+          let dotColor = '', dotPing = false
+          if (equipos.some(eq => dayTurnos.some(t => t.equipo === eq))) {
+            let isExcedido = false, isLibre = false
+            for (const eq of equipos) {
+              const cap = capacidades[eq] ?? 8
+              const eqShifts = dayTurnos.filter(t => t.equipo === eq)
+              if (!eqShifts.length) continue
+              if (peakConcurrent(eqShifts) > cap) isExcedido = true
+              if (findGaps(eqShifts, cap).length > 0) isLibre = true
             }
+            dotColor = isExcedido ? 'bg-red-500' : isLibre ? 'bg-emerald-400' : 'bg-red-400'
+            dotPing = isExcedido
+          }
 
-            return (
-              <button
-                key={date}
-                data-date={date}
-                onClick={() => onSelect(date, year, week)}
-                className={`flex flex-col items-center py-2 rounded-xl border transition-all cursor-pointer flex-shrink-0 ${
-                  isSelected
-                    ? 'border-[var(--primary)] bg-[var(--primary-light)]/60'
-                    : 'border-[var(--border)] bg-white hover:border-[var(--primary)]/40 hover:bg-gray-50'
-                }`}
-                style={{ width: 50, gap: 3 }}>
-                <span className={`text-[10px] font-medium uppercase tracking-wide ${
-                  isSelected ? 'text-[var(--primary)]' : 'text-[var(--text-muted)]'
+          return (
+            <button
+              key={date}
+              onClick={() => onSelect(date)}
+              className={`flex-1 flex flex-col items-center py-2 rounded-xl border transition-all cursor-pointer ${
+                isSelected
+                  ? 'border-[var(--primary)] bg-[var(--primary-light)]/60'
+                  : 'border-[var(--border)] bg-white hover:border-[var(--primary)]/40 hover:bg-gray-50'
+              }`}
+              style={{ gap: 2 }}>
+              <span className={`text-[10px] font-medium uppercase tracking-wide ${
+                isSelected ? 'text-[var(--primary)]' : 'text-[var(--text-muted)]'
+              }`}>
+                {dia}
+              </span>
+              <div className={`w-6 h-6 flex items-center justify-center rounded-full ${
+                isToday && isSelected ? 'bg-[var(--primary)]' :
+                isToday ? 'border-2 border-[var(--primary)]' : ''
+              }`}>
+                <span className={`text-[13px] font-bold leading-none ${
+                  isToday && isSelected ? 'text-white' :
+                  isSelected ? 'text-[var(--primary)]' :
+                  isToday ? 'text-[var(--primary)]' : ''
                 }`}>
-                  {dia}
+                  {num}
                 </span>
-
-                {/* Date number — circle for today */}
-                <div className={`w-7 h-7 flex items-center justify-center rounded-full ${
-                  isToday && isSelected ? 'bg-[var(--primary)]' :
-                  isToday ? 'border-2 border-[var(--primary)]' : ''
-                }`}>
-                  <span className={`text-[14px] font-bold leading-none ${
-                    isToday && isSelected ? 'text-white' :
-                    isSelected ? 'text-[var(--primary)]' :
-                    isToday ? 'text-[var(--primary)]' : ''
-                  }`}>
-                    {num}
-                  </span>
-                </div>
-
-                <span className={`text-[9px] ${
-                  isSelected ? 'text-[var(--primary)]/70' : 'text-[var(--text-muted)]'
-                }`}>
-                  {mes}
-                </span>
-
-                {/* Dot */}
-                <div className="h-2 flex items-center justify-center relative">
-                  {dotColor && dotPing && (
-                    <span className={`absolute w-2.5 h-2.5 rounded-full ${dotColor} opacity-75 animate-ping`} />
-                  )}
-                  {dotColor && <span className={`w-1.5 h-1.5 rounded-full ${dotColor} relative`} />}
-                </div>
-              </button>
-            )
-          })}
-        </div>
+              </div>
+              <div className="h-2 flex items-center justify-center relative">
+                {dotColor && dotPing && (
+                  <span className={`absolute w-2 h-2 rounded-full ${dotColor} opacity-75 animate-ping`} />
+                )}
+                {dotColor && <span className={`w-1.5 h-1.5 rounded-full ${dotColor} relative`} />}
+              </div>
+            </button>
+          )
+        })}
       </div>
 
       {/* Legend */}
@@ -457,9 +434,11 @@ function sectionOrder(equipoNombre: string): number {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-export default function EspacioTrabajoClient({ user: _user }: { user: SessionUser }) {
+export default function EspacioTrabajoClient({ user }: { user: SessionUser }) {
   const todayStr = new Date().toLocaleDateString('sv')
   const initIso = isoWeekOf(todayStr)
+
+  const isCompras = user.rol === 'Compras'
 
   const [weekYear, setWeekYear] = useState(initIso.year)
   const [weekNum, setWeekNum] = useState(initIso.week)
@@ -472,19 +451,6 @@ export default function EspacioTrabajoClient({ user: _user }: { user: SessionUse
   // Loaded week's dates
   const dates = useMemo(() => getWeekDates(weekYear, weekNum), [weekYear, weekNum])
 
-  // Scrollable strip: today-2w … today+12w (fixed window)
-  const stripDates = useMemo(() => {
-    const result: Array<{ date: string; year: number; week: number }> = []
-    const { year: ty, week: tw } = isoWeekOf(todayStr)
-    for (let offset = -2; offset <= 12; offset++) {
-      let w = tw + offset, y = ty
-      while (w < 1) { y--; w += isoWeeksInYear(y) }
-      while (w > isoWeeksInYear(y)) { w -= isoWeeksInYear(y); y++ }
-      getWeekDates(y, w).forEach(d => result.push({ date: d, year: y, week: w }))
-    }
-    return result
-  }, [todayStr])
-
   useEffect(() => {
     setLoading(true); setError(null)
     fetch(`/api/espacio-trabajo?fechaInicio=${dates[0]}&fechaFin=${dates[5]}`)
@@ -496,31 +462,26 @@ export default function EspacioTrabajoClient({ user: _user }: { user: SessionUse
   function prevWeek() {
     let w = weekNum - 1, y = weekYear
     if (w < 1) { y--; w = isoWeeksInYear(y) }
+    const newDates = getWeekDates(y, w)
     setWeekYear(y); setWeekNum(w)
-    setSelectedDate(getWeekDates(y, w)[0])
+    setSelectedDate(newDates.includes(todayStr) ? todayStr : newDates[0])
   }
   function nextWeek() {
     let w = weekNum + 1, y = weekYear
     if (w > isoWeeksInYear(y)) { y++; w = 1 }
+    const newDates = getWeekDates(y, w)
     setWeekYear(y); setWeekNum(w)
-    setSelectedDate(getWeekDates(y, w)[0])
-  }
-
-  function handleStripSelect(date: string, year: number, week: number) {
-    setSelectedDate(date)
-    if (year !== weekYear || week !== weekNum) {
-      setWeekYear(year)
-      setWeekNum(week)
-    }
+    setSelectedDate(newDates.includes(todayStr) ? todayStr : newDates[0])
   }
 
   const groups = useMemo(() => {
     if (!apiData) return []
     const equipoNames = [...new Set(apiData.turnos.map(t => t.equipo).filter(Boolean))]
       .filter(e => !isRecepcion(e))
+      .filter(e => !isCompras || isManicura(e))
     return equipoNames
       .sort((a, b) => sectionOrder(a) - sectionOrder(b) || a.localeCompare(b, 'es'))
-  }, [apiData])
+  }, [apiData, isCompras])
 
   const hasAvailable = useMemo(() => {
     if (!apiData) return false
@@ -570,15 +531,15 @@ export default function EspacioTrabajoClient({ user: _user }: { user: SessionUse
         </button>
       </div>
 
-      {/* Scrollable day strip */}
-      <DayStrip
-        stripDates={stripDates}
-        loadedDates={dates}
+      {/* 6-day chip selector for the loaded week */}
+      <WeekDayChips
+        dates={dates}
         selectedDate={selectedDate}
         todayStr={todayStr}
-        onSelect={handleStripSelect}
+        onSelect={setSelectedDate}
         turnos={apiData?.turnos ?? []}
         capacidades={apiData?.capacidades ?? {}}
+        soloManicuras={isCompras}
       />
 
       {/* Tabs */}

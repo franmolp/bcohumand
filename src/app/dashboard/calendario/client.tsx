@@ -496,22 +496,22 @@ function CreateEventModal({
         {isLocalCerrado && (
           <>
             <div className="grid grid-cols-2 gap-3">
-              <div>
+              <div className="min-w-0">
                 <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Fecha inicio *</label>
                 <input
                   type="date"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]"
-                  style={{ fontSize: 16 }}
+                  className="w-full min-w-0 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[var(--primary)]"
+                  style={{ fontSize: 16, WebkitAppearance: 'none' }}
                   value={form.fecha_inicio}
                   onChange={e => set('fecha_inicio', e.target.value)}
                 />
               </div>
-              <div>
+              <div className="min-w-0">
                 <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Fecha fin *</label>
                 <input
                   type="date"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]"
-                  style={{ fontSize: 16 }}
+                  className="w-full min-w-0 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[var(--primary)]"
+                  style={{ fontSize: 16, WebkitAppearance: 'none' }}
                   min={form.fecha_inicio}
                   value={form.fecha_fin}
                   onChange={e => set('fecha_fin', e.target.value)}
@@ -586,8 +586,8 @@ function CreateEventModal({
               <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Fecha *</label>
               <input
                 type="date"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16 }}
+                className="w-full min-w-0 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16, WebkitAppearance: 'none' }}
                 value={form.fecha}
                 onChange={e => set('fecha', e.target.value)}
               />

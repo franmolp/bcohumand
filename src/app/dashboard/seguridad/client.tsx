@@ -118,12 +118,15 @@ export default function SeguridadClient() {
     return () => clearInterval(t)
   }, [load])
 
-  // Stats
-  const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
-  const logsHoy = logs.filter(l => new Date(l.created_at) >= hoy)
-  const exitososHoy = logsHoy.filter(l => l.accion === 'login_exitoso').length
-  const fallidosHoy = logsHoy.filter(l => l.accion === 'contrasena_incorrecta').length
-  const bloqueadosHoy = logsHoy.filter(l => l.accion === 'cuenta_bloqueada').length
+  // Stats — reactivas al período seleccionado (logs ya viene filtrado por la API)
+  const periodoLabel = periodo === 'hoy' ? 'hoy' : periodo === '7d' ? '7 días' : periodo === '30d' ? '30 días' : 'total'
+  const ingresosCount = new Set(
+    logs
+      .filter(l => l.accion === 'Ingresó a la app')
+      .map(l => l.usuario?.usuario ?? l.usuario_texto ?? l.ip ?? 'anon')
+  ).size
+  const fallidosCount = logs.filter(l => l.accion === 'contrasena_incorrecta' || l.accion === 'usuario_no_encontrado').length
+  const bloqueadosCount = logs.filter(l => l.accion === 'cuenta_bloqueada').length
 
   return (
     <div className="py-4 fade-in">
@@ -151,16 +154,16 @@ export default function SeguridadClient() {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 mb-5">
         <div className="bg-white rounded-2xl border border-[var(--border)] shadow-sm p-3 text-center">
-          <p className="text-[22px] font-bold text-green-600">{exitososHoy}</p>
-          <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Exitosos hoy</p>
+          <p className="text-[22px] font-bold text-green-600">{ingresosCount}</p>
+          <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Ingresos {periodoLabel}</p>
         </div>
         <div className="bg-white rounded-2xl border border-[var(--border)] shadow-sm p-3 text-center">
-          <p className="text-[22px] font-bold text-amber-500">{fallidosHoy}</p>
-          <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Fallidos hoy</p>
+          <p className="text-[22px] font-bold text-amber-500">{fallidosCount}</p>
+          <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Fallidos {periodoLabel}</p>
         </div>
         <div className="bg-white rounded-2xl border border-[var(--border)] shadow-sm p-3 text-center">
-          <p className="text-[22px] font-bold text-red-500">{bloqueadosHoy}</p>
-          <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Bloqueados hoy</p>
+          <p className="text-[22px] font-bold text-red-500">{bloqueadosCount}</p>
+          <p className="text-[11px] text-[var(--text-muted)] mt-0.5">Bloqueados {periodoLabel}</p>
         </div>
       </div>
 

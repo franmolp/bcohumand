@@ -7,7 +7,25 @@ import { IconSettings, IconEdit, IconTrash, IconPlus, IconUsers } from '@/compon
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Equipo { id: number; nombre: string }
-interface Rol { id: number; nombre: string; descripcion: string | null }
+interface Rol { id: number; nombre: string; descripcion: string | null; permisos: string[] | null }
+
+// Todos los módulos configurables por rol (Informes, Equipos y Seguridad son admin-only y no aparecen acá)
+const MODULOS = [
+  { href: '/dashboard',                 label: 'Inicio',             sub: 'Página de inicio del dashboard' },
+  { href: '/dashboard/solicitudes',     label: 'Solicitudes',        sub: 'Solicitudes de ausencias, licencias y permisos' },
+  { href: '/dashboard/adelantos',       label: 'Adelantos',          sub: 'Solicitud y gestión de adelantos de sueldo' },
+  { href: '/dashboard/mi-asistencia',   label: 'Mi Asistencia',      sub: 'Fichadas propias del empleado · no aplica a Admin/HR/Encargada' },
+  { href: '/dashboard/asistencia',      label: 'Asistencia',         sub: 'Gestión de fichadas de todos · ≠ Mi Asistencia' },
+  { href: '/dashboard/empleados',       label: 'Empleados',          sub: 'CRUD de empleados, roles y equipos' },
+  { href: '/dashboard/liquidador',      label: 'Liquidaciones',      sub: 'Firmar y subir recibos de todos · ≠ Mi Liquidación' },
+  { href: '/dashboard/espacio-trabajo', label: 'Espacio de trabajo', sub: 'Gestión de recursos y turnos del local' },
+  { href: '/dashboard/compras',         label: 'Compras',            sub: 'Registro de gastos y proveedores' },
+  { href: '/dashboard/monotributo',     label: 'Monotributo',        sub: 'Archivos de monotributo de todos' },
+  { href: '/dashboard/calendario',      label: 'Calendario',         sub: 'Calendario de eventos y turnos' },
+  { href: '/dashboard/muro',            label: 'Muro Social',        sub: 'Publicaciones y comunicados del equipo' },
+  { href: '/dashboard/reparaciones',    label: 'Reparaciones',       sub: 'Registro de reparaciones y mantenimiento' },
+  { href: '/dashboard/juegos',          label: 'Juegos',             sub: 'Juegos y actividades del equipo' },
+]
 
 // ─── Equipos ─────────────────────────────────────────────────────────────────
 
@@ -23,8 +41,13 @@ function EquiposTab() {
 
   async function load() {
     setLoading(true)
-    const r = await fetch('/api/equipos')
-    if (r.ok) setEquipos(await r.json())
+    try {
+      const r = await fetch('/api/equipos')
+      if (r.ok) {
+        const data = await r.json()
+        setEquipos(Array.isArray(data) ? data : [])
+      }
+    } catch { /* ignorar errores de red */ }
     setLoading(false)
   }
   useEffect(() => { load() }, [])
@@ -87,7 +110,7 @@ function EquiposTab() {
         title="Eliminar equipo"
         message={`¿Eliminás el equipo "${deleteTarget?.nombre}"? Los empleados asignados quedarán sin equipo.`}
         onConfirm={handleDelete}
-        onCancel={() => setDeleteTarget(null)}
+        onClose={() => setDeleteTarget(null)}
         loading={deleting}
         danger
       />
@@ -102,38 +125,64 @@ function RolesTab() {
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
   const [editTarget, setEditTarget] = useState<Rol | null>(null)
-  const [form, setForm] = useState({ nombre: '', descripcion: '' })
+  const [form, setForm] = useState({ nombre: '', descripcion: '', permisos: [] as string[] })
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Rol | null>(null)
   const [deleting, setDeleting] = useState(false)
 
   async function load() {
     setLoading(true)
-    const r = await fetch('/api/roles')
-    if (r.ok) setRoles(await r.json())
+    try {
+      const r = await fetch('/api/roles')
+      if (r.ok) {
+        const data = await r.json()
+        setRoles(Array.isArray(data) ? data : [])
+      }
+    } catch { /* ignorar errores de red */ }
     setLoading(false)
   }
   useEffect(() => { load() }, [])
 
   function openNew() {
     setEditTarget(null)
-    setForm({ nombre: '', descripcion: '' })
+    setForm({ nombre: '', descripcion: '', permisos: [] })
+    setSaveError(null)
     setModal(true)
   }
   function openEdit(r: Rol) {
     setEditTarget(r)
-    setForm({ nombre: r.nombre, descripcion: r.descripcion ?? '' })
+    setForm({ nombre: r.nombre, descripcion: r.descripcion ?? '', permisos: r.permisos ?? [] })
+    setSaveError(null)
     setModal(true)
+  }
+
+  function toggleModulo(href: string) {
+    setForm(f => ({
+      ...f,
+      permisos: f.permisos.includes(href)
+        ? f.permisos.filter(p => p !== href)
+        : [...f.permisos, href],
+    }))
   }
 
   async function handleSave(ev: React.FormEvent) {
     ev.preventDefault()
     setSaving(true)
-    const body = { nombre: form.nombre, descripcion: form.descripcion || null }
-    const url = editTarget ? `/api/roles/${editTarget.id}` : '/api/roles'
-    const method = editTarget ? 'PUT' : 'POST'
-    const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    if (r.ok) { await load(); setModal(false) }
+    setSaveError(null)
+    try {
+      const body = { nombre: form.nombre, descripcion: form.descripcion || null, permisos: form.permisos.length > 0 ? form.permisos : null }
+      const url = editTarget ? `/api/roles/${editTarget.id}` : '/api/roles'
+      const method = editTarget ? 'PUT' : 'POST'
+      const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      if (r.ok) { await load(); setModal(false) }
+      else {
+        const err = await r.json().catch(() => ({}))
+        setSaveError(err.error || `Error ${r.status}`)
+      }
+    } catch {
+      setSaveError('Error de red al guardar')
+    }
     setSaving(false)
   }
 
@@ -157,9 +206,16 @@ function RolesTab() {
         {loading ? <div className="py-12"><Spinner /></div> : roles.map(r => (
           <div key={r.id} className="bg-white rounded-2xl border border-[var(--border)] shadow-sm p-4">
             <div className="flex items-start justify-between">
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-[14px] font-semibold text-[var(--text)]">{r.nombre}</p>
                 {r.descripcion && <p className="text-[12px] text-[var(--text-muted)] mt-0.5">{r.descripcion}</p>}
+                <p className="text-[11px] text-[var(--text-muted)] mt-1">
+                  {!Array.isArray(r.permisos)
+                    ? <span className="text-amber-500">Sin configurar (usa defaults)</span>
+                    : r.permisos.length === 0
+                      ? <span className="text-gray-400">Sin módulos asignados</span>
+                      : r.permisos.map(h => MODULOS.find(m => m.href === h)?.label).filter(Boolean).join(' · ')}
+                </p>
               </div>
               <div className="flex gap-2 ml-3">
                 <button onClick={() => openEdit(r)} className="p-1.5 rounded-lg text-[var(--primary)] hover:bg-indigo-50 transition-colors"><IconEdit size={15}/></button>
@@ -174,6 +230,32 @@ function RolesTab() {
         <form onSubmit={handleSave} className="space-y-4">
           <Input label="Nombre *" value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} placeholder="Ej: Encargada" required autoFocus />
           <Input label="Descripción" value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} placeholder="Descripción del rol" />
+
+          <div>
+            <p className="text-[12px] font-semibold text-[var(--text-sub)] mb-2">Módulos visibles</p>
+            <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)]">
+              {MODULOS.map(m => {
+                const on = form.permisos.includes(m.href)
+                return (
+                  <button key={m.href} type="button" onClick={() => toggleModulo(m.href)}
+                    className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 transition-colors cursor-pointer gap-3">
+                    <div className="text-left">
+                      <p className="text-[13px] font-medium text-[var(--text)]">{m.label}</p>
+                      <p className="text-[11px] text-[var(--text-muted)]">{m.sub}</p>
+                    </div>
+                    <div className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${on ? 'bg-[var(--primary)]' : 'bg-gray-200'}`}>
+                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${on ? 'left-4' : 'left-0.5'}`} />
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-[11px] text-[var(--text-muted)] mt-1.5">
+              Informes, Equipos y Roles, y Seguridad son exclusivos de Admin y no se configuran acá.
+            </p>
+          </div>
+
+          {saveError && <p className="text-[12px] text-red-500 bg-red-50 rounded-lg px-3 py-2">{saveError}</p>}
           <div className="flex gap-3 pt-1">
             <Button type="submit" loading={saving} className="flex-1">Guardar</Button>
             <Button type="button" variant="secondary" onClick={() => setModal(false)}>Cancelar</Button>
@@ -186,7 +268,7 @@ function RolesTab() {
         title="Eliminar rol"
         message={`¿Eliminás el rol "${deleteTarget?.nombre}"? Los empleados con este rol quedarán sin rol asignado.`}
         onConfirm={handleDelete}
-        onCancel={() => setDeleteTarget(null)}
+        onClose={() => setDeleteTarget(null)}
         loading={deleting}
         danger
       />

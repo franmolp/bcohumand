@@ -5,7 +5,7 @@ import Link from 'next/link'
 import type { SessionUser } from '@/types'
 import {
   IconBell, IconCheck, IconX, IconCalendar, IconCalendarCheck,
-  IconShoppingBag, IconReceipt, IconWall, IconAlertCircle, IconPlus, IconTrash, IconFilter, IconHeartFilled, IconFingerprint, IconDollar, IconWrench,
+  IconShoppingBag, IconReceipt, IconWall, IconAlertCircle, IconPlus, IconTrash, IconFilter, IconHeartFilled, IconFingerprint, IconDollar, IconWrench, IconFileText,
 } from '@/components/ui/Icons'
 import { Spinner, Modal, Button, Input, Select, Toast } from '@/components/ui'
 
@@ -44,6 +44,7 @@ function tipoConfig(tipo: string) {
     feriado:               { icon: <IconCalendar size={14} />,         bg: 'bg-violet-100',  color: 'text-violet-600',  href: '/dashboard/calendario' },
     compra:                { icon: <IconShoppingBag size={14} />,      bg: 'bg-pink-100',    color: 'text-pink-600',    href: '/dashboard/compras' },
     monotributo:           { icon: <IconReceipt size={14} />,          bg: 'bg-indigo-100',  color: 'text-indigo-600',  href: '/dashboard/monotributo' },
+    recibo:                { icon: <IconFileText size={14} />,         bg: 'bg-blue-100',    color: 'text-blue-600',    href: '/dashboard/liquidador' },
     certificado:           { icon: <IconAlertCircle size={14} />,      bg: 'bg-red-100',     color: 'text-red-500',     href: '/dashboard/solicitudes' },
     mural_post:            { icon: <IconWall size={14} />,             bg: 'bg-teal-100',    color: 'text-teal-600',    href: '/dashboard/muro' },
     mural_respuesta:       { icon: <IconWall size={14} />,             bg: 'bg-teal-100',    color: 'text-teal-600',    href: '/dashboard/muro' },

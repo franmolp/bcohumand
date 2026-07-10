@@ -16,14 +16,14 @@ const allNav = [
   { href: '/dashboard/liquidador',   label: 'Liquidaciones',  labelEmp: 'Mi Liquidación', icon: IconDollar },
   { href: '/dashboard/adelantos',    label: 'Adelantos',      labelEmp: 'Mis Adelantos', icon: IconDollar },
   { href: '/dashboard/mi-asistencia', label: 'Mi Asistencia', icon: IconClipboard, notAdmin: true, mobile: true },
-  { href: '/dashboard/espacio-trabajo', label: 'Espacio de trabajo', icon: IconLayoutGrid, roles: ['Admin', 'admin', 'HR', 'Encargada'] },
+  { href: '/dashboard/espacio-trabajo', label: 'Espacio de trabajo', icon: IconLayoutGrid, roles: ['Admin', 'admin', 'HR', 'Encargada', 'Compras'] },
   { href: '/dashboard/compras',      label: 'Compras',        icon: IconShoppingBag, roles: ['Admin', 'admin', 'Compras', 'Encargada'] },
   { href: '/dashboard/monotributo',  label: 'Monotributo',    icon: IconReceipt },
   { href: '/dashboard/calendario',   label: 'Calendario',     icon: IconCalendar,    mobile: true },
   { href: '/dashboard/muro',          label: 'Muro Social',     icon: IconWall },
   { href: '/dashboard/reparaciones',  label: 'Reparaciones',    icon: IconWrench },
   { href: '/dashboard/juegos',        label: 'Juegos',          icon: IconStar,        mobile: true },
-  { href: '/dashboard/informes',       label: 'Informes',        icon: IconBarChart,   admin: true },
+  { href: '/dashboard/informes',       label: 'Informes',        icon: IconBarChart,   roles: ['Admin', 'admin'] },
   { href: '/dashboard/equipos',       label: 'Equipos y Roles', icon: IconSettings,   admin: true },
   { href: '/dashboard/seguridad',    label: 'Seguridad',      icon: IconShield,      admin: true },
 ]
@@ -53,7 +53,12 @@ export default function Navigation({ user }: { user: SessionUser }) {
     if (i.roles && !i.roles.includes(user.rol)) return false
     return true
   })
-  const mobileItems = items.filter(i => i.mobile).slice(0, 4)
+  const mobileHrefs = isAdmin
+    ? ['/dashboard', '/dashboard/asistencia', '/dashboard/solicitudes', '/dashboard/calendario', '/dashboard/informes']
+    : isHR
+    ? ['/dashboard', '/dashboard/asistencia', '/dashboard/solicitudes', '/dashboard/empleados', '/dashboard/calendario']
+    : ['/dashboard', '/dashboard/mi-asistencia', '/dashboard/solicitudes', '/dashboard/liquidador', '/dashboard/calendario']
+  const mobileItems = mobileHrefs.map(href => items.find(i => i.href === href)).filter(Boolean) as typeof items
   const initials = user.nombre.split(' ').map(n => n[0]).join('').slice(0, 2)
 
   async function logout() { await fetch('/api/auth/logout', { method: 'POST' }); router.push('/login') }
@@ -278,28 +283,29 @@ export default function Navigation({ user }: { user: SessionUser }) {
       {/* ─── MOBILE: Bottom nav ─── */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
-        <div className="flex">
+        <div className="flex px-3 h-[90px]">
           {mobileItems.map(item => {
             const active = path === item.href; const Icon = item.icon
-            const label = (!isAdminOrHR && (item as {labelEmp?: string}).labelEmp) || item.label
+            const fullLabel = (!isAdminOrHR && (item as {labelEmp?: string}).labelEmp) || item.label
+            const label = fullLabel.replace(/^Mi[s]? /, '')
             const badge = modulos[item.href] ?? 0
             return (
               <Link key={item.href} href={item.href}
-                className={`flex-1 flex flex-col items-center pt-3 pb-6 gap-1 min-h-[72px] ${active ? 'text-[var(--primary)]' : 'text-gray-400'}`}>
-                <span className="relative">
-                  <Icon size={22} />
+                className={`flex-1 flex flex-col items-center pt-4 gap-1 overflow-hidden ${active ? 'text-[var(--primary)]' : 'text-gray-400'}`}>
+                <span className="relative flex-shrink-0">
+                  <Icon size={20} />
                   {badge > 0 && !active && (
                     <span className="absolute -top-1 -right-1.5 min-w-[14px] h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5">
                       {badge > 99 ? '99+' : badge}
                     </span>
                   )}
                 </span>
-                <span className="text-[10px] font-medium">{label}</span>
+                <span className="text-[10px] font-medium w-full text-center truncate px-0.5">{label}</span>
               </Link>
             )
           })}
-          <button onClick={() => setDrawer(true)} className="flex-1 flex flex-col items-center pt-3 pb-6 gap-1 min-h-[72px] text-gray-400 cursor-pointer">
-            <IconMore size={22} /><span className="text-[10px] font-medium">Más</span>
+          <button onClick={() => setDrawer(true)} className="flex-1 flex flex-col items-center pt-4 gap-1 overflow-hidden text-gray-400 cursor-pointer">
+            <IconMore size={20} className="flex-shrink-0" /><span className="text-[10px] font-medium w-full text-center truncate px-0.5">Más</span>
           </button>
         </div>
       </nav>

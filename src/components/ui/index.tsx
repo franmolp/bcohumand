@@ -32,16 +32,18 @@ export function Button({ variant = 'primary', size = 'md', loading, icon, childr
 // ─── Input ───
 interface InpProps extends InputHTMLAttributes<HTMLInputElement> { label?: string; error?: string; icon?: ReactNode }
 
-export const Input = forwardRef<HTMLInputElement, InpProps>(({ label, error, icon, type, className = '', ...r }, ref) => {
+export const Input = forwardRef<HTMLInputElement, InpProps>(({ label, error, icon, type, className = '', style, ...r }, ref) => {
   const [show, setShow] = useState(false)
   const isPw = type === 'password'
+  const isDate = type === 'date'
   return (
-    <div>
+    <div className="min-w-0">
       {label && <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">{label}</label>}
       <div className="relative">
         {icon && <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)]">{icon}</div>}
         <input ref={ref} type={isPw && show ? 'text' : type}
-          className={`w-full h-11 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] placeholder:text-[var(--text-muted)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] ${icon ? 'pl-11' : 'pl-4'} ${isPw ? 'pr-11' : 'pr-4'} ${error ? 'border-red-300' : ''} ${className}`}
+          style={{ fontSize: 16, ...(isDate ? { WebkitAppearance: 'none' } : {}), ...style }}
+          className={`w-full min-w-0 h-11 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] placeholder:text-[var(--text-muted)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] ${icon ? 'pl-11' : 'pl-3'} ${isPw ? 'pr-11' : 'pr-3'} ${error ? 'border-red-300' : ''} ${className}`}
           {...r} />
         {isPw && <button type="button" onClick={() => setShow(!show)} tabIndex={-1}
           className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-sub)] cursor-pointer">
@@ -85,7 +87,7 @@ export function Modal({ open, onClose, title, children, footer }: {
   return createPortal(
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div onClick={e => e.stopPropagation()}
-        className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl max-h-[85vh] flex flex-col">
+        className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90dvh] flex flex-col" style={{ overflow: 'hidden', overflowX: 'hidden' }}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
           <h2 className="font-bold text-[17px]">{title}</h2>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 cursor-pointer"><IconX size={16} /></button>
@@ -123,8 +125,8 @@ export function Toast({ message, visible, type = 'success', onClose }: { message
 }
 
 // ─── Confirm ───
-export function Confirm({ open, onClose, onConfirm, title, message, confirmLabel = 'Confirmar', danger = false }: {
-  open: boolean; onClose: () => void; onConfirm: () => void; title: string; message: string; confirmLabel?: string; danger?: boolean
+export function Confirm({ open, onClose, onConfirm, title, message, confirmLabel = 'Confirmar', danger = false, loading = false }: {
+  open: boolean; onClose: () => void; onConfirm: () => void; title: string; message: string; confirmLabel?: string; danger?: boolean; loading?: boolean
 }) {
   if (!open) return null
   return createPortal(
@@ -135,8 +137,8 @@ export function Confirm({ open, onClose, onConfirm, title, message, confirmLabel
         <h3 className="text-base font-bold text-center mb-1.5">{title}</h3>
         <p className="text-sm text-[var(--text-sub)] text-center mb-6">{message}</p>
         <div className="flex gap-3">
-          <Button variant="secondary" className="flex-1" onClick={onClose}>Cancelar</Button>
-          <Button variant={danger ? 'danger' : 'primary'} className="flex-1" onClick={onConfirm}>{confirmLabel}</Button>
+          <Button variant="secondary" className="flex-1" onClick={onClose} disabled={loading}>Cancelar</Button>
+          <Button variant={danger ? 'danger' : 'primary'} className="flex-1" onClick={onConfirm} loading={loading}>{confirmLabel}</Button>
         </div>
       </div>
     </div>,

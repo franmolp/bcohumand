@@ -335,9 +335,9 @@ export default function AsistenciaClient({ user }: Props) {
     <div className="pt-[100px] lg:pt-0">
 
       {/* Header + Tabs — fixed on mobile (sticky doesn't work inside overflow-y-auto on iOS Safari), sticky on desktop */}
-      <div className="fixed top-12 left-0 right-0 z-20 lg:sticky lg:top-14 lg:left-auto lg:right-auto">
+      <div className="fixed top-12 left-0 right-0 z-20 bg-[var(--bg)] lg:sticky lg:top-14 lg:left-auto lg:right-auto">
         {/* Header row */}
-        <div className="px-4 lg:px-0 pt-4 pb-2 flex items-center justify-between bg-[var(--background)]">
+        <div className="px-4 lg:px-0 pt-4 pb-2 flex items-center justify-between bg-[var(--bg)]">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
               <IconClipboard size={18} className="text-white" />
@@ -1028,31 +1028,31 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Entrada</label>
               <input type="time" value={editEntrada} onChange={e => setEditEntrada(e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16 }} />
+                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Salida</label>
               <input type="time" value={editSalida} onChange={e => setEditSalida(e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16 }} />
+                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Entrada base</label>
               <input type="time" value={editBaseEntrada} onChange={e => setEditBaseEntrada(e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16 }} />
+                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Salida base</label>
               <input type="time" value={editBaseSalida} onChange={e => setEditBaseSalida(e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16 }} />
+                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
             </div>
           </div>
           {editHoras !== null && (
@@ -1370,31 +1370,31 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Entrada</label>
               <input type="time" value={editEntrada} onChange={e => setEditEntrada(e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16 }} />
+                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Salida</label>
               <input type="time" value={editSalida} onChange={e => setEditSalida(e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16 }} />
+                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Entrada base</label>
               <input type="time" value={editBaseEntrada} onChange={e => setEditBaseEntrada(e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16 }} />
+                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Salida base</label>
               <input type="time" value={editBaseSalida} onChange={e => setEditBaseSalida(e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16 }} />
+                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
             </div>
           </div>
           {editHoras !== null && (
@@ -1951,18 +1951,37 @@ function AjustesTab({ configDraft, setConfigDraft, saveConfig, savingCfg, empLis
     )
   }
 
-  function InputCsv({ label, field, hint }: { label: string; field: 'equiposPorTurnos' | 'equiposHorarioEstricto'; hint?: string }) {
+  const equiposUnicos = useMemo(() => {
+    const seen = new Set<string>()
+    const result: string[] = []
+    for (const e of empList) if (e.equipo?.nombre && !seen.has(e.equipo.nombre)) { seen.add(e.equipo.nombre); result.push(e.equipo.nombre) }
+    return result.sort((a, b) => a.localeCompare(b, 'es'))
+  }, [empList])
+
+  function CheckboxEquipos({ label, hint, field }: { label: string; hint: string; field: 'equiposPorTurnos' | 'equiposHorarioEstricto' }) {
+    const selected = configDraft[field] as string[]
     return (
       <div>
-        <label className="block text-xs font-medium text-[var(--text-sub)] mb-1">{label}</label>
-        {hint && <div className="text-[11px] text-[var(--text-muted)] mb-1">{hint}</div>}
-        <input
-          type="text"
-          value={(configDraft[field] as string[]).join(', ')}
-          onChange={e => setField(field, e.target.value.split(',').map(s => s.trim()).filter(Boolean) as AsistenciaConfig[typeof field])}
-          className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-          style={{ fontSize: 16 }}
-        />
+        <p className="text-xs font-medium text-[var(--text-sub)] mb-0.5">{label}</p>
+        <p className="text-[11px] text-[var(--text-muted)] mb-2">{hint}</p>
+        {equiposUnicos.length === 0
+          ? <p className="text-xs text-[var(--text-muted)]">No hay equipos cargados.</p>
+          : <div className="space-y-2">
+              {equiposUnicos.map(nombre => (
+                <label key={nombre} className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(nombre)}
+                    onChange={ev => setField(field, (ev.target.checked
+                      ? [...selected, nombre]
+                      : selected.filter(n => n !== nombre)) as AsistenciaConfig[typeof field])}
+                    className="w-4 h-4 rounded accent-[var(--primary)] cursor-pointer flex-shrink-0"
+                  />
+                  <span className="text-sm text-[var(--text)]">{nombre}</span>
+                </label>
+              ))}
+            </div>
+        }
       </div>
     )
   }
@@ -1989,16 +2008,17 @@ function AjustesTab({ configDraft, setConfigDraft, saveConfig, savingCfg, empLis
 
       <div className="bg-white rounded-2xl border border-[var(--border)] p-4 space-y-5">
         <h2 className="text-sm font-semibold text-[var(--text)]">Categorías de equipos</h2>
-        <InputCsv
-          label="Equipos por turnos (sin salida temprana)"
+        <CheckboxEquipos
+          label="Horario por turnos"
+          hint="Entrada: se toma como referencia el primer turno si empieza más de 30 min después del horario base. Salida: nunca se penaliza (el horario depende de los clientes)."
           field="equiposPorTurnos"
-          hint="Masajistas, depiladoras. Separar con coma."
         />
-        <InputCsv
-          label="Equipos horario estricto"
+        <CheckboxEquipos
+          label="Horario estricto"
+          hint="Entrada: evaluada contra el horario base fijo, sin ajuste por turnos. Salida: se permite retirarse dentro de la tolerancia de salida configurada."
           field="equiposHorarioEstricto"
-          hint="Peluqueras. Separar con coma."
         />
+        <p className="text-[11px] text-[var(--text-muted)]">Los equipos sin categoría usan la regla por defecto: entrada justificada si el turno empieza más de 30 min tarde, y salida evaluada con la tolerancia configurada.</p>
       </div>
 
       <div className="bg-white rounded-2xl border border-[var(--border)] p-4 space-y-3">

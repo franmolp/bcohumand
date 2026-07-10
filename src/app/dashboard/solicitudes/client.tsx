@@ -144,17 +144,18 @@ function DetallePeriodo({ sol }: { sol: Solicitud }) {
 // ─── FormFields ───────────────────────────────────────────────────────────────
 
 function FormFields({
-  form, setForm, isAdmin, isAdminOrHR, editMode, empleados = [], certFile, setCertFile, config,
+  form, setForm, isAdmin, isAdminOrHR, editMode, empleados = [], certFile, setCertFile, config, showRecepHint = false,
 }: {
   form: Form
   setForm: (f: Form) => void
   isAdmin: boolean
   isAdminOrHR: boolean
   editMode: boolean
-  empleados?: { id: string; nombre: string }[]
+  empleados?: { id: string; nombre: string; equipo?: string }[]
   certFile: File | null
   setCertFile: (f: File | null) => void
   config: SolicitudesConfig
+  showRecepHint?: boolean
 }) {
   const tipos     = isAdmin ? TIPOS_ADMIN : TIPOS_EMPLEADO
   const isHorario = form.tipo === 'Cambio de Horario' || form.tipo === 'Cambio de horario/día'
@@ -173,15 +174,16 @@ function FormFields({
   const motivoRequired = !isAdminOrHR && !editMode && (form.tipo === 'Solicitud de Días' || isHorario)
 
   const inp = (label: string, k: keyof Form, type = 'text', placeholder = '') => {
-    const isDateField = type === 'date' && (k === 'fecha_inicio' || k === 'fecha_compensacion')
+    const isDateField = type === 'date'
     return (
-      <div>
+      <div className="min-w-0">
         <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">{label}</label>
         <input type={type} value={form[k] as string}
           onChange={e => setForm({ ...form, [k]: e.target.value })}
-          placeholder={placeholder} style={{ fontSize: 16 }}
-          min={isDateField && dateMin ? dateMin : undefined}
-          className="w-full h-11 px-4 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] placeholder:text-[var(--text-muted)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] lg:text-sm" />
+          placeholder={placeholder}
+          style={{ fontSize: 16, WebkitAppearance: 'none' }}
+          min={isDateField && (k === 'fecha_inicio' || k === 'fecha_compensacion') && dateMin ? dateMin : undefined}
+          className="w-full min-w-0 h-11 px-3 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] placeholder:text-[var(--text-muted)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] lg:text-sm" />
       </div>
     )
   }
@@ -262,6 +264,16 @@ function FormFields({
             {form.tipo === 'Vacaciones'
               ? `Anticipación mínima: ${config.vacaciones_min_dias} días`
               : `Anticipación mínima: ${config.otros_min_dias} días · Motivo obligatorio`}
+          </p>
+        </div>
+      )}
+
+      {/* Aviso regla de vacaciones para recepcionistas */}
+      {showRecepHint && form.tipo === 'Vacaciones' && (
+        <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-50 border border-blue-100 rounded-xl">
+          <IconAlertCircle size={14} className="text-blue-500 shrink-0 mt-0.5" />
+          <p className="text-[12px] text-blue-700">
+            Las recepcionistas solo pueden tomar vacaciones en bloques de <strong>7 o 14 días corridos</strong>.
           </p>
         </div>
       )}
@@ -579,7 +591,11 @@ function HistorialModal({ sol, onClose }: { sol: Solicitud; onClose: () => void 
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-interface Empleado { id: string; nombre: string }
+interface Empleado { id: string; nombre: string; equipo?: string }
+
+function isRecepcionEquipo(equipo: string): boolean {
+  return equipo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes('recep')
+}
 
 export default function SolicitudesClient({ user }: { user: SessionUser }) {
   const isAdmin = user.rol === 'admin' || user.rol === 'Admin'
@@ -594,7 +610,7 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
   const [tipoFilter, setTipoFilter]         = useState('')
   const [empleadoFilter, setEmpleadoFilter] = useState('')
   const [empleados, setEmpleados]           = useState<Empleado[]>([])
-  const [subFilter, setSubFilter]           = useState<'todas' | 'en_curso' | 'futuras' | 'archivadas'>('todas')
+  const [subFilter, setSubFilter]           = useState<'todas' | 'en_curso' | 'futuras' | 'archivadas'>('en_curso')
   const [fotosMap, setFotosMap]             = useState<Record<string, string | null>>({})
 
   // Modal nueva / edición
@@ -670,8 +686,8 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
     if (!isAdminOrHR) return
     fetch('/api/empleados?estado=activo')
       .then(r => r.json())
-      .then((d: { id: string; nombre: string }[]) =>
-        setEmpleados(Array.isArray(d) ? d.map(e => ({ id: e.id, nombre: e.nombre })) : [])
+      .then((d: { id: string; nombre: string; equipo?: { nombre: string } }[]) =>
+        setEmpleados(Array.isArray(d) ? d.map(e => ({ id: e.id, nombre: e.nombre, equipo: e.equipo?.nombre ?? '' })) : [])
       )
   }, [isAdminOrHR])
 
@@ -726,6 +742,14 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
         if (form.fecha_inicio < minFecha) {
           setFormError(`Las vacaciones deben pedirse con al menos ${config.vacaciones_min_dias} días de anticipación`)
           setSaving(false); return
+        }
+        // Recepcionistas: solo pueden pedir 7 o 14 días corridos
+        if (isRecepcionEquipo(user.equipo)) {
+          const diasVac = calcDias(form.fecha_inicio, form.fecha_fin)
+          if (diasVac !== 7 && diasVac !== 14) {
+            setFormError('Las recepcionistas solo pueden pedir vacaciones en bloques de 7 o 14 días corridos')
+            setSaving(false); return
+          }
         }
       } else if (form.tipo === 'Solicitud de Días' || isHorario) {
         const minFecha = addDaysStr(today, config.otros_min_dias)
@@ -913,12 +937,15 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
         return true
       })
 
-  // Pendientes: orden de creación (quién pidió primero). El resto: por fecha_inicio.
+  // Pendientes: orden de creación (quién pidió primero).
+  // Archivadas: más recientes primero (ayer → atrás).
+  // Resto: fecha_inicio ascendente.
   const displayList = [...filtered].sort((a, b) => {
     if (estadoFilter === 'pending') {
       return (a.fecha_creacion || '').localeCompare(b.fecha_creacion || '')
     }
-    return (a.fecha_inicio || '').localeCompare(b.fecha_inicio || '')
+    const cmp = (a.fecha_inicio || '').localeCompare(b.fecha_inicio || '')
+    return subFilter === 'archivadas' ? -cmp : cmp
   })
   const visibleList = isAdminOrHR ? displayList : displayList.slice(0, visibleCount)
 
@@ -989,7 +1016,7 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
               {tabs.map(s => {
                 const active = estadoFilter === s || (s === 'todos' && !estadoFilter)
                 return (
-                  <button key={s} onClick={() => { setEstadoFilter(s === 'todos' ? '' : s); setSubFilter('todas') }}
+                  <button key={s} onClick={() => { setEstadoFilter(s === 'todos' ? '' : s); setSubFilter('en_curso') }}
                     className={`px-2 lg:px-3 py-2 text-[10px] lg:text-[11px] font-medium rounded-[10px] cursor-pointer transition-all whitespace-nowrap ${active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
                     {tabLabel[s]}
                   </button>
@@ -1002,11 +1029,11 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
 
       {/* ─── Sub-filtro período ─── */}
       {isAdminOrHR && estadoFilter !== 'pending' && (
-        <div className="flex bg-white border border-gray-200/60 rounded-xl p-0.5 mb-4 w-fit">
-          {(['todas', 'en_curso', 'futuras', 'archivadas'] as const).map(sf => (
-            <button key={sf} onClick={() => setSubFilter(sf)}
-              className={`px-3 lg:px-4 py-2 text-[11px] lg:text-[12px] font-medium rounded-[10px] cursor-pointer transition-all whitespace-nowrap ${subFilter === sf ? 'bg-[var(--primary)] text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>
-              {sf === 'todas' ? 'Todas' : sf === 'en_curso' ? 'En curso' : sf === 'futuras' ? 'Futuras' : 'Archivadas'}
+        <div className="flex gap-1.5 mb-4">
+          {(['en_curso', 'futuras', 'archivadas'] as const).map(sf => (
+            <button key={sf} onClick={() => setSubFilter(subFilter === sf ? 'todas' : sf)}
+              className={`px-3 py-1.5 text-[11px] lg:text-[12px] font-medium rounded-lg cursor-pointer transition-all whitespace-nowrap border ${subFilter === sf ? 'bg-[var(--primary)] text-white border-[var(--primary)] shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:text-gray-800'}`}>
+              {sf === 'en_curso' ? 'En curso' : sf === 'futuras' ? 'Futuras' : 'Archivadas'}
             </button>
           ))}
         </div>
@@ -1283,7 +1310,7 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
             {editId ? 'Guardar' : form.tipo === 'Feriado/Local cerrado' ? 'Crear feriado' : 'Enviar'}
           </Button>
         </>}>
-        <FormFields form={form} setForm={setForm} isAdmin={isAdminOrHR} isAdminOrHR={isAdminOrHR} editMode={!!editId} empleados={empleados} certFile={modalCertFile} setCertFile={setModalCertFile} config={config} />
+        <FormFields form={form} setForm={setForm} isAdmin={isAdminOrHR} isAdminOrHR={isAdminOrHR} editMode={!!editId} empleados={empleados} certFile={modalCertFile} setCertFile={setModalCertFile} config={config} showRecepHint={!isAdminOrHR && isRecepcionEquipo(user.equipo)} />
         {formError && (
           <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl mt-4">
             <IconAlertCircle size={16} className="text-red-500 shrink-0" />

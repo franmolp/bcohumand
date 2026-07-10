@@ -36,14 +36,44 @@ export async function GET(request: NextRequest) {
       if (--tm === 0) { tm = 12; ty-- }
     }
     const nombreNorm = normNombre(session.nombre)
-    query = query
-      .eq('nombre_empleada', nombreNorm)
-      .or(months.map(({ anio, mes }) => `and(anio.eq.${anio},mes.eq.${mes})`).join(','))
+    // Intentar obtener el nombre exacto usado en recibos a través de pagos (por usuario_id)
+    const { data: pagoRef } = await supabaseAdmin
+      .from('liquidaciones_pagos')
+      .select('nombre_excel')
+      .eq('usuario_id', session.id)
+      .limit(1)
+    const nombreExcel = pagoRef?.[0]?.nombre_excel as string | undefined
+    // Armar OR de nombres: normNombre + nombre_excel (si existe y es distinto)
+    const nameFilters = new Set<string>([nombreNorm])
+    if (nombreExcel) nameFilters.add(nombreExcel)
+    // Construir pares (nombre AND mes) para evitar cross-match entre empleadas con igual primer nombre
+    const orParts: string[] = []
+    for (const { anio, mes } of months) {
+      for (const nombre of nameFilters) {
+        orParts.push(`and(nombre_empleada.eq.${nombre},anio.eq.${anio},mes.eq.${mes})`)
+      }
+    }
+    if (!orParts.length) return NextResponse.json([])
+    query = query.or(orParts.join(','))
   }
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data || [])
+}
+
+export async function DELETE(request: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+  if (!isAdmin) return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
+
+  const { id } = await request.json()
+  if (!id) return NextResponse.json({ error: 'Falta id' }, { status: 400 })
+
+  const { error } = await supabaseAdmin.from('recibos_sueldo').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
 }
 
 export async function POST(request: NextRequest) {

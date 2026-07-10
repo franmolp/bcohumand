@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { supabase } from '@/lib/supabase'
 import { getSession } from '@/lib/auth'
-import { gasReady, gasUpload } from '@/lib/gas-upload'
+import { gasReady, gasUploadBase64 } from '@/lib/gas-upload'
 import { crearNotificacion } from '@/lib/notificaciones'
+
+const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+
+// Mismo algoritmo que normNombre() en el GET — convierte "Rocio Ojeda" → "Rocio O"
+function normNombre(nombre: string): string {
+  const parts = nombre.trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return nombre
+  const first = parts[0]
+  const last  = parts[parts.length - 1]
+  if (parts.length === 1) return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase()
+  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase() + ' ' + last.charAt(0).toUpperCase()
+}
 
 export async function POST(request: NextRequest) {
   const session = await getSession()
@@ -12,37 +23,42 @@ export async function POST(request: NextRequest) {
   if (!isAdmin) return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
 
   try {
-    const formData      = await request.formData()
-    const file          = formData.get('file') as File | null
-    const anioStr       = formData.get('anio') as string
-    const mesStr        = formData.get('mes') as string
-    const nombre        = formData.get('nombre') as string
-    const nombreArchivo = formData.get('nombre_archivo') as string
+    const body          = await request.json()
+    const base64        = body.base64 as string | undefined
+    const anioStr       = body.anio as string
+    const mesStr        = body.mes as string
+    const nombre        = body.nombre as string
+    const nombreArchivo = body.nombre_archivo as string
 
-    if (!file || !anioStr || !mesStr || !nombre || !nombreArchivo) {
-      return NextResponse.json({ error: 'Faltan campos requeridos' }, { status: 400 })
-    }
-    if (file.type !== 'application/pdf') {
-      return NextResponse.json({ error: 'Solo se permiten archivos PDF' }, { status: 400 })
+    const missing = [
+      !base64        && 'base64',
+      !anioStr       && 'anio',
+      !mesStr        && 'mes',
+      !nombre        && 'nombre',
+      !nombreArchivo && 'nombre_archivo',
+    ].filter(Boolean)
+    if (missing.length) {
+      console.error('[upload] campos faltantes:', missing, '| base64 len:', base64?.length ?? 0)
+      return NextResponse.json({ error: `Faltan campos: ${missing.join(', ')}` }, { status: 400 })
     }
 
-    const anio  = parseInt(anioStr)
-    const mes   = parseInt(mesStr)
-    const bytes = await file.arrayBuffer()
+    const anio = parseInt(anioStr)
+    const mes  = parseInt(mesStr)
 
     let url: string
 
     if (gasReady()) {
-      url = await gasUpload({
-        bytes, mimeType: 'application/pdf', fileName: nombreArchivo,
+      url = await gasUploadBase64({
+        base64, mimeType: 'application/pdf', fileName: nombreArchivo,
         folderType: 'liquidaciones',
         anio, mes,
       })
     } else {
+      const pdfBytes    = Buffer.from(base64, 'base64')
       const storagePath = `${anio}/${String(mes).padStart(2, '0')}/${nombreArchivo}`
       const { error: uploadError } = await supabaseAdmin.storage
         .from('recibos-sueldo')
-        .upload(storagePath, new Uint8Array(bytes), { contentType: 'application/pdf', upsert: true })
+        .upload(storagePath, pdfBytes, { contentType: 'application/pdf', upsert: true })
       if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 })
       const { data: urlData } = supabaseAdmin.storage.from('recibos-sueldo').getPublicUrl(storagePath)
       url = urlData.publicUrl
@@ -62,22 +78,32 @@ export async function POST(request: NextRequest) {
     if (dbError) {
       console.error('DB register error:', dbError.message)
     } else {
-      // Buscar el empleado por nombre y notificarle
-      const { data: emp } = await supabase
-        .from('usuarios')
-        .select('id')
-        .ilike('nombre', nombre)
-        .eq('estado_cuenta', 'activo')
-        .maybeSingle()
-
-      if (emp?.id) {
-        const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
-        await crearNotificacion({
-          usuario_id: emp.id,
-          titulo: `Tu recibo de sueldo está disponible`,
-          mensaje: `Ya podés ver tu liquidación de ${meses[mes - 1]} ${anio}.`,
-          tipo: 'recibo',
-        })
+      // Notificar al empleado — primero por nombre_excel en liquidaciones_pagos, fallback normNombre
+      try {
+        const { data: pagoRef } = await supabaseAdmin
+          .from('liquidaciones_pagos')
+          .select('usuario_id')
+          .eq('nombre_excel', nombre)
+          .limit(1)
+        let empId = pagoRef?.[0]?.usuario_id as string | undefined
+        if (!empId) {
+          const { data: users } = await supabaseAdmin
+            .from('usuarios')
+            .select('id, nombre')
+            .eq('estado_cuenta', 'activo')
+          empId = users?.find(u => normNombre(u.nombre) === nombre)?.id
+        }
+        if (empId) {
+          const mesNombre = MESES_ES[mes - 1] ?? String(mes)
+          await crearNotificacion({
+            usuario_id: empId,
+            titulo:     'Nuevo recibo de sueldo',
+            mensaje:    `Tu recibo de ${mesNombre} ${anio} ya está disponible`,
+            tipo:       'recibo',
+          })
+        }
+      } catch (notifErr) {
+        console.error('Error al enviar notificación de recibo:', notifErr)
       }
     }
 

@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { SessionUser, Compra, Proveedor } from '@/types'
 import { Modal, Button, Input, Confirm, Spinner } from '@/components/ui'
 import { IconShoppingBag, IconEdit, IconTrash, IconPlus, IconAlertCircle } from '@/components/ui/Icons'
 import { compressImage } from '@/lib/compress-image'
+import FileViewer from '@/components/FileViewer'
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 const ESTADOS: { value: string; label: string }[] = [
@@ -19,6 +20,33 @@ function fmtFecha(iso: string) {
 }
 function fmtMonto(n: number) {
   return '$' + n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function formatMontoInput(value: string): string {
+  let v = value
+  // Aceptar . como separador decimal (teclado inglés/iOS en inglés)
+  // Si no hay coma y hay un punto al final o seguido de 1-2 dígitos al final,
+  // convertirlo a coma
+  if (!v.includes(',') && /\.\d{0,2}$/.test(v)) {
+    const lastDot = v.lastIndexOf('.')
+    v = v.slice(0, lastDot) + ',' + v.slice(lastDot + 1)
+  }
+  // Quitar todos los puntos restantes (eran separadores de miles que el usuario no debe ingresar)
+  v = v.replace(/\./g, '')
+  const clean = v.replace(/[^0-9,]/g, '')
+  const commaIdx = clean.indexOf(',')
+  let intPart = commaIdx >= 0 ? clean.slice(0, commaIdx) : clean
+  const decPart = commaIdx >= 0 ? clean.slice(commaIdx + 1, commaIdx + 3) : undefined
+  intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return decPart !== undefined ? `${intPart},${decPart}` : intPart
+}
+
+function numToMontoStr(n: number): string {
+  const rounded = Math.round(n * 100)
+  const cents = rounded % 100
+  const intPart = Math.floor(rounded / 100)
+  const intStr = String(intPart).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return cents > 0 ? `${intStr},${String(cents).padStart(2, '0')}` : intStr
 }
 function estadoBadge(e: string) {
   if (e === 'efectivo') return <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-green-50 text-green-700 border border-green-100">Efectivo</span>
@@ -55,7 +83,7 @@ function compraToForm(c: Compra): FormState {
     fecha: c.fecha,
     proveedor_id: c.proveedor_id ? String(c.proveedor_id) : '',
     proveedor_nombre_nuevo: '',
-    monto: String(c.monto),
+    monto: numToMontoStr(c.monto),
     numero_factura: c.numero_factura ?? '',
     detalle: c.detalle ?? '',
     estado_pago: c.estado_pago,
@@ -77,6 +105,7 @@ function CompraModal({ open, editTarget, proveedores, onClose, onSaved, onProvee
   const [fotoFile, setFotoFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -151,11 +180,14 @@ function CompraModal({ open, editTarget, proveedores, onClose, onSaved, onProvee
   }
 
   return (
+    <>
     <Modal open={open} onClose={onClose} title={editTarget ? 'Editar Compra' : '+ Nueva Compra'}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-[13px] font-medium text-[var(--text)] mb-1">Fecha <span className="text-red-500">*</span></label>
-          <input type="date" value={form.fecha} onChange={e => set('fecha', e.target.value)} required className="w-full rounded-xl border border-[var(--border)] px-3 py-2.5 text-[15px] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"/>
+          <input type="date" value={form.fecha} onChange={e => set('fecha', e.target.value)} required
+            style={{ fontSize: 16, WebkitAppearance: 'none' }}
+            className="w-full min-w-0 rounded-xl border border-[var(--border)] px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"/>
         </div>
 
         <div>
@@ -196,8 +228,8 @@ function CompraModal({ open, editTarget, proveedores, onClose, onSaved, onProvee
           type="text"
           inputMode="decimal"
           value={form.monto}
-          onChange={e => set('monto', e.target.value.replace(/[^0-9,.]/g, ''))}
-          placeholder="0,00"
+          onChange={e => set('monto', formatMontoInput(e.target.value))}
+          placeholder="0"
           required
         />
 
@@ -235,8 +267,8 @@ function CompraModal({ open, editTarget, proveedores, onClose, onSaved, onProvee
           <label className="block text-[13px] font-medium text-[var(--text)] mb-1">Foto de Factura (opcional)</label>
           {editTarget?.foto_url && !fotoFile && (
             <div className="mb-2 flex items-center gap-2">
-              <a href={editTarget.foto_url} target="_blank" rel="noopener noreferrer"
-                className="text-[12px] text-[var(--primary)] hover:underline">Ver factura actual</a>
+              <button type="button" onClick={() => editTarget?.foto_url && setViewerUrl(editTarget.foto_url)}
+                className="text-[12px] text-[var(--primary)] hover:underline">Ver factura actual</button>
               <span className="text-[11px] text-gray-400">· subí otra para reemplazarla</span>
             </div>
           )}
@@ -262,6 +294,8 @@ function CompraModal({ open, editTarget, proveedores, onClose, onSaved, onProvee
         </div>
       </form>
     </Modal>
+    {viewerUrl && <FileViewer url={viewerUrl} name="Factura" onClose={() => setViewerUrl(null)} />}
+    </>
   )
 }
 
@@ -276,10 +310,15 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
   const [total, setTotal] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
+  const [search, setSearch] = useState('')
+  const [allCompras, setAllCompras] = useState<Compra[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<Compra | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Compra | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [viewer, setViewer] = useState<string | null>(null)
+
+  const isSearching = search.trim().length > 0
 
   const mesStr = `${anio}-${String(mes + 1).padStart(2, '0')}`
 
@@ -294,7 +333,30 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
     setLoading(false)
   }, [mesStr])
 
+  const fetchAllCompras = useCallback(async () => {
+    const res = await fetch('/api/compras')
+    if (res.ok) {
+      const d = await res.json()
+      setAllCompras(d.compras || [])
+    }
+  }, [])
+
   useEffect(() => { fetchCompras() }, [fetchCompras])
+
+  useEffect(() => {
+    if (isSearching) fetchAllCompras()
+  }, [isSearching, fetchAllCompras])
+
+  const displayed = useMemo(() => {
+    if (!isSearching) return compras
+    const q = search.trim().toLowerCase()
+    return allCompras.filter(c => {
+      const prov = ((c.proveedor as { nombre: string } | null)?.nombre ?? c.proveedor_nombre ?? '').toLowerCase()
+      const det = (c.detalle ?? '').toLowerCase()
+      const monto = String(Math.round(c.monto))
+      return prov.includes(q) || det.includes(q) || monto.includes(q)
+    })
+  }, [search, isSearching, compras, allCompras])
 
   useEffect(() => {
     fetch('/api/proveedores').then(r => r.json()).then(d => { if (Array.isArray(d)) setProveedores(d) })
@@ -339,45 +401,56 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
         </Button>
       </div>
 
-      {/* Filtros */}
-      <div className="bg-white rounded-2xl border border-[var(--border)] shadow-sm p-4 mb-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-[13px] text-[var(--text-muted)] font-medium">Filtrar por mes:</span>
-          <select
-            value={mes}
-            onChange={e => setMes(Number(e.target.value))}
-            className="rounded-xl border border-[var(--border)] px-3 py-2 text-[14px] bg-white"
-          >
-            {MESES.map((m, i) => <option key={i} value={i}>{m}</option>)}
-          </select>
-          <select
-            value={anio}
-            onChange={e => setAnio(Number(e.target.value))}
-            className="rounded-xl border border-[var(--border)] px-3 py-2 text-[14px] bg-white"
-          >
-            {anios.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </div>
+      {/* Búsqueda + Filtros */}
+      <div className="bg-white rounded-2xl border border-[var(--border)] shadow-sm p-4 mb-4 space-y-3">
+        <input
+          type="search"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar por proveedor, detalle o monto…"
+          className="w-full rounded-xl border border-[var(--border)] px-3 py-2.5 text-[14px] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+        />
+        {!isSearching && (
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-[13px] text-[var(--text-muted)] font-medium">Filtrar por mes:</span>
+            <select
+              value={mes}
+              onChange={e => setMes(Number(e.target.value))}
+              className="rounded-xl border border-[var(--border)] px-3 py-2 text-[14px] bg-white"
+            >
+              {MESES.map((m, i) => <option key={i} value={i}>{m}</option>)}
+            </select>
+            <select
+              value={anio}
+              onChange={e => setAnio(Number(e.target.value))}
+              className="rounded-xl border border-[var(--border)] px-3 py-2 text-[14px] bg-white"
+            >
+              {anios.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+        )}
       </div>
 
-      {/* Total del mes — solo admin */}
-      {isAdmin && total !== null && (
+      {/* Total — solo admin */}
+      {isAdmin && (isSearching ? displayed.length > 0 : total !== null) && (
         <div className="rounded-2xl p-5 mb-4" style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
-          <p className="text-white/70 text-[12px] font-medium mb-1">Total del mes</p>
-          <p className="text-white text-[28px] font-bold leading-none">{fmtMonto(total)}</p>
-          <p className="text-white/60 text-[12px] mt-1">{compras.length} compra{compras.length !== 1 ? 's' : ''} registrada{compras.length !== 1 ? 's' : ''}</p>
+          <p className="text-white/70 text-[12px] font-medium mb-1">{isSearching ? 'Total encontrado' : 'Total del mes'}</p>
+          <p className="text-white text-[28px] font-bold leading-none">{fmtMonto(isSearching ? displayed.reduce((s, c) => s + Number(c.monto), 0) : total!)}</p>
+          <p className="text-white/60 text-[12px] mt-1">{displayed.length} compra{displayed.length !== 1 ? 's' : ''} registrada{displayed.length !== 1 ? 's' : ''}</p>
         </div>
       )}
 
       {/* Tabla */}
       <div className="bg-white rounded-2xl border border-[var(--border)] shadow-sm overflow-hidden">
-        {loading ? (
+        {loading && !isSearching ? (
           <div className="py-16"><Spinner /></div>
-        ) : compras.length === 0 ? (
-          <div className="py-16 text-center text-[var(--text-muted)] text-sm">Sin compras en {MESES[mes]} {anio}</div>
+        ) : displayed.length === 0 ? (
+          <div className="py-16 text-center text-[var(--text-muted)] text-sm">
+            {isSearching ? `Sin resultados para "${search}"` : `Sin compras en ${MESES[mes]} ${anio}`}
+          </div>
         ) : (
           <>
-            <p className="px-4 pt-3 pb-2 text-[12px] text-[var(--text-muted)]">Mostrando {compras.length} compra{compras.length !== 1 ? 's' : ''}</p>
+            <p className="px-4 pt-3 pb-2 text-[12px] text-[var(--text-muted)]">Mostrando {displayed.length} compra{displayed.length !== 1 ? 's' : ''}{isSearching ? ` · todos los tiempos` : ''}</p>
 
             {/* Desktop table */}
             <div className="hidden lg:block overflow-x-auto">
@@ -395,7 +468,7 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
-                  {compras.map(c => (
+                  {displayed.map(c => (
                     <tr key={c.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-[var(--text-muted)]">{fmtFecha(c.fecha)}</td>
                       <td className="px-4 py-3 font-medium text-[var(--text)]">{(c.proveedor as {nombre:string}|null)?.nombre ?? c.proveedor_nombre ?? '—'}</td>
@@ -406,7 +479,7 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
                       <td className="px-4 py-3">{estadoBadge(c.estado_pago)}</td>
                       <td className="px-4 py-3 text-center">
                         {c.foto_url
-                          ? <a href={c.foto_url} target="_blank" rel="noopener noreferrer" className="text-[var(--primary)] hover:underline text-[12px]">Ver</a>
+                          ? <button onClick={() => setViewer(c.foto_url!)} className="text-[var(--primary)] hover:underline text-[12px]">Ver</button>
                           : <span className="text-gray-300">—</span>}
                       </td>
                       {isAdmin && <td className="px-4 py-3 text-[var(--text-muted)]">{(c.cargado_por as {nombre:string}|null)?.nombre ?? c.usuario_email ?? '—'}</td>}
@@ -426,7 +499,7 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
 
             {/* Mobile cards */}
             <div className="lg:hidden divide-y divide-[var(--border)]">
-              {compras.map(c => (
+              {displayed.map(c => (
                 <div key={c.id} className="p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1 min-w-0">
@@ -439,7 +512,7 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       {estadoBadge(c.estado_pago)}
-                      {c.foto_url && <a href={c.foto_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-[var(--primary)]">Ver factura</a>}
+                      {c.foto_url && <button onClick={() => setViewer(c.foto_url!)} className="text-[11px] text-[var(--primary)]">Ver factura</button>}
                     </div>
                     {isAdmin && (
                       <div className="flex gap-2">
@@ -471,10 +544,11 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
         title="Eliminar compra"
         message={`¿Eliminás la compra de ${deleteTarget?.proveedor?.nombre ?? deleteTarget?.proveedor_nombre ?? ''} por ${deleteTarget ? fmtMonto(deleteTarget.monto) : ''}?`}
         onConfirm={handleDelete}
-        onCancel={() => setDeleteTarget(null)}
+        onClose={() => setDeleteTarget(null)}
         loading={deleting}
         danger
       />
+      {viewer && <FileViewer url={viewer} name="Factura" onClose={() => setViewer(null)} />}
     </div>
   )
 }

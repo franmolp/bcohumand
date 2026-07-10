@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Button, Spinner, Toast } from '@/components/ui'
-import { IconPlus, IconFileText, IconCheck, IconAlertCircle, IconX } from '@/components/ui/Icons'
+import { IconPlus, IconFileText, IconCheck, IconAlertCircle, IconX, IconEye, IconEyeOff } from '@/components/ui/Icons'
 import { MESES } from '@/lib/liquidador'
 import type { SessionUser } from '@/types'
 import FileViewer from '@/components/FileViewer'
@@ -13,14 +13,19 @@ interface ReciboProcesado {
   pageIndex: number
   nombreRaw: string
   nombreFormateado: string
+  nombreEditado?: string   // override manual del usuario
   mesStr: string
   anioStr: string
-  pdfBytes: Uint8Array
+  pdfBase64: string
   previewUrl: string
   status: 'pending' | 'uploading' | 'uploaded' | 'error'
   errorMsg?: string
   storageUrl?: string
   nombreArchivo: string
+}
+
+function buildNombreArchivo(nombre: string, mes: string) {
+  return `${nombre} Liquidacion ${mes}.pdf`
 }
 
 interface ReciboDB {
@@ -57,6 +62,173 @@ export function normalizarNombre(nombre: string): string {
 }
 
 const SIG_KEY = 'humand_firma_empleador'
+
+type PdfjsLib = {
+  getDocument: (opts: object) => { promise: Promise<{
+    numPages: number
+    getPage: (n: number) => Promise<{
+      getTextContent: () => Promise<{ items: { str: string }[] }>
+      getViewport: (o: { scale: number }) => { width: number; height: number }
+      render: (o: { canvasContext: CanvasRenderingContext2D; viewport: unknown }) => { promise: Promise<void> }
+    }>
+  }> }
+}
+
+// Load pdfjs with local worker (no CDN → works on iOS Safari)
+let _pdfjs: PdfjsLib | null = null
+async function getPdfjsLib(): Promise<PdfjsLib> {
+  if (_pdfjs) return _pdfjs
+  const pdfjs = await import('pdfjs-dist')
+  ;(pdfjs as unknown as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc =
+    '/pdf.worker.min.mjs'
+  _pdfjs = pdfjs as unknown as PdfjsLib
+  return _pdfjs
+}
+
+interface PageMeta { nombre: string; mesStr: string | null }
+
+const MESES_ES = 'Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre'
+
+// Extract name + period from each page of the original PDF
+async function extractPageMeta(file: File): Promise<PageMeta[]> {
+  try {
+    const pdfjs = await getPdfjsLib()
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const doc   = await pdfjs.getDocument({ data: bytes }).promise
+    const result: PageMeta[] = []
+
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page    = await doc.getPage(i)
+      const content = await page.getTextContent()
+      const strs    = content.items.map(it => it.str)
+      const text    = strs.join(' ')
+
+      // Log para diagnóstico (visible en consola del browser)
+      console.log(`[PDF p${i}] items[0..15]:`, strs.slice(0, 15).join('|'))
+      console.log(`[PDF p${i}] text:`, text.substring(0, 500))
+
+      // ── Período ────────────────────────────────────────────────────────────
+      // Acepta "Período Junio 2026", "Liquidación Junio 2026", o simplemente "Junio 2026"
+      const rMeses = new RegExp(`(${MESES_ES})\\s+(20\\d{2})`, 'i')
+      const periodMatch =
+        text.match(new RegExp(`Per[ií]odo[\\s:]+(?:Liquidaci[oó]n[\\s]+)?(${MESES_ES})\\s+(20\\d{2})`, 'i')) ??
+        text.match(new RegExp(`Liquidaci[oó]n[\\s:]+(?:Mensual[\\s]+)?(${MESES_ES})\\s+(20\\d{2})`, 'i')) ??
+        text.match(rMeses)
+
+      // ── Nombre — 5 estrategias, primera que resulte gana ──────────────────
+      let nombre = ''
+
+      // S1: "Apellido y Nombre:" → captura hasta CUIL/DNI/número de CUIL
+      if (!nombre) {
+        const m = text.match(
+          /(?:Apellido\s+y\s+Nombre[s]?|Nombre[s]?\s+y\s+Apellido)\s*[:\-]?\s*(.{1,80}?)(?=\s{2,}|\s+CUIL|\s+DNI|\s+\d{2}[-.\s]\d|\s+Per[ií])/i
+        )
+        if (m?.[1]) {
+          const c = m[1].trim().replace(/\s+/g, ' ')
+          if (/[A-ZÁÉÍÓÚÜÑ]{2,}/.test(c) && !/^\d/.test(c)) nombre = c
+        }
+      }
+
+      // S2: texto inmediatamente antes del número de CUIL (XX-XXXXXXXX-X o XX.XXXXXXXX.X)
+      if (!nombre) {
+        const cuilM = text.match(/\b(\d{2}[-.\s]\d{7,8}[-.\s]\d)\b/)
+        if (cuilM) {
+          const before = text
+            .slice(Math.max(0, cuilM.index! - 220), cuilM.index!)
+            .replace(/\bCUIL\s*[:\-]?\s*$/, '')
+            .trimEnd()
+          const m = before.match(/\b([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,}){1,3})\s*$/)
+          if (m?.[1]) nombre = m[1].trim()
+        }
+      }
+
+      // S3: ítem "CUIL" en array → tomar ítems ALL-CAPS inmediatamente anteriores
+      if (!nombre) {
+        for (let j = 0; j < strs.length; j++) {
+          if (/^CUIL\s*:?$/i.test(strs[j].trim())) {
+            const parts: string[] = []
+            for (let k = j - 1; k >= Math.max(0, j - 12); k--) {
+              const c = strs[k].trim()
+              if (!c || /^[:\-\/·\s]+$/.test(c)) continue
+              if (/^[A-ZÁÉÍÓÚÜÑ]{2,}(?: [A-ZÁÉÍÓÚÜÑ]{2,})*$/.test(c)) {
+                parts.unshift(...c.split(/\s+/))
+              } else break
+            }
+            if (parts.length >= 2) { nombre = parts.join(' '); break }
+          }
+        }
+      }
+
+      // S4: ítem que contiene "apellido" → ítems ALL-CAPS siguientes
+      if (!nombre) {
+        const lower = strs.map(s => s.toLowerCase())
+        for (let j = 0; j < lower.length; j++) {
+          if (lower[j].includes('apellido')) {
+            const parts: string[] = []
+            for (let k = j + 1; k < Math.min(j + 25, strs.length); k++) {
+              const c = strs[k].trim()
+              if (!c || /^[:\-\/·\s]+$/.test(c)) continue
+              if (/^[A-ZÁÉÍÓÚÜÑ]{2,}(?: [A-ZÁÉÍÓÚÜÑ]{2,})*$/.test(c) && !/^(CUIL|DNI)$/.test(c)) {
+                parts.push(...c.split(/\s+/))
+              } else if (parts.length > 0) break
+            }
+            if (parts.length >= 2) { nombre = parts.join(' '); break }
+          }
+        }
+      }
+
+      // S5: campos "Apellido:" y "Nombre:" separados
+      if (!nombre) {
+        const ap = text.match(/\bApellido\s*[:\-]\s*([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,})*)/i)
+        const nm = text.match(/\bNombres?\s*[:\-]\s*([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,})*)/i)
+        if (ap?.[1] && nm?.[1]) nombre = ap[1].trim() + ' ' + nm[1].trim()
+        else if (ap?.[1]) nombre = ap[1].trim()
+      }
+
+      console.log(`[PDF p${i}] nombre="${nombre}" mes="${periodMatch?.[1] ?? ''}"`)
+      result.push({ nombre, mesStr: periodMatch ? periodMatch[1] : null })
+    }
+    return result
+  } catch (e) {
+    console.error('[extractPageMeta]', e)
+    return []
+  }
+}
+
+function toUint8(base64: string): Uint8Array {
+  const bin = atob(base64)
+  const arr = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+  return arr
+}
+
+function uint8ToBase64(bytes: Uint8Array): string {
+  const CHUNK = 8192
+  const parts: string[] = []
+  for (let k = 0; k < bytes.length; k += CHUNK) {
+    parts.push(String.fromCharCode.apply(null, bytes.subarray(k, k + CHUNK) as unknown as number[]))
+  }
+  return btoa(parts.join(''))
+}
+
+// Render page 1 of a single-page PDF to a JPEG thumbnail
+async function renderThumbnail(pdfBase64: string): Promise<string> {
+  try {
+    const pdfjs  = await getPdfjsLib()
+    const pdfBytes = toUint8(pdfBase64)
+    const doc    = await pdfjs.getDocument({ data: pdfBytes }).promise
+    const page   = await doc.getPage(1)
+    const vp     = page.getViewport({ scale: 0.65 })
+    const canvas = document.createElement('canvas')
+    canvas.width = vp.width; canvas.height = vp.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return ''
+    await page.render({ canvasContext: ctx, viewport: vp }).promise
+    return canvas.toDataURL('image/jpeg', 0.75)
+  } catch {
+    return ''
+  }
+}
 
 // Remove white pixels from signature image → returns PNG Uint8Array
 async function removeWhiteBg(dataUrl: string): Promise<Uint8Array> {
@@ -107,39 +279,197 @@ function StatusBadge({ status, errorMsg }: { status: ReciboProcesado['status']; 
 
 // ─── Employee View ─────────────────────────────────────────────────────────────
 
+interface PagoEmpleada {
+  anio: number
+  mes: number
+  total: number
+  efectivo: number
+  transferencia: number
+}
+
+interface BrutoMes { anio: number; mes: number; bruto: number }
+
+function fmtPeso(n: number): string {
+  return '$' + Math.round(n).toLocaleString('es-AR')
+}
+
+function fmtBruto(n: number): string {
+  return '$' + Math.round(n).toLocaleString('es-AR')
+}
+
+const MESES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+
+function HistorialChart({ data, visible }: { data: BrutoMes[]; visible: boolean }) {
+  const [selected, setSelected] = useState<number | null>(null)
+  const now = new Date()
+  const curAnio = now.getFullYear()
+  const curMes  = now.getMonth() + 1
+
+  const cerrados = data
+    .filter(d => !(d.anio === curAnio && d.mes === curMes))
+    .sort((a, b) => a.anio !== b.anio ? a.anio - b.anio : a.mes - b.mes)
+    .slice(-6)
+
+  if (!cerrados.length) return null
+
+  const maxBruto = Math.max(...cerrados.map(d => d.bruto))
+  const activeIdx = selected ?? cerrados.length - 1
+  const activeData = cerrados[activeIdx]
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200/60 px-4 pt-4 pb-3 mb-3">
+      <p className="text-[11px] font-semibold text-[var(--text-sub)] mb-2">Historial de liquidaciones</p>
+
+      {/* Info del mes seleccionado */}
+      <div className="h-6 flex items-center justify-center mb-2">
+        <span className="text-[12px] font-semibold text-[var(--primary)]">
+          {MESES[activeData.mes - 1]} {activeData.anio} · {visible ? fmtBruto(activeData.bruto) : '$••••••'}
+        </span>
+      </div>
+
+      {/* Barras */}
+      <div className="flex items-end gap-1.5" style={{ height: 80 }}>
+        {cerrados.map((d, idx) => {
+          const h = maxBruto > 0 ? Math.max(Math.round((d.bruto / maxBruto) * 80), 4) : 4
+          const isActive = idx === activeIdx
+          return (
+            <button
+              key={`bar-${d.anio}-${d.mes}`}
+              className={`flex-1 rounded-t-sm transition-colors cursor-pointer ${isActive ? 'bg-[var(--primary)]' : 'bg-indigo-200 active:bg-indigo-300'}`}
+              style={{ height: h, alignSelf: 'flex-end' }}
+              onClick={() => setSelected(idx)}
+              aria-label={`${MESES[d.mes - 1]} ${d.anio}`}
+            />
+          )
+        })}
+      </div>
+
+      {/* Labels de mes */}
+      <div className="flex gap-1.5 mt-1.5">
+        {cerrados.map((d, idx) => (
+          <div key={`ml-${d.anio}-${d.mes}`} className="flex-1 text-center">
+            <span className={`text-[9px] block leading-none ${idx === activeIdx ? 'text-[var(--primary)] font-semibold' : 'text-gray-400'}`}>{MESES_CORTOS[d.mes - 1]}</span>
+            <span className={`text-[8px] block leading-none mt-0.5 ${idx === activeIdx ? 'text-[var(--primary)]' : 'text-gray-300'}`}>'{String(d.anio).slice(2)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const LS_MONTOS = 'liquidaciones_montos_visible'
+
 export function EmployeeRecibosView({ user }: { user: SessionUser }) {
   const [recibos, setRecibos] = useState<ReciboDB[]>([])
+  const [pagos,   setPagos]   = useState<PagoEmpleada[]>([])
+  const [brutos,  setBrutos]  = useState<BrutoMes[]>([])
   const [loading, setLoading] = useState(true)
-  const [viewer, setViewer] = useState<{ url: string; name: string } | null>(null)
+  const [viewer,  setViewer]  = useState<{ url: string; name: string } | null>(null)
+  const [montosVisible, setMontosVisible] = useState(true)
 
   useEffect(() => {
-    fetch('/api/liquidador/recibos')
-      .then(r => r.json())
-      .then(d => setRecibos(Array.isArray(d) ? (d as ReciboDB[]).sort((a, b) => b.anio - a.anio || b.mes - a.mes) : []))
-      .finally(() => setLoading(false))
+    const stored = localStorage.getItem(LS_MONTOS)
+    if (stored === 'false') setMontosVisible(false)
   }, [])
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/liquidador/recibos').then(r => r.json()),
+      fetch('/api/liquidador/pagos').then(r => r.json()),
+      fetch('/api/liquidador/bruto').then(r => r.json()).catch(() => []),
+    ]).then(([rData, pData, bData]) => {
+      setRecibos(Array.isArray(rData) ? (rData as ReciboDB[]).sort((a, b) => b.anio - a.anio || b.mes - a.mes) : [])
+      setPagos(Array.isArray(pData) ? (pData as PagoEmpleada[]) : [])
+      setBrutos(Array.isArray(bData) ? (bData as BrutoMes[]) : [])
+    }).finally(() => setLoading(false))
+  }, [])
+
+  function toggleMontos() {
+    const next = !montosVisible
+    setMontosVisible(next)
+    localStorage.setItem(LS_MONTOS, String(next))
+  }
 
   if (loading) return <Spinner />
 
+  // Build unified list of months from recibos + pagos
+  const keys = new Map<string, { anio: number; mes: number }>()
+  recibos.forEach(r => keys.set(`${r.anio}-${r.mes}`, { anio: r.anio, mes: r.mes }))
+  pagos.forEach(p => keys.set(`${p.anio}-${p.mes}`, { anio: p.anio, mes: p.mes }))
+  const meses = Array.from(keys.values()).sort((a, b) => b.anio - a.anio || b.mes - a.mes)
+
+  const reciboMap = new Map(recibos.map(r => [`${r.anio}-${r.mes}`, r]))
+  const pagoMap   = new Map(pagos.map(p => [`${p.anio}-${p.mes}`, p]))
+
   return (
     <div className="space-y-3 mt-4">
-      <p className="text-[13px] font-semibold text-[var(--text-sub)]">Recibos de sueldo</p>
-      {recibos.length === 0 ? (
-        <p className="text-[13px] text-[var(--text-sub)] text-center py-8">Sin recibos disponibles</p>
-      ) : recibos.map(r => (
-        <button key={r.id}
-          onClick={() => setViewer({ url: r.storage_url, name: r.nombre_archivo })}
-          className="w-full bg-white rounded-xl border border-gray-200/60 p-3.5 flex items-center gap-3 hover:bg-gray-50 transition-colors cursor-pointer text-left">
-          <div className="w-9 h-9 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
-            <IconFileText size={18} className="text-[var(--primary)]" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold">{MESES[r.mes - 1]} {r.anio}</p>
-            <p className="text-[11px] text-gray-400 truncate">{r.nombre_archivo}</p>
-          </div>
-          <span className="text-[12px] font-semibold text-[var(--primary)] shrink-0">Ver</span>
+      <HistorialChart data={brutos} visible={montosVisible} />
+      <div className="flex items-center justify-between">
+        <p className="text-[13px] font-semibold text-[var(--text-sub)]">Mis liquidaciones</p>
+        <button onClick={toggleMontos} className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer transition-colors" aria-label="Mostrar/ocultar montos">
+          {montosVisible ? <IconEye size={16} /> : <IconEyeOff size={16} />}
         </button>
-      ))}
+      </div>
+      {meses.length === 0 ? (
+        <p className="text-[13px] text-[var(--text-sub)] text-center py-8">Sin liquidaciones disponibles</p>
+      ) : meses.map(({ anio, mes }) => {
+        const recibo = reciboMap.get(`${anio}-${mes}`)
+        const pago   = pagoMap.get(`${anio}-${mes}`)
+        return (
+          <div key={`${anio}-${mes}`} className="w-full bg-white rounded-xl border border-gray-200/60 overflow-hidden">
+            {recibo && recibo.storage_url.startsWith('http') ? (
+              <button
+                onClick={() => setViewer({ url: recibo.storage_url, name: recibo.nombre_archivo })}
+                className="w-full p-3.5 flex items-center gap-3 hover:bg-gray-50 transition-colors cursor-pointer text-left">
+                <div className="w-9 h-9 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
+                  <IconFileText size={18} className="text-[var(--primary)]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-semibold">{MESES[mes - 1]} {anio}</p>
+                  <p className="text-[11px] text-gray-400 truncate">{recibo.nombre_archivo}</p>
+                </div>
+                <span className="text-[12px] font-semibold text-[var(--primary)] shrink-0">Ver recibo</span>
+              </button>
+            ) : (
+              <div className="p-3.5 flex items-center gap-3">
+                <div className="w-9 h-9 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
+                  <IconFileText size={18} className="text-gray-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-semibold">{MESES[mes - 1]} {anio}</p>
+                  <p className="text-[11px] text-gray-400">Recibo pendiente</p>
+                </div>
+              </div>
+            )}
+            {pago && (
+              <div className="border-t border-gray-100 px-3.5 py-3 bg-gray-50/60 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-semibold text-[var(--text-main)]">Total a liquidar</span>
+                  <span className="text-[13px] font-bold text-[var(--primary)]">
+                    {montosVisible ? fmtPeso(pago.total) : '$••••••'}
+                  </span>
+                </div>
+                {(pago.efectivo > 0 || pago.transferencia > 0) && montosVisible && (
+                  <>
+                    {pago.efectivo > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-[var(--text-sub)]">Efectivo</span>
+                        <span className="text-[11px] font-medium text-[var(--text-main)]">{fmtPeso(pago.efectivo)}</span>
+                      </div>
+                    )}
+                    {pago.transferencia > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-[var(--text-sub)]">Transferencia</span>
+                        <span className="text-[11px] font-medium text-[var(--text-main)]">{fmtPeso(pago.transferencia)}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
       {viewer && <FileViewer url={viewer.url} name={viewer.name} onClose={() => setViewer(null)} />}
     </div>
   )
@@ -149,8 +479,8 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
 
 export function RecibosTab() {
   const now = new Date()
-  const [anio, setAnio] = useState(now.getFullYear())
-  const [mes,  setMes]  = useState(now.getMonth() + 1)
+  const anio = now.getFullYear()
+  const mes  = now.getMonth() + 1
 
   const [firma,      setFirma]      = useState<string | null>(null)
   const [pdfFile,    setPdfFile]    = useState<File | null>(null)
@@ -158,38 +488,26 @@ export function RecibosTab() {
   const [progreso,   setProgreso]   = useState({ actual: 0, total: 0 })
   const [recibos,    setRecibos]    = useState<ReciboProcesado[]>([])
   const [subiendo,   setSubiendo]   = useState(false)
-  const [syncing,    setSyncing]    = useState(false)
-  const [syncResult, setSyncResult] = useState<{ inserted: number; skipped: number } | null>(null)
+  const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type }); setTimeout(() => setToast(null), 3500)
   }
 
-  async function handleSync() {
-    setSyncing(true)
-    setSyncResult(null)
-    try {
-      const res  = await fetch('/api/drive/sync', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ tipo: 'liquidaciones' }),
-      })
-      const data = await res.json()
-      if (data.error) { showToast(data.error, 'error'); return }
-      setSyncResult({ inserted: data.inserted ?? 0, skipped: data.skipped ?? 0 })
-      showToast(`Sincronización completa: ${data.inserted} importados, ${data.skipped} ya existían`)
-    } catch {
-      showToast('Error al conectar con Drive', 'error')
-    } finally {
-      setSyncing(false)
-    }
-  }
-
-  // Load signature from localStorage
+  // Cargar firma: localStorage como cache rápida, servidor como fuente de verdad
   useEffect(() => {
-    const saved = localStorage.getItem(SIG_KEY)
-    if (saved) setFirma(saved)
+    const cached = localStorage.getItem(SIG_KEY)
+    if (cached) setFirma(cached)
+    fetch('/api/liquidador/firma')
+      .then(r => r.json())
+      .then(d => {
+        if (d.dataUrl) {
+          setFirma(d.dataUrl)
+          localStorage.setItem(SIG_KEY, d.dataUrl)
+        }
+      })
+      .catch(() => {})
   }, [])
 
   function handleFirma(e: React.ChangeEvent<HTMLInputElement>) {
@@ -200,133 +518,112 @@ export function RecibosTab() {
       const dataUrl = ev.target?.result as string
       localStorage.setItem(SIG_KEY, dataUrl)
       setFirma(dataUrl)
+      // Guardar en servidor en segundo plano
+      const fd = new FormData()
+      fd.append('firma', file)
+      fetch('/api/liquidador/firma', { method: 'POST', body: fd }).catch(() => {})
     }
     reader.readAsDataURL(file)
+  }
+
+  async function eliminarFirma() {
+    localStorage.removeItem(SIG_KEY)
+    setFirma(null)
+    await fetch('/api/liquidador/firma', { method: 'DELETE' }).catch(() => {})
   }
 
   async function procesarPDF() {
     if (!pdfFile || !firma) return
     setProcesando(true)
     setRecibos([])
+    setProgreso({ actual: 0, total: 0 })
 
     try {
-      // Dynamic imports (client-only, avoid SSR)
-      const [PDFLib, pdfjs] = await Promise.all([
-        import('pdf-lib'),
-        import('pdfjs-dist'),
+      // 1. Importar pdf-lib (puro JS, funciona en browser/iOS sin problemas de servidor)
+      const { PDFDocument } = await import('pdf-lib')
+
+      // 2. Leer PDF y firma en paralelo
+      const [rawBuf, sigBytes] = await Promise.all([
+        pdfFile.arrayBuffer(),
+        removeWhiteBg(firma),
       ])
 
-      // Configure pdfjs worker via unpkg CDN (matches installed version)
-      const version = (pdfjs as unknown as { version: string }).version
-      ;(pdfjs as unknown as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc =
-        `//unpkg.com/pdfjs-dist@${version}/build/pdf.worker.min.mjs`
-
-      // Remove white background from signature
-      const sigBytes = await removeWhiteBg(firma)
-
-      // Read source PDF
-      const pdfBuffer = await pdfFile.arrayBuffer()
-      const pdfBytes  = new Uint8Array(pdfBuffer)
-
-      // Load with pdf-lib (for modification)
-      const srcDoc = await PDFLib.PDFDocument.load(pdfBytes.slice().buffer as ArrayBuffer)
-
-      // Load with pdfjs (for text extraction)
-      const pdfJsLib = pdfjs as unknown as {
-        getDocument: (opts: { data: Uint8Array }) => { promise: Promise<{ getPage: (n: number) => Promise<{ getTextContent: () => Promise<{ items: { str: string }[] }> }> }> }
-      }
-      const pdfJsDoc = await pdfJsLib.getDocument({ data: pdfBytes.slice() }).promise
-
+      const srcDoc  = await PDFDocument.load(rawBuf)
       const numPages = srcDoc.getPageCount()
       setProgreso({ actual: 0, total: numPages })
 
+      // 3. Extraer metadata: pdfjs (desktop) y servidor CID (iOS) en paralelo
+      const [pdfjsMeta, serverMeta] = await Promise.all([
+        extractPageMeta(pdfFile),
+        (async (): Promise<PageMeta[]> => {
+          try {
+            const fdEx = new FormData()
+            fdEx.append('pdf', pdfFile)
+            const resEx = await fetch('/api/liquidador/recibos/extraer', { method: 'POST', body: fdEx })
+            if (!resEx.ok) return []
+            const d = await resEx.json()
+            return Array.isArray(d.pages) ? d.pages : []
+          } catch { return [] }
+        })(),
+      ])
+
+      const fallbackMes = MESES[mes - 1]
+      const anioStr     = String(anio)
+
+      // 4. Firmar cada página directamente en el browser — pdf-lib es JS puro
       const results: ReciboProcesado[] = []
 
       for (let i = 0; i < numPages; i++) {
-        setProgreso({ actual: i + 1, total: numPages })
+        const pageDoc    = await PDFDocument.create()
+        const [copied]   = await pageDoc.copyPages(srcDoc, [i])
+        pageDoc.addPage(copied)
 
-        // Extract text
-        const pdfJsPage  = await pdfJsDoc.getPage(i + 1)
-        const textContent = await pdfJsPage.getTextContent()
-        const fullText   = textContent.items.map(it => it.str).join(' ')
-
-        // Name regex: "Nombre y Apellido: OJEDA ROCIO AYELEN"
-        const nameMatch =
-          fullText.match(/Nombre\s+y\s+Apellido[\s:]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s]+?)(?:\s{2,}|CUIL|DNI|Per[ií]|$)/i) ??
-          fullText.match(/Apellido\s+y\s+Nombre[\s:]+([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\s]+?)(?:\s{2,}|CUIL|DNI|Per[ií]|$)/i)
-
-        // Period regex: "Período Febrero 2026"
-        const periodMatch = fullText.match(/Per[ií]odo[\s:]+([A-Za-záéíóúüñ]+)\s+(\d{4})/i)
-
-        const nombreRaw       = nameMatch?.[1]?.trim() ?? `Página ${i + 1}`
-        const mesStr          = periodMatch?.[1] ?? MESES[mes - 1]
-        const anioStr         = periodMatch?.[2] ?? String(anio)
-        const nombreFormateado = nameMatch ? formatearNombrePDF(nombreRaw) : `Página ${i + 1}`
-        const nombreArchivo   = `${nombreFormateado} Liquidacion ${mesStr}.pdf`
-
-        // Create individual signed PDF
-        const newDoc = await PDFLib.PDFDocument.create()
-        const [copiedPage] = await newDoc.copyPages(srcDoc, [i])
-        newDoc.addPage(copiedPage)
-
-        const page  = newDoc.getPages()[0]
+        const page              = pageDoc.getPages()[0]
         const { width, height } = page.getSize()
+        const sigImage          = await pageDoc.embedPng(sigBytes)
+        const sigWidth          = width * 0.11
+        const sigHeight         = sigWidth * (sigImage.height / sigImage.width)
+        page.drawImage(sigImage, { x: width * 0.62, y: height * 0.085, width: sigWidth, height: sigHeight, opacity: 0.92 })
 
-        // Embed signature
-        const sigImage  = await newDoc.embedPng(sigBytes)
-        const sigWidth  = width * 0.12
-        const sigHeight = sigWidth * (sigImage.height / sigImage.width)
+        const signedBytes  = await pageDoc.save()
+        const pdfBase64    = uint8ToBase64(signedBytes)   // codificar acá, NO guardar Uint8Array en state
 
-        page.drawImage(sigImage, {
-          x: width * 0.61,
-          y: height * 0.04,
-          width: sigWidth,
-          height: sigHeight,
-          opacity: 0.92,
-        })
+        const nombre = pdfjsMeta[i]?.nombre || serverMeta[i]?.nombre || ''
+        const mesStr = pdfjsMeta[i]?.mesStr || serverMeta[i]?.mesStr || fallbackMes
 
-        const signedBytes = await newDoc.save()
-
-        // Generate preview using pdfjs
-        let previewUrl = ''
-        try {
-          const prevDoc  = await pdfJsLib.getDocument({ data: signedBytes.slice() }).promise
-          const prevPage = await prevDoc.getPage(1)
-          const vp = (prevPage as unknown as {
-            getViewport: (opts: { scale: number }) => {
-              width: number; height: number;
-              clone: (o: object) => typeof vp
-            }
-          }).getViewport({ scale: 1.2 })
-          const canvas = document.createElement('canvas')
-          canvas.width = vp.width; canvas.height = vp.height
-          const ctx = canvas.getContext('2d')!
-          await (prevPage as unknown as {
-            render: (opts: { canvasContext: CanvasRenderingContext2D; viewport: typeof vp }) => { promise: Promise<void> }
-          }).render({ canvasContext: ctx, viewport: vp }).promise
-          previewUrl = canvas.toDataURL('image/jpeg', 0.82)
-        } catch (e) {
-          console.warn('Preview render failed', e)
-        }
+        const nombreFormateado = nombre ? formatearNombrePDF(nombre) : ''
+        const nombreArchivo    = `${nombreFormateado || `Pagina ${i + 1}`} Liquidacion ${mesStr}.pdf`
 
         results.push({
-          pageIndex: i,
-          nombreRaw, nombreFormateado,
-          mesStr, anioStr,
-          pdfBytes: signedBytes,
-          previewUrl,
-          status: 'pending',
-          nombreArchivo,
+          pageIndex: i, nombreRaw: nombre, nombreFormateado,
+          mesStr, anioStr, pdfBase64,
+          previewUrl: '', status: 'pending', nombreArchivo,
         })
+
+        setProgreso({ actual: i + 1, total: numPages })
       }
 
       setRecibos(results)
+
+      // 5. Generar thumbnails uno por uno en el fondo
+      for (let i = 0; i < results.length; i++) {
+        const thumb = await renderThumbnail(results[i].pdfBase64)
+        if (thumb) setRecibos(prev => prev.map((r, idx) => idx === i ? { ...r, previewUrl: thumb } : r))
+      }
     } catch (e) {
       console.error('Error procesando PDF', e)
-      showToast('Error al procesar el PDF. Verificá que pdf-lib y pdfjs-dist estén instalados.', 'error')
+      showToast(e instanceof Error ? e.message : 'Error al procesar el PDF', 'error')
     } finally {
       setProcesando(false)
     }
+  }
+
+  function updateNombre(index: number, valor: string) {
+    setRecibos(prev => prev.map((r, i) => {
+      if (i !== index) return r
+      const nombre = valor.trim()
+      return { ...r, nombreEditado: nombre, nombreArchivo: buildNombreArchivo(nombre || `Pagina ${i + 1}`, r.mesStr) }
+    }))
   }
 
   async function subirRecibo(index: number) {
@@ -336,14 +633,24 @@ export function RecibosTab() {
     setRecibos(prev => prev.map((r, i) => i === index ? { ...r, status: 'uploading' } : r))
 
     try {
-      const fd = new FormData()
-      fd.append('file', new Blob([recibo.pdfBytes], { type: 'application/pdf' }), recibo.nombreArchivo)
-      fd.append('anio', recibo.anioStr)
-      fd.append('mes', String(mes))
-      fd.append('nombre', recibo.nombreFormateado)
-      fd.append('nombre_archivo', recibo.nombreArchivo)
+      // Usar el mes detectado en el PDF (mesStr) en vez del picker, para que se guarde en la carpeta correcta
+      const mesPdf = recibo.mesStr ? MESES.indexOf(recibo.mesStr) + 1 : -1
+      const mesUpload = mesPdf > 0 ? mesPdf : mes
 
-      const r = await fetch('/api/liquidador/recibos/upload', { method: 'POST', body: fd })
+      const base64 = recibo.pdfBase64
+      if (!base64) throw new Error('PDF vacío')
+
+      const r = await fetch('/api/liquidador/recibos/upload', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          base64,
+          anio:           recibo.anioStr,
+          mes:            String(mesUpload),
+          nombre:         (recibo.nombreEditado ?? recibo.nombreFormateado) || `Pagina ${index + 1}`,
+          nombre_archivo: recibo.nombreArchivo,
+        }),
+      })
       const d = await r.json()
 
       if (r.ok) {
@@ -351,8 +658,10 @@ export function RecibosTab() {
       } else {
         setRecibos(prev => prev.map((rec, i) => i === index ? { ...rec, status: 'error', errorMsg: d.error } : rec))
       }
-    } catch {
-      setRecibos(prev => prev.map((rec, i) => i === index ? { ...rec, status: 'error', errorMsg: 'Error de red' } : rec))
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Error de red'
+      console.error(`[subir ${index}] catch:`, msg)
+      setRecibos(prev => prev.map((rec, i) => i === index ? { ...rec, status: 'error', errorMsg: msg } : rec))
     }
   }
 
@@ -373,24 +682,6 @@ export function RecibosTab() {
 
   return (
     <div>
-      {/* Month */}
-      <div className="flex flex-wrap items-center gap-3 mb-5">
-        <MonthPicker anio={anio} mes={mes} onChange={(a, m) => { setAnio(a); setMes(m) }} />
-        <div className="ml-auto flex items-center gap-3">
-          {syncResult && (
-            <span className="text-[12px] text-emerald-600 font-medium">
-              {syncResult.inserted} importados · {syncResult.skipped} ya existían
-            </span>
-          )}
-          <button onClick={handleSync} disabled={syncing}
-            className="h-9 px-3 rounded-xl border border-[var(--border)] bg-white text-[12px] font-medium text-[var(--text-sub)] hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer transition-colors">
-            {syncing
-              ? <><div className="w-3.5 h-3.5 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" /> Importando…</>
-              : '↑ Importar historial de Drive'}
-          </button>
-        </div>
-      </div>
-
       {/* Setup section */}
       <div className="grid lg:grid-cols-2 gap-4 mb-5">
 
@@ -418,10 +709,16 @@ export function RecibosTab() {
           {firma ? (
             <div className="h-24 border-2 border-[var(--primary)] bg-[var(--primary-light)] rounded-xl flex items-center justify-between px-4">
               <img src={firma} alt="Firma" className="max-h-14 max-w-[120px] object-contain" style={{ background: 'transparent' }} />
-              <button onClick={() => { localStorage.removeItem(SIG_KEY); setFirma(null) }}
-                className="text-[12px] text-[var(--text-sub)] hover:text-red-500 cursor-pointer ml-2 shrink-0">
-                Cambiar
-              </button>
+              <div className="flex flex-col items-end gap-1.5 ml-2 shrink-0">
+                <label className="text-[12px] text-[var(--text-sub)] hover:text-[var(--primary)] cursor-pointer">
+                  Cambiar
+                  <input type="file" accept="image/*" className="hidden" onChange={handleFirma} />
+                </label>
+                <button onClick={eliminarFirma}
+                  className="text-[12px] text-red-400 hover:text-red-600 cursor-pointer">
+                  Eliminar
+                </button>
+              </div>
             </div>
           ) : (
             <label className="flex items-center justify-center h-24 border-2 border-dashed border-gray-200 hover:border-[var(--primary)] hover:bg-[var(--primary-light)] rounded-xl cursor-pointer transition-colors">
@@ -453,12 +750,11 @@ export function RecibosTab() {
           <div className="flex items-center gap-3">
             <Spinner size={20} inline />
             <span className="text-[13px] text-[var(--text-sub)]">
-              Procesando página {progreso.actual} de {progreso.total}...
+              Procesando recibos...
             </span>
           </div>
-          <div className="w-full bg-gray-100 rounded-full h-2">
-            <div className="bg-[var(--primary)] h-2 rounded-full transition-all"
-              style={{ width: `${progreso.total > 0 ? (progreso.actual / progreso.total) * 100 : 0}%` }} />
+          <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+            <div className="h-2 rounded-full bg-[var(--primary)] animate-pulse w-full" />
           </div>
         </div>
       )}
@@ -492,16 +788,33 @@ export function RecibosTab() {
                 {r.previewUrl ? (
                   <img src={r.previewUrl} alt={r.nombreFormateado}
                     className="w-full object-cover border-b border-gray-100"
-                    style={{ maxHeight: 280 }} />
+                    style={{ maxHeight: 320 }} />
                 ) : (
-                  <div className="h-20 bg-gray-50 flex items-center justify-center border-b border-gray-100">
-                    <IconFileText size={24} className="text-gray-300" />
+                  <div className="h-24 bg-gray-50 flex flex-col items-center justify-center gap-2 border-b border-gray-100">
+                    <div className="w-4 h-4 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" />
+                    <p className="text-[11px] text-gray-400">Generando vista previa...</p>
                   </div>
                 )}
                 {/* Info */}
                 <div className="p-3 flex items-start gap-2">
                   <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-semibold">{r.nombreFormateado}</p>
+                    {editingIdx === i ? (
+                      <input
+                        autoFocus
+                        className="text-[13px] font-semibold w-full border-b border-[var(--primary)] outline-none bg-transparent pb-0.5 mb-0.5"
+                        defaultValue={r.nombreEditado ?? r.nombreFormateado}
+                        onBlur={e => { updateNombre(i, e.target.value); setEditingIdx(null) }}
+                        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                      />
+                    ) : (
+                      <button
+                        onClick={() => r.status !== 'uploaded' && setEditingIdx(i)}
+                        className={`text-[13px] font-semibold text-left w-full truncate block ${r.status !== 'uploaded' ? 'hover:text-[var(--primary)] cursor-text' : ''} transition-colors`}
+                        title={r.status !== 'uploaded' ? 'Tocar para editar nombre' : undefined}
+                      >
+                        {(r.nombreEditado ?? r.nombreFormateado) || <span className="text-amber-500">Pagina {i + 1} — tocar para editar</span>}
+                      </button>
+                    )}
                     <p className="text-[11px] text-gray-400 truncate">{r.nombreArchivo}</p>
                     <div className="mt-1.5 flex items-center gap-2">
                       <StatusBadge status={r.status} errorMsg={r.errorMsg} />
