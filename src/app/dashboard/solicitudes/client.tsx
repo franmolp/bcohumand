@@ -914,12 +914,15 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
         return true
       })
 
-  // Pendientes: orden de creación (quién pidió primero). El resto: por fecha_inicio.
+  // Pendientes: orden de creación (quién pidió primero).
+  // Archivadas: más recientes primero (ayer → atrás).
+  // Resto: fecha_inicio ascendente.
   const displayList = [...filtered].sort((a, b) => {
     if (estadoFilter === 'pending') {
       return (a.fecha_creacion || '').localeCompare(b.fecha_creacion || '')
     }
-    return (a.fecha_inicio || '').localeCompare(b.fecha_inicio || '')
+    const cmp = (a.fecha_inicio || '').localeCompare(b.fecha_inicio || '')
+    return subFilter === 'archivadas' ? -cmp : cmp
   })
   const visibleList = isAdminOrHR ? displayList : displayList.slice(0, visibleCount)
 
