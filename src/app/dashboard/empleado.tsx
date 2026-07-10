@@ -319,20 +319,26 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   }
   const unifiedItems: UnifiedItem[] = []
 
+  function fmtSub(diasHasta: number, fecha: string): string {
+    const fecha_ = fmtFecha(fecha)
+    if (diasHasta === 0) return `Hoy · ${fecha_}`
+    if (diasHasta === 1) return `Mañana · ${fecha_}`
+    return `en ${diasHasta} días · ${fecha_}`
+  }
+
   for (const ev of eventos) {
     const diasHasta = Math.floor((new Date(ev.fecha + 'T12:00:00').getTime() - new Date(todayStr + 'T12:00:00').getTime()) / 86400000)
     unifiedItems.push({ key: `ev-${ev.id}`, kind: 'evento', fecha: ev.fecha, diasHasta, titulo: ev.titulo,
-      subtitulo: diasHasta === 0 ? 'Hoy' : diasHasta === 1 ? 'Mañana' : fmtFecha(ev.fecha), emoji: ev.emoji ?? undefined })
+      subtitulo: fmtSub(diasHasta, ev.fecha), emoji: ev.emoji ?? undefined })
   }
   for (const b of proxCumple) {
     unifiedItems.push({ key: `bd-${b.nombre}`, kind: 'cumple', fecha: b.fecha, diasHasta: b.dias, titulo: b.nombre,
-      subtitulo: b.dias === 0 ? 'Hoy' : b.dias === 1 ? 'Mañana' : fmtFecha(b.fecha),
-      fotoPerfil: b.foto_perfil, isThisWeek: b.isThisWeek })
+      subtitulo: fmtSub(b.dias, b.fecha), fotoPerfil: b.foto_perfil, isThisWeek: b.isThisWeek })
   }
   for (const ef of efemerides) {
     const diasHasta = Math.floor((new Date(ef.fecha + 'T12:00:00').getTime() - new Date(todayStr + 'T12:00:00').getTime()) / 86400000)
     unifiedItems.push({ key: `ef-${ef.id}-${ef.fecha}`, kind: 'efemeride', fecha: ef.fecha, diasHasta, titulo: ef.titulo,
-      subtitulo: diasHasta === 0 ? 'Hoy' : diasHasta === 1 ? 'Mañana' : fmtFecha(ef.fecha) })
+      subtitulo: fmtSub(diasHasta, ef.fecha) })
   }
   unifiedItems.sort((a, b) => a.diasHasta - b.diasHasta)
 
@@ -579,9 +585,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
                             </span>
                           </div>
                     ) : (
-                      <div className="w-8 flex items-center justify-center flex-shrink-0">
-                        <div className={`w-2 h-2 rounded-full ${dotColor}`} />
-                      </div>
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`} />
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-medium truncate">{titulo}</p>
