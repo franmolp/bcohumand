@@ -170,6 +170,8 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   const in30Str = `${in30.getFullYear()}-${String(in30.getMonth()+1).padStart(2,'0')}-${String(in30.getDate()).padStart(2,'0')}`
   const hace7 = new Date(today); hace7.setDate(today.getDate() - 7)
   const hace7Str = hace7.toISOString()
+  const nextMo = mo === 12 ? 1 : mo + 1
+  const nextMoYr = mo === 12 ? yr + 1 : yr
 
   const showAusentes = session.rol === 'HR' || session.rol === 'Encargada'
 
@@ -183,7 +185,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   const mesEnd   = `${yr}-${String(mo).padStart(2,'0')}-${String(new Date(yr, mo, 0).getDate()).padStart(2,'0')}`
   const mesNombre = today.toLocaleString('es', { month: 'long' })
 
-  const [vacRes, notifRes, usersRes, evRes, configRes, solPendRes, ausentesRes, muroRes, palabraHoyRes, partidaHoyRes, rankingMesRes] = await Promise.all([
+  const [vacRes, notifRes, usersRes, evRes, configRes, solPendRes, ausentesRes, muroRes, palabraHoyRes, partidaHoyRes, rankingMesRes, efemRes] = await Promise.all([
     supabase
       .from('solicitudes')
       .select('dias')
@@ -260,6 +262,12 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
       .eq('resuelta', true)
       .gte('fecha', mesStart)
       .lte('fecha', mesEnd),
+
+    supabaseAdmin
+      .from('efemerides')
+      .select('id, titulo, mes, dia, anio, tipo')
+      .in('mes', [mo, nextMo])
+      .or(`anio.is.null,anio.eq.${yr}${nextMoYr !== yr ? `,anio.eq.${nextMoYr}` : ''}`),
   ])
 
   // Vacaciones
@@ -284,6 +292,49 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
     30,
     session.id,
   )
+
+  // Efemérides: convertir mes+dia a fecha y filtrar al rango de 30 días
+  const efemerides = (efemRes.data ?? []).flatMap(ef => {
+    const results: { id: number; titulo: string; tipo: string; fecha: string }[] = []
+    for (const [m, y] of [[mo, yr], [nextMo, nextMoYr]] as [number, number][]) {
+      if (ef.mes !== m) continue
+      if (ef.anio !== null && ef.anio !== y) continue
+      const fecha = `${y}-${String(m).padStart(2,'0')}-${String(ef.dia).padStart(2,'0')}`
+      if (fecha >= todayStr && fecha <= in30Str) results.push({ id: ef.id, titulo: ef.titulo, tipo: ef.tipo, fecha })
+    }
+    return results
+  })
+
+  // Lista unificada de próximos eventos + cumpleaños + efemérides
+  type UnifiedItem = {
+    key: string
+    kind: 'evento' | 'cumple' | 'efemeride'
+    fecha: string
+    diasHasta: number
+    titulo: string
+    subtitulo: string
+    emoji?: string
+    fotoPerfil?: string | null
+    isThisWeek?: boolean
+  }
+  const unifiedItems: UnifiedItem[] = []
+
+  for (const ev of eventos) {
+    const diasHasta = Math.floor((new Date(ev.fecha + 'T12:00:00').getTime() - new Date(todayStr + 'T12:00:00').getTime()) / 86400000)
+    unifiedItems.push({ key: `ev-${ev.id}`, kind: 'evento', fecha: ev.fecha, diasHasta, titulo: ev.titulo,
+      subtitulo: diasHasta === 0 ? 'Hoy' : diasHasta === 1 ? 'Mañana' : fmtFecha(ev.fecha), emoji: ev.emoji ?? undefined })
+  }
+  for (const b of proxCumple) {
+    unifiedItems.push({ key: `bd-${b.nombre}`, kind: 'cumple', fecha: b.fecha, diasHasta: b.dias, titulo: b.nombre,
+      subtitulo: b.dias === 0 ? '¡Hoy cumple años! 🎂' : b.dias === 1 ? 'Mañana cumple 🎂' : `en ${b.dias} días · ${fmtFecha(b.fecha)}`,
+      fotoPerfil: b.foto_perfil, isThisWeek: b.isThisWeek })
+  }
+  for (const ef of efemerides) {
+    const diasHasta = Math.floor((new Date(ef.fecha + 'T12:00:00').getTime() - new Date(todayStr + 'T12:00:00').getTime()) / 86400000)
+    unifiedItems.push({ key: `ef-${ef.id}-${ef.fecha}`, kind: 'efemeride', fecha: ef.fecha, diasHasta, titulo: ef.titulo,
+      subtitulo: diasHasta === 0 ? 'Hoy' : diasHasta === 1 ? 'Mañana' : fmtFecha(ef.fecha) })
+  }
+  unifiedItems.sort((a, b) => a.diasHasta - b.diasHasta)
 
   const TIPOS_AUSENCIA = ['Ausencia por Salud', 'Ausencia Injustificada', 'Vacaciones', 'Solicitud de Días', 'Cambio de horario/día']
   const ausentesHoyList = (ausentesRes.data ?? []).filter(r => {
@@ -500,72 +551,63 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
         {/* Right column */}
         <div className="space-y-4">
 
-          {/* Próximos eventos */}
+          {/* Próximos eventos y cumpleaños */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <Link href="/dashboard/calendario" className="flex items-center justify-between px-5 py-4 border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
-              <h2 className="text-[14px] font-bold text-violet-600">Próximos Eventos</h2>
+              <h2 className="text-[14px] font-bold text-violet-600">Próximos eventos y cumpleaños</h2>
               <div className="flex items-center gap-2">
-                {eventos.length > 0 && <span className="text-[12px] font-bold text-violet-500">{eventos.length}</span>}
+                {unifiedItems.length > 0 && <span className="text-[12px] font-bold text-violet-500">{unifiedItems.length}</span>}
                 <IconChevronRight size={14} className="text-gray-300" />
               </div>
             </Link>
             <div className="p-4 space-y-2">
-              {eventos.length === 0 && (
+              {unifiedItems.length === 0 && (
                 <p className="text-center text-[13px] text-gray-400 py-6">Sin eventos próximos</p>
               )}
-              {eventos.slice(0, 5).map(ev => {
-                const diasHasta = Math.floor(
-                  (new Date(ev.fecha + 'T12:00:00').getTime() - new Date(todayStr + 'T12:00:00').getTime()) / 86400000
-                )
+              {unifiedItems.slice(0, 8).map(item => {
+                if (item.kind === 'evento') {
+                  return (
+                    <div key={item.key} className="flex items-start gap-2.5 p-2.5 rounded-xl bg-violet-50/60">
+                      <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0 text-sm">
+                        {item.emoji ?? <IconCalendar size={14} className="text-violet-500" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-semibold truncate">{item.titulo}</p>
+                        <p className="text-[11px] text-gray-400">{item.subtitulo}</p>
+                      </div>
+                    </div>
+                  )
+                }
+                if (item.kind === 'cumple') {
+                  return (
+                    <div key={item.key} className={`flex items-center gap-2.5 p-2.5 rounded-xl ${item.isThisWeek ? 'bg-pink-50' : 'bg-gray-50/60'}`}>
+                      {item.fotoPerfil
+                        ? <img src={item.fotoPerfil} alt={item.titulo} className={`w-8 h-8 rounded-full object-cover flex-shrink-0 ${item.isThisWeek ? 'ring-2 ring-pink-300' : ''}`} />
+                        : <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-[image:var(--gradient)] shadow-sm ${item.isThisWeek ? 'ring-2 ring-pink-300' : ''}`}>
+                            <span className="text-[10px] font-bold text-white">
+                              {item.titulo.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
+                            </span>
+                          </div>
+                      }
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-[13px] truncate ${item.isThisWeek ? 'font-bold text-gray-900' : 'font-semibold text-gray-700'}`}>{item.titulo}</p>
+                        <p className={`text-[11px] ${item.isThisWeek ? 'text-pink-500 font-medium' : 'text-gray-400'}`}>{item.subtitulo}</p>
+                      </div>
+                    </div>
+                  )
+                }
                 return (
-                  <div key={ev.id} className="flex items-start gap-2.5 p-2.5 rounded-xl bg-violet-50/60">
-                    <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0 text-sm">
-                      {ev.emoji ?? <IconCalendar size={14} className="text-violet-500" />}
+                  <div key={item.key} className="flex items-start gap-2.5 p-2.5 rounded-xl bg-blue-50/60">
+                    <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0 text-[16px]">
+                      📅
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-semibold truncate">{ev.titulo}</p>
-                      <p className="text-[11px] text-gray-400">
-                        {diasHasta === 0 ? 'Hoy' : diasHasta === 1 ? 'Mañana' : fmtFecha(ev.fecha)}
-                        {!ev.todo_el_dia && ev.hora_desde && ` · ${ev.hora_desde.slice(0,5)}`}
-                      </p>
+                      <p className="text-[13px] font-semibold truncate">{item.titulo}</p>
+                      <p className="text-[11px] text-gray-400">{item.subtitulo}</p>
                     </div>
                   </div>
                 )
               })}
-            </div>
-          </div>
-
-          {/* Próximos cumpleaños */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <Link href="/dashboard/calendario" className="flex items-center justify-between px-5 py-4 border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
-              <h2 className="text-[14px] font-bold text-pink-600">Próximos Cumpleaños</h2>
-              <div className="flex items-center gap-2">
-                {proxCumple.length > 0 && <span className="text-[12px] font-bold text-pink-500">{proxCumple.length}</span>}
-                <IconChevronRight size={14} className="text-gray-300" />
-              </div>
-            </Link>
-            <div className="p-4 space-y-2">
-              {proxCumple.length === 0 && (
-                <p className="text-center text-[13px] text-gray-400 py-6">Sin cumpleaños próximos</p>
-              )}
-              {proxCumple.map((b, i) => (
-                <div key={i} className={`flex items-center gap-2.5 p-2.5 rounded-xl ${b.isThisWeek ? 'bg-pink-50' : 'bg-gray-50/60'}`}>
-                  {b.foto_perfil
-                    ? <img src={b.foto_perfil} alt={b.nombre} className={`w-8 h-8 rounded-full object-cover flex-shrink-0 ${b.isThisWeek ? 'ring-2 ring-pink-300' : ''}`} />
-                    : <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-[image:var(--gradient)] shadow-sm ${b.isThisWeek ? 'ring-2 ring-pink-300' : ''}`}>
-                        <span className="text-[10px] font-bold text-white">
-                          {b.nombre.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
-                        </span>
-                      </div>
-                  }
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-[13px] truncate ${b.isThisWeek ? 'font-bold text-gray-900' : 'font-semibold text-gray-700'}`}>{b.nombre}</p>
-                    <p className={`text-[11px] ${b.isThisWeek ? 'text-pink-500 font-medium' : 'text-gray-400'}`}>
-                      {b.dias === 0 ? 'Hoy' : b.dias === 1 ? 'Mañana' : `en ${b.dias} días · ${fmtFecha(b.fecha)}`}
-                    </p>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
 
