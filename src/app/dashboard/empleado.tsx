@@ -560,28 +560,32 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
                 <IconChevronRight size={14} className="text-gray-300" />
               </div>
             </Link>
-            <div className="p-4 space-y-2">
+            <div className="divide-y divide-gray-50">
               {unifiedItems.length === 0 && (
-                <p className="text-center text-[13px] text-gray-400 py-6">Sin eventos próximos</p>
+                <p className="text-center text-[13px] text-gray-400 py-8">Sin eventos próximos</p>
               )}
               {unifiedItems.slice(0, 8).map(item => {
-                const isEvento = item.kind === 'evento'
                 const isCumple = item.kind === 'cumple'
-                const bgRow   = isEvento ? 'bg-violet-100' : isCumple ? 'bg-pink-100' : 'bg-blue-100'
-                const bgIcon  = isEvento ? 'bg-violet-200' : isCumple ? 'bg-pink-200' : 'bg-blue-200'
-                const textSub = isEvento ? 'text-violet-600' : isCumple ? 'text-pink-600' : 'text-blue-600'
-                const iconNode = isEvento
-                  ? (item.emoji ?? <IconCalendar size={14} className="text-violet-600" />)
-                  : isCumple ? '🎂' : '📅'
+                const dotColor = item.kind === 'evento' ? 'bg-violet-400' : 'bg-blue-400'
                 const titulo = isCumple ? `Cumpleaños de ${item.titulo}` : item.titulo
                 return (
-                  <div key={item.key} className={`flex items-center gap-2.5 p-2.5 rounded-xl ${bgRow}`}>
-                    <div className={`w-8 h-8 rounded-lg ${bgIcon} flex items-center justify-center flex-shrink-0 text-[16px]`}>
-                      {iconNode}
-                    </div>
+                  <div key={item.key} className="flex items-center gap-3 px-5 py-3.5">
+                    {isCumple ? (
+                      item.fotoPerfil
+                        ? <img src={item.fotoPerfil} alt={item.titulo} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                        : <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-[image:var(--gradient)] shadow-sm">
+                            <span className="text-[10px] font-bold text-white">
+                              {item.titulo.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
+                            </span>
+                          </div>
+                    ) : (
+                      <div className="w-8 flex items-center justify-center flex-shrink-0">
+                        <div className={`w-2 h-2 rounded-full ${dotColor}`} />
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-semibold truncate">{titulo}</p>
-                      <p className={`text-[11px] font-medium ${textSub}`}>{item.subtitulo}</p>
+                      <p className="text-[13px] font-medium truncate">{titulo}</p>
+                      <p className="text-[11px] text-gray-400">{item.subtitulo}</p>
                     </div>
                   </div>
                 )
