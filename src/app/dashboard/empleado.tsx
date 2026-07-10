@@ -2,7 +2,7 @@ import Link from 'next/link'
 import type { SessionUser } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { IconCalendar, IconBell, IconAlertCircle, IconChevronRight, IconStar } from '@/components/ui/Icons'
+import { IconCalendar, IconBell, IconAlertCircle, IconChevronRight, IconStar, IconClock, IconEdit } from '@/components/ui/Icons'
 import GoogleReviewsCarousel from '@/components/GoogleReviewsCarousel'
 
 const VACACIONES_DEFAULT = 14
@@ -500,7 +500,10 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
           {/* Mis solicitudes pendientes */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <Link href="/dashboard/solicitudes" className="flex items-center justify-between px-5 py-4 border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
-              <h2 className="text-[14px] font-bold text-amber-600">Mis solicitudes pendientes</h2>
+              <div className="flex items-center gap-2">
+                <IconClock size={15} className="text-amber-500" />
+                <h2 className="text-[14px] font-bold text-amber-600">Mis solicitudes pendientes</h2>
+              </div>
               <div className="flex items-center gap-2">
                 {misSOLS.length > 0 && <span className="text-[12px] font-bold text-amber-600">{misSOLS.length}</span>}
                 <IconChevronRight size={14} className="text-gray-300" />
@@ -512,7 +515,9 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
               )}
               {misSOLS.map(s => (
                 <div key={s.id} className="flex items-center gap-3 px-5 py-3.5">
-                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: tipoColor(s.tipo) }} />
+                  <div className="w-8 flex items-center justify-center flex-shrink-0">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: tipoColor(s.tipo) }} />
+                  </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-medium">{s.tipo}</p>
                     <p className="text-[11px] text-gray-400">
@@ -560,7 +565,10 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
           {/* Próximos eventos y cumpleaños */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <Link href="/dashboard/calendario" className="flex items-center justify-between px-5 py-4 border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
-              <h2 className="text-[14px] font-bold text-violet-600">Próximos eventos y cumpleaños</h2>
+              <div className="flex items-center gap-2">
+                <IconCalendar size={15} className="text-violet-500" />
+                <h2 className="text-[14px] font-bold text-violet-600">Próximos eventos y cumpleaños</h2>
+              </div>
               <div className="flex items-center gap-2">
                 {unifiedItems.length > 0 && <span className="text-[12px] font-bold text-violet-500">{unifiedItems.length}</span>}
                 <IconChevronRight size={14} className="text-gray-300" />
@@ -585,7 +593,9 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
                             </span>
                           </div>
                     ) : (
-                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`} />
+                      <div className="w-8 flex items-center justify-center flex-shrink-0">
+                        <div className={`w-2 h-2 rounded-full ${dotColor}`} />
+                      </div>
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-medium truncate">{titulo}</p>
@@ -607,7 +617,10 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
       {/* Última publicación del muro */}
       <Link href="/dashboard/muro" className="block bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-[14px] font-bold text-indigo-600">Últimas novedades</h2>
+          <div className="flex items-center gap-2">
+            <IconEdit size={15} className="text-indigo-500" />
+            <h2 className="text-[14px] font-bold text-indigo-600">Últimas novedades</h2>
+          </div>
           <IconChevronRight size={14} className="text-gray-300" />
         </div>
         {muroPost && muroAutor ? (
