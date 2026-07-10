@@ -185,7 +185,9 @@ function CompraModal({ open, editTarget, proveedores, onClose, onSaved, onProvee
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-[13px] font-medium text-[var(--text)] mb-1">Fecha <span className="text-red-500">*</span></label>
-          <input type="date" value={form.fecha} onChange={e => set('fecha', e.target.value)} required className="w-full rounded-xl border border-[var(--border)] px-3 py-2.5 text-[15px] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"/>
+          <input type="date" value={form.fecha} onChange={e => set('fecha', e.target.value)} required
+            style={{ fontSize: 16, WebkitAppearance: 'none' }}
+            className="w-full min-w-0 rounded-xl border border-[var(--border)] px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"/>
         </div>
 
         <div>
