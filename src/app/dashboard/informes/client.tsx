@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import type { SessionUser } from '@/types'
 import { Spinner } from '@/components/ui'
-import { IconBarChart, IconChevronLeft, IconChevronRight, IconDollar, IconCalendarCheck, IconClock, IconUsers } from '@/components/ui/Icons'
+import { IconBarChart, IconChevronLeft, IconChevronRight, IconDollar, IconCalendarCheck, IconUsers, IconReceipt } from '@/components/ui/Icons'
 
 interface Kpis {
   totalCitas: number
@@ -15,14 +15,12 @@ interface Kpis {
   proyeccion: number | null
   diasTranscurridos: number
   diasDelMes: number
-  fuenteVentas: 'liquidacion' | 'fresha'
 }
 
 interface EmpleadaRow {
   nombre: string
   citas: number
   ventaNeta: number
-  comision: number | null
   minOcupada: number
   minLibre: number
   ocupacionPct: number | null
@@ -39,8 +37,14 @@ interface ServicioRow {
   precioPorHora: number | null
 }
 
+interface PagoRow {
+  tipo: string
+  total: number
+}
+
 interface ApiData {
   kpis: Kpis
+  pagosPorTipo: PagoRow[]
   productividad: EmpleadaRow[]
   servicios: ServicioRow[]
   rentabilidad: ServicioRow[]
@@ -108,10 +112,7 @@ export default function InformesClient({ user }: { user: SessionUser }) {
     setError(null)
     fetch(`/api/informes?mes=${mes}`)
       .then(r => r.json())
-      .then(d => {
-        if (d.error) setError(d.error)
-        else setDatos(d)
-      })
+      .then(d => { if (d.error) setError(d.error); else setDatos(d) })
       .catch(() => setError('Error al cargar'))
       .finally(() => setCargando(false))
   }, [mes])
@@ -122,166 +123,152 @@ export default function InformesClient({ user }: { user: SessionUser }) {
 
   return (
     <div className="pb-6">
-      {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <IconBarChart size={22} className="text-[var(--primary)]" />
         <h1 className="text-[19px] font-bold text-[var(--text)]">Informes</h1>
       </div>
 
-      {/* Selector de mes */}
       <div className="flex items-center justify-between bg-white rounded-2xl border border-[var(--border)] px-4 py-3 mb-5">
-        <button
-          onClick={() => setMes(prevMes)}
-          className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-gray-50 transition-colors cursor-pointer"
-        >
+        <button onClick={() => setMes(prevMes)} className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-gray-50 transition-colors cursor-pointer">
           <IconChevronLeft size={18} />
         </button>
         <span className="text-[15px] font-semibold text-[var(--text)]">{fmtMes(mes)}</span>
-        <button
-          onClick={() => puedeAvanzar && setMes(nextMes)}
-          className={`p-1.5 rounded-lg transition-colors ${puedeAvanzar ? 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-gray-50 cursor-pointer' : 'text-gray-200 cursor-default'}`}
-        >
+        <button onClick={() => puedeAvanzar && setMes(nextMes)} className={`p-1.5 rounded-lg transition-colors ${puedeAvanzar ? 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-gray-50 cursor-pointer' : 'text-gray-200 cursor-default'}`}>
           <IconChevronRight size={18} />
         </button>
       </div>
 
       {cargando && <div className="flex justify-center py-16"><Spinner /></div>}
-
-      {error && !cargando && (
-        <div className="flex items-center gap-2 text-red-500 text-[14px] py-8 justify-center">
-          {error}
-        </div>
-      )}
+      {error && !cargando && <div className="text-red-500 text-[14px] py-8 text-center">{error}</div>}
 
       {datos && !cargando && k && (
         <div className="flex flex-col gap-5">
 
-          {/* KPI cards principales */}
+          {/* KPIs principales */}
           <div className="grid grid-cols-2 gap-3">
             <KpiCard label="Citas realizadas" value={String(k.totalCitas)} sub={k.canceladas > 0 ? `${k.canceladas} canceladas (${k.tasaCancelacion}%)` : undefined} />
-            <KpiCard label="Ventas netas" value={fmt$(k.ventasNetas)} sub={k.fuenteVentas === 'fresha' ? 'Estimado (Fresha)' : undefined} />
+            <KpiCard label="Ventas netas" value={fmt$(k.ventasNetas)} sub="Loyverse" />
             <KpiCard label="Gastos" value={fmt$(k.gastos)} />
-            <KpiCard
-              label="Balance estimado"
-              value={fmt$(k.balance)}
-              color={k.balance >= 0 ? 'text-green-600' : 'text-red-500'}
-            />
+            <KpiCard label="Balance estimado" value={fmt$(k.balance)} color={k.balance >= 0 ? 'text-green-600' : 'text-red-500'} />
           </div>
 
           {/* Proyección */}
           {k.proyeccion !== null && (
             <div className="bg-white rounded-2xl border border-[var(--border)] px-4 py-4">
-              <p className="text-[11px] text-[var(--text-muted)] font-medium uppercase tracking-wide mb-2">Proyección del mes</p>
+              <p className="text-[11px] text-[var(--text-muted)] font-medium uppercase tracking-wide mb-2">Proyección del mes · Loyverse</p>
               <div className="flex items-end gap-2 mb-2">
                 <span className="text-[20px] font-bold text-[var(--primary)]">{fmt$(k.proyeccion)}</span>
                 <span className="text-[12px] text-[var(--text-muted)] mb-0.5">estimado cierre</span>
               </div>
-              <div className="flex items-center gap-2">
-                <BaraCSS pct={k.diasTranscurridos / k.diasDelMes * 100} color="var(--primary)" />
-                <span className="text-[11px] text-[var(--text-muted)] whitespace-nowrap">
-                  Día {k.diasTranscurridos}/{k.diasDelMes}
-                </span>
+              <div className="flex items-center gap-2 mb-1">
+                <BaraCSS pct={k.diasTranscurridos / k.diasDelMes * 100} />
+                <span className="text-[11px] text-[var(--text-muted)] whitespace-nowrap">Día {k.diasTranscurridos}/{k.diasDelMes}</span>
               </div>
-              <p className="text-[11px] text-[var(--text-muted)] mt-1.5">
-                {fmt$(k.ventasNetas)} registrados hasta hoy
+              <p className="text-[11px] text-[var(--text-muted)]">{fmt$(k.ventasNetas)} acumulados</p>
+            </div>
+          )}
+
+          {/* Ventas por tipo de pago */}
+          {datos.pagosPorTipo.length > 0 && (
+            <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
+              <div className="px-4 py-3 border-b border-[var(--border)]">
+                <p className="text-[13px] font-semibold text-[var(--text)] flex items-center gap-2">
+                  <IconReceipt size={15} className="text-[var(--primary)]" /> Ventas por medio de pago
+                </p>
+              </div>
+              <div className="px-4 py-3 flex flex-col gap-3">
+                {(() => {
+                  const maxTotal = Math.max(...datos.pagosPorTipo.map(p => p.total), 1)
+                  return datos.pagosPorTipo.map((p, i) => (
+                    <div key={i}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[13px] font-medium text-[var(--text)]">{p.tipo}</span>
+                        <span className="text-[13px] font-semibold text-[var(--text)]">{fmt$(p.total)}</span>
+                      </div>
+                      <BaraCSS pct={p.total / maxTotal * 100} />
+                    </div>
+                  ))
+                })()}
+              </div>
+              <p className="px-4 py-2 text-[10px] text-[var(--text-muted)] border-t border-gray-50">
+                Monto neto cobrado por medio · Fuente: Loyverse
               </p>
             </div>
           )}
 
           {/* Productividad por empleada */}
-          {datos.productividad.length > 0 && (() => {
-            const tieneComision = datos.productividad.some(e => e.comision !== null)
-            return (
-              <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
-                <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between">
-                  <p className="text-[13px] font-semibold text-[var(--text)] flex items-center gap-2">
-                    <IconUsers size={15} className="text-[var(--primary)]" /> Productividad por empleada
-                  </p>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${k.fuenteVentas === 'liquidacion' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
-                    {k.fuenteVentas === 'liquidacion' ? 'Desde liquidación' : 'Estimado (Fresha)'}
-                  </span>
-                </div>
-
-                {/* Mobile: tabla compacta una línea por empleada */}
-                <div className="lg:hidden">
-                  <div className="flex items-center px-4 py-2 border-b border-gray-100 text-[9px] text-[var(--text-muted)] uppercase tracking-wide">
-                    <span className="flex-1">Empleada</span>
-                    <span className="w-8 text-right">Citas</span>
-                    <span className="w-[78px] text-right">Ventas</span>
-                    <span className="w-10 text-right">% Oc.</span>
-                    <span className="w-10 text-right">Asist.</span>
-                  </div>
-                  {datos.productividad.map((e, i) => (
-                    <div key={i} className="flex items-center px-4 py-2.5 border-b border-gray-50 last:border-0">
-                      <span className="flex-1 text-[12px] font-semibold text-[var(--text)] truncate pr-2">{e.nombre}</span>
-                      <span className="w-8 text-right text-[12px] text-[var(--text-muted)]">{e.citas}</span>
-                      <span className="w-[78px] text-right text-[12px] font-semibold text-[var(--text)]">{fmt$(e.ventaNeta)}</span>
-                      <span className="w-10 text-right text-[12px]">
-                        {e.ocupacionPct !== null
-                          ? <span className={`font-semibold ${e.ocupacionPct >= 70 ? 'text-green-600' : e.ocupacionPct >= 40 ? 'text-amber-500' : 'text-red-500'}`}>{e.ocupacionPct}%</span>
-                          : <span className="text-gray-300">—</span>}
-                      </span>
-                      <span className="w-10 text-right text-[11px] text-[var(--text-muted)]">
-                        {e.diasHabiles > 0 ? `${e.diasPresente}/${e.diasHabiles}d` : <span className="text-gray-300">—</span>}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Desktop: tabla completa */}
-                <div className="hidden lg:block overflow-x-auto">
-                  <table className="w-full text-[12px]">
-                    <thead>
-                      <tr className="border-b border-[var(--border)] text-[var(--text-muted)]">
-                        <th className="text-left px-4 py-2.5 font-medium">Empleada</th>
-                        <th className="text-right px-3 py-2.5 font-medium">Citas</th>
-                        <th className="text-right px-3 py-2.5 font-medium">Ventas</th>
-                        {tieneComision && <th className="text-right px-3 py-2.5 font-medium">Comisión</th>}
-                        <th className="text-right px-3 py-2.5 font-medium">T. ocup.</th>
-                        <th className="text-right px-3 py-2.5 font-medium">T. libre</th>
-                        <th className="text-right px-3 py-2.5 font-medium">% ocup.</th>
-                        <th className="text-right px-4 py-2.5 font-medium">Asist.</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {datos.productividad.map((e, i) => (
-                        <tr key={i} className="border-b border-gray-50 last:border-0">
-                          <td className="px-4 py-3 font-medium text-[var(--text)]">{e.nombre}</td>
-                          <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.citas}</td>
-                          <td className="px-3 py-3 text-right font-semibold text-[var(--text)]">{fmt$(e.ventaNeta)}</td>
-                          {tieneComision && (
-                            <td className="px-3 py-3 text-right text-[var(--primary)] font-medium">
-                              {e.comision !== null ? fmt$(e.comision) : <span className="text-gray-300">—</span>}
-                            </td>
-                          )}
-                          <td className="px-3 py-3 text-right text-[var(--text-muted)]">
-                            {e.minOcupada > 0 ? fmtMin(e.minOcupada) : <span className="text-gray-300">—</span>}
-                          </td>
-                          <td className="px-3 py-3 text-right text-[var(--text-muted)]">
-                            {e.minLibre > 0 ? fmtMin(e.minLibre) : <span className="text-gray-300">—</span>}
-                          </td>
-                          <td className="px-3 py-3 text-right">
-                            {e.ocupacionPct !== null ? (
-                              <span className={`font-semibold ${e.ocupacionPct >= 70 ? 'text-green-600' : e.ocupacionPct >= 40 ? 'text-amber-500' : 'text-red-500'}`}>
-                                {e.ocupacionPct}%
-                              </span>
-                            ) : <span className="text-gray-300">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-right text-[var(--text-muted)]">
-                            {e.diasHabiles > 0 ? `${e.diasPresente}/${e.diasHabiles}d` : <span className="text-gray-300">—</span>}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <p className="px-4 py-2 text-[10px] text-[var(--text-muted)] border-t border-gray-50">
-                  T. ocup. / T. libre = tiempo de citas vs tiempo libre dentro del horario base · Asist. = días presentes / días hábiles
+          {datos.productividad.length > 0 && (
+            <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
+              <div className="px-4 py-3 border-b border-[var(--border)]">
+                <p className="text-[13px] font-semibold text-[var(--text)] flex items-center gap-2">
+                  <IconUsers size={15} className="text-[var(--primary)]" /> Productividad por empleada
                 </p>
               </div>
-            )
-          })()}
+
+              {/* Mobile */}
+              <div className="lg:hidden">
+                <div className="flex items-center px-4 py-2 border-b border-gray-100 text-[9px] text-[var(--text-muted)] uppercase tracking-wide">
+                  <span className="flex-1">Empleada</span>
+                  <span className="w-8 text-right">Citas</span>
+                  <span className="w-[80px] text-right">Ventas</span>
+                  <span className="w-10 text-right">Ocup.</span>
+                  <span className="w-10 text-right">Asist.</span>
+                </div>
+                {datos.productividad.map((e, i) => (
+                  <div key={i} className="flex items-center px-4 py-2.5 border-b border-gray-50 last:border-0">
+                    <span className="flex-1 text-[12px] font-semibold truncate pr-2">{e.nombre}</span>
+                    <span className="w-8 text-right text-[12px] text-[var(--text-muted)]">{e.citas}</span>
+                    <span className="w-[80px] text-right text-[12px] font-semibold">{fmt$(e.ventaNeta)}</span>
+                    <span className="w-10 text-right text-[12px]">
+                      {e.ocupacionPct !== null
+                        ? <span className={`font-semibold ${e.ocupacionPct >= 70 ? 'text-green-600' : e.ocupacionPct >= 40 ? 'text-amber-500' : 'text-red-500'}`}>{e.ocupacionPct}%</span>
+                        : <span className="text-gray-300">—</span>}
+                    </span>
+                    <span className="w-10 text-right text-[11px] text-[var(--text-muted)]">
+                      {e.diasHabiles > 0 ? `${e.diasPresente}/${e.diasHabiles}d` : '—'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop */}
+              <div className="hidden lg:block overflow-x-auto">
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="border-b border-[var(--border)] text-[var(--text-muted)]">
+                      <th className="text-left px-4 py-2.5 font-medium">Empleada</th>
+                      <th className="text-right px-3 py-2.5 font-medium">Citas</th>
+                      <th className="text-right px-3 py-2.5 font-medium">Ventas (Loyverse)</th>
+                      <th className="text-right px-3 py-2.5 font-medium">T. ocup.</th>
+                      <th className="text-right px-3 py-2.5 font-medium">T. libre</th>
+                      <th className="text-right px-3 py-2.5 font-medium">% ocup.</th>
+                      <th className="text-right px-4 py-2.5 font-medium">Asist.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {datos.productividad.map((e, i) => (
+                      <tr key={i} className="border-b border-gray-50 last:border-0">
+                        <td className="px-4 py-3 font-medium text-[var(--text)]">{e.nombre}</td>
+                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.citas}</td>
+                        <td className="px-3 py-3 text-right font-semibold text-[var(--text)]">{e.ventaNeta > 0 ? fmt$(e.ventaNeta) : <span className="text-gray-300">—</span>}</td>
+                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.minOcupada > 0 ? fmtMin(e.minOcupada) : <span className="text-gray-300">—</span>}</td>
+                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.minLibre > 0 ? fmtMin(e.minLibre) : <span className="text-gray-300">—</span>}</td>
+                        <td className="px-3 py-3 text-right">
+                          {e.ocupacionPct !== null
+                            ? <span className={`font-semibold ${e.ocupacionPct >= 70 ? 'text-green-600' : e.ocupacionPct >= 40 ? 'text-amber-500' : 'text-red-500'}`}>{e.ocupacionPct}%</span>
+                            : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right text-[var(--text-muted)]">{e.diasHabiles > 0 ? `${e.diasPresente}/${e.diasHabiles}d` : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="px-4 py-2 text-[10px] text-[var(--text-muted)] border-t border-gray-50">
+                Ventas: precio con descuento aplicado (Loyverse) · Ocup.: tiempo en citas vs horario base (Fresha)
+              </p>
+            </div>
+          )}
 
           {/* Servicios más pedidos */}
           {datos.servicios.length > 0 && (
@@ -301,10 +288,7 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                           <p className="text-[13px] font-medium text-[var(--text)] truncate">{s.servicio}</p>
                           {s.categoria && <p className="text-[10px] text-[var(--text-muted)]">{s.categoria}</p>}
                         </div>
-                        <div className="flex items-center gap-2 text-[12px] shrink-0">
-                          <span className="font-semibold text-[var(--text)]">{s.cantidad} citas</span>
-                          <span className="text-[var(--text-muted)]">{fmt$(s.ventaNeta)}</span>
-                        </div>
+                        <span className="text-[12px] font-semibold text-[var(--text)] shrink-0">{s.cantidad} citas</span>
                       </div>
                       <BaraCSS pct={s.cantidad / maxCant * 100} />
                     </div>
@@ -322,39 +306,7 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                   <IconDollar size={15} className="text-[var(--primary)]" /> Rentabilidad por servicio
                 </p>
               </div>
-
-              {/* Mobile: cards */}
-              <div className="lg:hidden divide-y divide-gray-50">
-                {datos.rentabilidad.map((s, i) => (
-                  <div key={i} className="px-4 py-3 space-y-1.5">
-                    <div>
-                      <p className="text-[13px] font-medium text-[var(--text)]">{s.servicio}</p>
-                      {s.categoria && <p className="text-[10px] text-[var(--text-muted)]">{s.categoria}</p>}
-                    </div>
-                    <div className="grid grid-cols-4 gap-x-2">
-                      <div>
-                        <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wide">Citas</p>
-                        <p className="text-[12px] font-semibold text-[var(--text)]">{s.cantidad}</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wide">Duración</p>
-                        <p className="text-[12px] text-[var(--text-muted)]">{s.duracionMin !== null ? `${s.duracionMin}m` : '—'}</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wide">P. prom.</p>
-                        <p className="text-[12px] text-[var(--text-muted)]">{fmt$(s.ventaNeta / s.cantidad)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wide">$/hora</p>
-                        <p className="text-[12px] font-semibold text-[var(--primary)]">{fmt$(s.precioPorHora!)}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Desktop: tabla completa */}
-              <div className="hidden lg:block overflow-x-auto">
+              <div className="overflow-x-auto">
                 <table className="w-full text-[12px]">
                   <thead>
                     <tr className="border-b border-[var(--border)] text-[var(--text-muted)]">
@@ -373,29 +325,23 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                           {s.categoria && <p className="text-[10px] text-[var(--text-muted)]">{s.categoria}</p>}
                         </td>
                         <td className="px-3 py-3 text-right text-[var(--text-muted)]">{s.cantidad}</td>
-                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">
-                          {s.duracionMin !== null ? `${s.duracionMin}m` : <span className="text-gray-300">—</span>}
-                        </td>
+                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">{s.duracionMin !== null ? `${s.duracionMin}m` : '—'}</td>
                         <td className="px-3 py-3 text-right text-[var(--text-muted)]">{fmt$(s.ventaNeta / s.cantidad)}</td>
-                        <td className="px-4 py-3 text-right">
-                          <span className="font-semibold text-[var(--primary)]">{fmt$(s.precioPorHora!)}</span>
-                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-[var(--primary)]">{fmt$(s.precioPorHora!)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-
               <p className="px-4 py-2 text-[10px] text-[var(--text-muted)] border-t border-gray-50">
-                $/hora = precio promedio del servicio ÷ duración promedio en horas
+                $/hora = precio promedio ÷ duración promedio · Fuente: Fresha
               </p>
             </div>
           )}
 
           {k.totalCitas === 0 && datos.productividad.length === 0 && (
             <div className="text-center py-10 text-[var(--text-muted)] text-[14px]">
-              Sin datos de citas para este mes.
-              <p className="text-[12px] mt-1">Los informes se actualizan diariamente con la importación de Fresha.</p>
+              Sin datos para este mes.
             </div>
           )}
 

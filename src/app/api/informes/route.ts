@@ -3,21 +3,11 @@ import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { CHIP_INFO } from '@/lib/asistencia'
 
-function citaDurMin(c: { duracion_min: number | null; franja_inicio: string | null; franja_fin: string | null }): number {
-  if (c.duracion_min && c.duracion_min > 0) return c.duracion_min
-  if (c.franja_inicio && c.franja_fin) {
-    const diff = toMin(c.franja_fin) - toMin(c.franja_inicio)
-    if (diff > 0) return diff
-  }
-  return 0
-}
-
 function toMin(t: string): number {
   const [h, m] = t.split(':').map(Number)
   return h * 60 + (m || 0)
 }
 
-// Merge overlapping intervals clipped to [baseIni, baseFin] and return total occupied minutes
 function calcOcupado(intervals: Array<{ ini: number; fin: number }>, baseIni: number, baseFin: number): number {
   const clipped = intervals
     .map(iv => ({ ini: Math.max(iv.ini, baseIni), fin: Math.min(iv.fin, baseFin) }))
@@ -32,15 +22,21 @@ function calcOcupado(intervals: Array<{ ini: number; fin: number }>, baseIni: nu
   return total + (curFin - curIni)
 }
 
-const ESTADOS_CANCELADOS = new Set([
-  'cancelado', 'cancelada', 'cancelled', 'canceled',
-  'no_presentado', 'no presentado', 'no show', 'no-show', 'noshow',
-])
+const ESTADOS_CANCELADOS = new Set(['cancelado', 'cancelada', 'cancelled', 'canceled', 'no_presentado', 'no presentado', 'no show', 'no-show', 'noshow'])
 function esCancelada(estado: string | null) {
   return ESTADOS_CANCELADOS.has((estado ?? '').toLowerCase().trim())
 }
 
-const ESTADO_NO_CONTAR_PRESENTE = new Set(['Sin fichada'])
+function normStr(s: string): string {
+  return s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+}
+
+// "Brenda Pérez" → "brenda p"  |  "Brenda P" → "brenda p"
+function shortNorm(name: string): string {
+  const parts = normStr(name).split(/\s+/).filter(Boolean)
+  if (parts.length < 2) return parts[0] ?? ''
+  return `${parts[0]} ${parts[parts.length - 1][0]}`
+}
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -55,21 +51,25 @@ export async function GET(request: NextRequest) {
   const diasDelMes = new Date(y, m, 0).getDate()
   const fin = `${y}-${String(m).padStart(2, '0')}-${String(diasDelMes).padStart(2, '0')}`
 
+  // Hasta ayer (importación Loyverse corre a las 21hs, así que ayer siempre tiene datos)
   const tz = 'America/Argentina/Buenos_Aires'
   const ahora = new Date()
-  const horaArg = parseInt(ahora.toLocaleString('en-CA', { timeZone: tz, hour: 'numeric', hour12: false }))
-  const offsetDias = horaArg < 6 ? 2 : 1
-  const ultDiaCerrado = new Date(ahora)
-  ultDiaCerrado.setDate(ultDiaCerrado.getDate() - offsetDias)
-  const finCitas = ultDiaCerrado.toLocaleDateString('en-CA', { timeZone: tz })
+  const ayerAR = new Date(ahora)
+  ayerAR.setDate(ayerAR.getDate() - 1)
+  const ayerStr = ayerAR.toLocaleDateString('en-CA', { timeZone: tz })
+  const finDatos = ayerStr < fin ? ayerStr : fin
 
-  const diasTranscurridos = finCitas >= fin
-    ? diasDelMes
-    : Math.max(1, parseInt(finCitas.substring(8)))
+  const diasTranscurridos = finDatos >= fin ? diasDelMes : Math.max(1, parseInt(finDatos.substring(8)))
+
+  // Rango UTC para Loyverse (AR = UTC-3, entonces 00hs AR = 03:00 UTC)
+  const inicioUTC = `${inicio}T03:00:00.000Z`
+  const finDatosDplusOne = new Date(finDatos)
+  finDatosDplusOne.setDate(finDatosDplusOne.getDate() + 1)
+  const finDatosUTC = `${finDatosDplusOne.toISOString().slice(0, 10)}T02:59:59.999Z`
 
   const [
     { data: citas },
-    { data: atenciones },
+    { data: loyTickets },
     { data: asistencia },
     { data: comprasData },
     { data: usuarios },
@@ -78,12 +78,12 @@ export async function GET(request: NextRequest) {
       .from('fresha_citas_detalle')
       .select('usuario_id, nombre_empleada, estado, categoria, servicio, duracion_min, franja_inicio, franja_fin, venta_neta, fecha')
       .gte('fecha', inicio)
-      .lte('fecha', finCitas),
+      .lte('fecha', finDatos),
     supabaseAdmin
-      .from('liquidacion_atenciones')
-      .select('usuario_id, venta_neta, comision, articulo, categoria')
-      .eq('anio', y)
-      .eq('mes', m),
+      .from('loyverse_tickets')
+      .select('profesional, total_money, payment_type, receipt_date')
+      .gte('receipt_date', inicioUTC)
+      .lte('receipt_date', finDatosUTC),
     supabaseAdmin
       .from('asistencia_procesada')
       .select('usuario_id, estado, horas_base, fecha, horario_base_entrada, horario_base_salida')
@@ -97,34 +97,45 @@ export async function GET(request: NextRequest) {
     supabaseAdmin.from('usuarios').select('id, nombre'),
   ])
 
-  const nombreMap = new Map((usuarios ?? []).map(u => [u.id, u.nombre]))
+  // Map: shortNorm(nombre) → usuario_id  (para cruzar Loyverse con empleadas)
+  const shortToUid = new Map<string, string>()
+  const nombreMap = new Map<string, string>()
+  for (const u of usuarios ?? []) {
+    shortToUid.set(shortNorm(u.nombre), u.id)
+    nombreMap.set(u.id, u.nombre)
+  }
 
+  // ─── Loyverse: ventas netas y pagos ───────────────────────────────────────────
+  const tickets = loyTickets ?? []
+  const ventasNetas = tickets.reduce((s, t) => s + (t.total_money || 0), 0)
+  const proyeccion = diasTranscurridos < diasDelMes && diasTranscurridos > 0
+    ? Math.round(ventasNetas / diasTranscurridos * diasDelMes)
+    : null
+  const gastos = (comprasData ?? []).reduce((s, c) => s + (c.monto || 0), 0)
+
+  // Ventas por tipo de pago
+  const pagoMap = new Map<string, number>()
+  for (const t of tickets) {
+    const tipo = t.payment_type || 'Otro'
+    pagoMap.set(tipo, (pagoMap.get(tipo) ?? 0) + (t.total_money || 0))
+  }
+  const pagosPorTipo = [...pagoMap.entries()]
+    .map(([tipo, total]) => ({ tipo, total: Math.round(total) }))
+    .sort((a, b) => b.total - a.total)
+
+  // Ventas Loyverse por profesional
+  const loyVentaMap = new Map<string, number>()
+  for (const t of tickets) {
+    if (!t.profesional) continue
+    const key = normStr(t.profesional)
+    loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + (t.total_money || 0))
+  }
+
+  // ─── Fresha: citas y ocupación ───────────────────────────────────────────────
   const citasTodas = citas ?? []
   const citasNoCanc = citasTodas.filter(c => !esCancelada(c.estado))
   const citasCanceladas = citasTodas.filter(c => esCancelada(c.estado))
 
-  const tieneAtenciones = (atenciones ?? []).length > 0
-  const fuenteVentas: 'liquidacion' | 'fresha' = tieneAtenciones ? 'liquidacion' : 'fresha'
-
-  const ventasNetas = tieneAtenciones
-    ? (atenciones ?? []).reduce((s, a) => s + (a.venta_neta || 0), 0)
-    : citasNoCanc.reduce((s, c) => s + (c.venta_neta || 0), 0)
-
-  const gastos = (comprasData ?? []).reduce((s, c) => s + (c.monto || 0), 0)
-  const proyeccion = diasTranscurridos < diasDelMes && diasTranscurridos > 0
-    ? Math.round(ventasNetas / diasTranscurridos * diasDelMes)
-    : null
-
-  const atencionByUid = new Map<string, { ventaNeta: number; comision: number }>()
-  for (const a of (atenciones ?? [])) {
-    const prev = atencionByUid.get(a.usuario_id) ?? { ventaNeta: 0, comision: 0 }
-    atencionByUid.set(a.usuario_id, {
-      ventaNeta: prev.ventaNeta + (a.venta_neta || 0),
-      comision: prev.comision + (a.comision || 0),
-    })
-  }
-
-  // Franjas de citas por empleada/fecha para calcular ocupación real
   const citasFranjaMap = new Map<string, Array<{ ini: number; fin: number }>>()
   for (const c of citasNoCanc) {
     if (!c.franja_inicio || !c.franja_fin || !c.fecha) continue
@@ -133,11 +144,11 @@ export async function GET(request: NextRequest) {
     citasFranjaMap.get(key)!.push({ ini: toMin(c.franja_inicio), fin: toMin(c.franja_fin) })
   }
 
+  // ─── Productividad por empleada ───────────────────────────────────────────────
   interface EmpData {
     nombre: string
     citas: number
-    ventaNeta: number
-    comision: number
+    ventaNeta: number   // de Loyverse
     diasPresente: number
     diasHabiles: number
     minBase: number
@@ -145,31 +156,24 @@ export async function GET(request: NextRequest) {
   }
   const empMap = new Map<string, EmpData>()
   const getEmp = (uid: string, nombre: string) => {
-    if (!empMap.has(uid)) empMap.set(uid, { nombre, citas: 0, ventaNeta: 0, comision: 0, diasPresente: 0, diasHabiles: 0, minBase: 0, minOcupada: 0 })
+    if (!empMap.has(uid)) empMap.set(uid, { nombre, citas: 0, ventaNeta: 0, diasPresente: 0, diasHabiles: 0, minBase: 0, minOcupada: 0 })
     return empMap.get(uid)!
   }
 
+  // Citas de Fresha → usuario_id + nombre + franjas de ocupación
+  // También construimos shortNorm(nombre_empleada) → uid para cruzar con Loyverse
+  const freshaShortToUid = new Map<string, string>()
   for (const c of citasNoCanc) {
-    const e = getEmp(c.usuario_id, c.nombre_empleada)
-    e.citas++
-    if (!tieneAtenciones) e.ventaNeta += c.venta_neta || 0
+    getEmp(c.usuario_id, c.nombre_empleada).citas++
+    if (c.nombre_empleada) freshaShortToUid.set(shortNorm(c.nombre_empleada), c.usuario_id)
   }
 
-  if (tieneAtenciones) {
-    for (const [uid, data] of atencionByUid) {
-      const nombre = nombreMap.get(uid) ?? '—'
-      const e = getEmp(uid, nombre)
-      e.ventaNeta = data.ventaNeta
-      e.comision = data.comision
-    }
-  }
-
+  // Asistencia → diasPresente, minBase, minOcupada
   for (const a of (asistencia ?? [])) {
     const nombre = nombreMap.get(a.usuario_id) ?? '—'
     const e = getEmp(a.usuario_id, nombre)
     const chip = CHIP_INFO[a.estado ?? '']
-    const esPresente = chip?.present && !ESTADO_NO_CONTAR_PRESENTE.has(a.estado ?? '')
-
+    const esPresente = chip?.present && a.estado !== 'Sin fichada'
     if (a.horario_base_entrada && a.horario_base_salida) {
       const baseIni = toMin(a.horario_base_entrada)
       const baseFin = toMin(a.horario_base_salida)
@@ -186,13 +190,24 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Montos de Loyverse → cruzar por shortNorm del nombre del profesional
+  for (const [loyNorm, ventaNeta] of loyVentaMap) {
+    // Primero intenta match directo en usuarios, sino en Fresha
+    const uid = shortToUid.get(loyNorm)
+      ?? freshaShortToUid.get(loyNorm)
+      ?? shortToUid.get(loyNorm.split(' ')[0]) // fallback solo por primer nombre
+    if (uid) {
+      const nombre = nombreMap.get(uid) ?? loyNorm
+      getEmp(uid, nombre).ventaNeta = ventaNeta
+    }
+  }
+
   const productividad = [...empMap.values()]
     .filter(e => e.citas > 0 || e.diasPresente > 0)
     .map(e => ({
       nombre: e.nombre,
       citas: e.citas,
       ventaNeta: Math.round(e.ventaNeta),
-      comision: tieneAtenciones ? Math.round(e.comision) : null,
       minOcupada: e.minOcupada,
       minLibre: Math.max(0, e.minBase - e.minOcupada),
       ocupacionPct: e.minBase > 0 ? Math.round(e.minOcupada / e.minBase * 100) : null,
@@ -201,7 +216,7 @@ export async function GET(request: NextRequest) {
     }))
     .sort((a, b) => b.ventaNeta - a.ventaNeta)
 
-  // Para servicios usamos solo duracion_min (columna K de Fresha), no la franja
+  // ─── Servicios (Fresha) ───────────────────────────────────────────────────────
   const srvMap = new Map<string, { categoria: string; cantidad: number; ventaNeta: number; duracionMin: number; cantConDur: number }>()
   for (const c of citasNoCanc) {
     const key = c.servicio || 'Sin servicio'
@@ -216,32 +231,16 @@ export async function GET(request: NextRequest) {
     })
   }
 
-  const calcPrecioPorHora = (d: { ventaNeta: number; cantidad: number; duracionMin: number; cantConDur: number }) =>
-    d.cantConDur > 0
-      ? Math.round((d.ventaNeta / d.cantidad) / ((d.duracionMin / d.cantConDur) / 60))
-      : null
+  const calcPPH = (d: { ventaNeta: number; cantidad: number; duracionMin: number; cantConDur: number }) =>
+    d.cantConDur > 0 ? Math.round((d.ventaNeta / d.cantidad) / ((d.duracionMin / d.cantConDur) / 60)) : null
 
   const servicios = [...srvMap.entries()]
-    .map(([servicio, d]) => ({
-      servicio,
-      categoria: d.categoria,
-      cantidad: d.cantidad,
-      ventaNeta: Math.round(d.ventaNeta),
-      duracionMin: d.cantConDur > 0 ? Math.round(d.duracionMin / d.cantConDur) : null,
-      precioPorHora: calcPrecioPorHora(d),
-    }))
+    .map(([servicio, d]) => ({ servicio, categoria: d.categoria, cantidad: d.cantidad, ventaNeta: Math.round(d.ventaNeta), duracionMin: d.cantConDur > 0 ? Math.round(d.duracionMin / d.cantConDur) : null, precioPorHora: calcPPH(d) }))
     .sort((a, b) => b.cantidad - a.cantidad)
     .slice(0, 15)
 
   const rentabilidad = [...srvMap.entries()]
-    .map(([servicio, d]) => ({
-      servicio,
-      categoria: d.categoria,
-      cantidad: d.cantidad,
-      ventaNeta: Math.round(d.ventaNeta),
-      duracionMin: d.cantConDur > 0 ? Math.round(d.duracionMin / d.cantConDur) : null,
-      precioPorHora: calcPrecioPorHora(d),
-    }))
+    .map(([servicio, d]) => ({ servicio, categoria: d.categoria, cantidad: d.cantidad, ventaNeta: Math.round(d.ventaNeta), duracionMin: d.cantConDur > 0 ? Math.round(d.duracionMin / d.cantConDur) : null, precioPorHora: calcPPH(d) }))
     .filter(s => s.precioPorHora !== null)
     .sort((a, b) => (b.precioPorHora ?? 0) - (a.precioPorHora ?? 0))
     .slice(0, 10)
@@ -257,8 +256,8 @@ export async function GET(request: NextRequest) {
       proyeccion,
       diasTranscurridos,
       diasDelMes,
-      fuenteVentas,
     },
+    pagosPorTipo,
     productividad,
     servicios,
     rentabilidad,

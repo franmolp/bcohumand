@@ -1,0 +1,38 @@
+name: Importar datos Loyverse
+
+on:
+  schedule:
+    # Todos los días a las 00:00 UTC = 21:00 ART (Argentina = UTC-3, sin cambio de horario)
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      from:
+        description: 'Fecha inicio (YYYY-MM-DD). Vacío = 1° del mes actual'
+        required: false
+      to:
+        description: 'Fecha fin (YYYY-MM-DD). Vacío = ayer'
+        required: false
+
+jobs:
+  import:
+    name: Importar tickets Loyverse
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Importar datos de Loyverse
+        env:
+          LOYVERSE_TOKEN: ${{ secrets.LOYVERSE_TOKEN }}
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          FROM: ${{ inputs.from }}
+          TO: ${{ inputs.to }}
+        run: node scripts/loyverse-import.mjs
