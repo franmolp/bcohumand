@@ -115,6 +115,8 @@ function parseCitasDetalle(text) {
   const iSrv = hdr.findIndex(h => h.includes('servicio'))
   const iDur = hdr.findIndex(h => h.includes('duraci'))
   const iVnt = hdr.findIndex(h => h.includes('ventas'))
+  console.log('[citas-detalle] Headers:', rows[0])
+  console.log('[citas-detalle] iDur:', iDur, '| iFr:', iFr, '| ejemplo fila 1:', rows[1])
   if (iN < 0 || iF < 0) {
     console.error('[citas-detalle] Columnas no encontradas. Headers:', rows[0])
     return []
