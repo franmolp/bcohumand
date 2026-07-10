@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "fresha:setup": "node scripts/fresha-setup.mjs",
-    "fresha:import": "node scripts/fresha-scraper.mjs"
+    "fresha:import": "node scripts/fresha-scraper.mjs",
+    "loyverse:import": "node scripts/loyverse-import.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.0",
