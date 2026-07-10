@@ -2,7 +2,7 @@ import Link from 'next/link'
 import type { SessionUser } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { IconCalendar, IconBell, IconAlertCircle, IconChevronRight, IconStar, IconClock, IconEdit } from '@/components/ui/Icons'
+import { IconCalendar, IconBell, IconAlertCircle, IconChevronRight, IconStar, IconClock, IconWall } from '@/components/ui/Icons'
 import GoogleReviewsCarousel from '@/components/GoogleReviewsCarousel'
 
 const VACACIONES_DEFAULT = 14
@@ -618,7 +618,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
       <Link href="/dashboard/muro" className="block bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
-            <IconEdit size={15} className="text-indigo-500" />
+            <IconWall size={15} className="text-indigo-500" />
             <h2 className="text-[14px] font-bold text-indigo-600">Últimas novedades</h2>
           </div>
           <IconChevronRight size={14} className="text-gray-300" />
