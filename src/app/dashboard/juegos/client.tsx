@@ -309,43 +309,50 @@ function WordleGame({ user, isAdmin }: { user: SessionUser; isAdmin: boolean }) 
         </div>
       )}
 
-      {/* Teclado — solo si no terminó */}
+      {/* Teclado — solo mobile/tablet */}
       {!gameOver && (
-        <div className="flex flex-col items-center gap-1 w-full px-2">
-          {TECLADO.map((fila, fi) => (
-            <div key={fi} className="flex gap-1 justify-center w-full">
-              {fila.map(tecla => {
-                const esBorrar = tecla === '⌫'
-                const estadoTecla = esBorrar ? null : calcEstadoTecla(tecla, intentos)
-                return (
-                  <button
-                    key={tecla}
-                    onPointerDown={e => { e.preventDefault(); presionarTecla(tecla) }}
-                    style={{
-                      width: esBorrar ? 'calc((100vw - 40px - 7 * 4px) / 5.5)' : 'calc((100vw - 40px - 9 * 4px) / 10)',
-                      height: 'min(56px, 12vw)',
-                      fontSize: 'min(13px, 3.5vw)',
-                    }}
-                    className={`rounded-lg font-bold cursor-pointer select-none transition-colors active:scale-95 shrink-0
-                      ${esBorrar
-                        ? 'bg-gray-300 text-gray-700'
-                        : estadoTecla
-                          ? COLORES[estadoTecla]
-                          : 'bg-gray-200 text-gray-800'}`}
-                  >
-                    {tecla}
-                  </button>
-                )
-              })}
-            </div>
-          ))}
-          <button
-            onPointerDown={e => { e.preventDefault(); presionarTecla('↵') }}
-            className="w-full h-12 mt-1 rounded-xl bg-[image:var(--gradient)] text-white text-[15px] font-bold cursor-pointer select-none shadow-sm active:scale-[0.98] transition-transform"
-          >
-            ENVIAR
-          </button>
-        </div>
+        <>
+          <div className="lg:hidden flex flex-col items-center gap-1 w-full px-2">
+            {TECLADO.map((fila, fi) => (
+              <div key={fi} className="flex gap-1 justify-center w-full">
+                {fila.map(tecla => {
+                  const esBorrar = tecla === '⌫'
+                  const estadoTecla = esBorrar ? null : calcEstadoTecla(tecla, intentos)
+                  return (
+                    <button
+                      key={tecla}
+                      onPointerDown={e => { e.preventDefault(); presionarTecla(tecla) }}
+                      style={{
+                        width: esBorrar ? 'calc((100vw - 40px - 7 * 4px) / 5.5)' : 'calc((100vw - 40px - 9 * 4px) / 10)',
+                        height: 'min(56px, 12vw)',
+                        fontSize: 'min(13px, 3.5vw)',
+                      }}
+                      className={`rounded-lg font-bold cursor-pointer select-none transition-colors active:scale-95 shrink-0
+                        ${esBorrar
+                          ? 'bg-gray-300 text-gray-700'
+                          : estadoTecla
+                            ? COLORES[estadoTecla]
+                            : 'bg-gray-200 text-gray-800'}`}
+                    >
+                      {tecla}
+                    </button>
+                  )
+                })}
+              </div>
+            ))}
+            <button
+              onPointerDown={e => { e.preventDefault(); presionarTecla('↵') }}
+              className="w-full h-12 mt-1 rounded-xl bg-[image:var(--gradient)] text-white text-[15px] font-bold cursor-pointer select-none shadow-sm active:scale-[0.98] transition-transform"
+            >
+              ENVIAR
+            </button>
+          </div>
+
+          {/* Desktop: hint teclado físico */}
+          <p className="hidden lg:block text-center text-[12px] text-[var(--text-muted)]">
+            Escribí con el teclado · <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 text-[11px] font-mono">Enter</kbd> para enviar · <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 text-[11px] font-mono">⌫</kbd> para borrar
+          </p>
+        </>
       )}
 
       {/* Rankings — visibles solo después de jugar */}
