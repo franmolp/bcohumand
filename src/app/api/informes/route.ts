@@ -78,12 +78,14 @@ export async function GET(request: NextRequest) {
       .from('fresha_citas_detalle')
       .select('usuario_id, nombre_empleada, estado, categoria, servicio, duracion_min, franja_inicio, franja_fin, venta_neta, fecha')
       .gte('fecha', inicio)
-      .lte('fecha', finDatos),
+      .lte('fecha', finDatos)
+      .limit(10000),
     supabaseAdmin
       .from('loyverse_tickets')
       .select('profesional, total_money, payment_type, receipt_date')
       .gte('receipt_date', inicioUTC)
-      .lte('receipt_date', finDatosUTC),
+      .lte('receipt_date', finDatosUTC)
+      .limit(10000),
     supabaseAdmin
       .from('asistencia_procesada')
       .select('usuario_id, estado, horas_base, fecha, horario_base_entrada, horario_base_salida')

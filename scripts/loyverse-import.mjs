@@ -69,10 +69,11 @@ async function fetchReceipts(from, to) {
     for (const r of receipts) {
       if (r.cancelled_at) continue
       const date = r.receipt_date ?? r.created_at
-      const paymentType = (r.payments ?? [])
-        .filter(p => p.type !== 'CASHROUNDING')
-        .map(p => p.name)
-        .join(', ') || 'Desconocido'
+      const paymentType = [...new Set(
+        (r.payments ?? [])
+          .filter(p => p.type !== 'CASHROUNDING')
+          .map(p => p.name)
+      )].join(', ') || 'Desconocido'
 
       for (const item of (r.line_items ?? [])) {
         const modifier = (item.line_modifiers ?? [])[0]
