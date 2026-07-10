@@ -1028,31 +1028,31 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Entrada</label>
               <input type="time" value={editEntrada} onChange={e => setEditEntrada(e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16 }} />
+                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Salida</label>
               <input type="time" value={editSalida} onChange={e => setEditSalida(e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16 }} />
+                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Entrada base</label>
               <input type="time" value={editBaseEntrada} onChange={e => setEditBaseEntrada(e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16 }} />
+                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Salida base</label>
               <input type="time" value={editBaseSalida} onChange={e => setEditBaseSalida(e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16 }} />
+                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
             </div>
           </div>
           {editHoras !== null && (
@@ -1370,31 +1370,31 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Entrada</label>
               <input type="time" value={editEntrada} onChange={e => setEditEntrada(e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16 }} />
+                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Salida</label>
               <input type="time" value={editSalida} onChange={e => setEditSalida(e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16 }} />
+                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Entrada base</label>
               <input type="time" value={editBaseEntrada} onChange={e => setEditBaseEntrada(e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16 }} />
+                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Salida base</label>
               <input type="time" value={editBaseSalida} onChange={e => setEditBaseSalida(e.target.value)}
-                className="w-full h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16 }} />
+                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
             </div>
           </div>
           {editHoras !== null && (
