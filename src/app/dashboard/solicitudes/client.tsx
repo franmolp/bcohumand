@@ -144,17 +144,18 @@ function DetallePeriodo({ sol }: { sol: Solicitud }) {
 // ─── FormFields ───────────────────────────────────────────────────────────────
 
 function FormFields({
-  form, setForm, isAdmin, isAdminOrHR, editMode, empleados = [], certFile, setCertFile, config,
+  form, setForm, isAdmin, isAdminOrHR, editMode, empleados = [], certFile, setCertFile, config, showRecepHint = false,
 }: {
   form: Form
   setForm: (f: Form) => void
   isAdmin: boolean
   isAdminOrHR: boolean
   editMode: boolean
-  empleados?: { id: string; nombre: string }[]
+  empleados?: { id: string; nombre: string; equipo?: string }[]
   certFile: File | null
   setCertFile: (f: File | null) => void
   config: SolicitudesConfig
+  showRecepHint?: boolean
 }) {
   const tipos     = isAdmin ? TIPOS_ADMIN : TIPOS_EMPLEADO
   const isHorario = form.tipo === 'Cambio de Horario' || form.tipo === 'Cambio de horario/día'
@@ -263,6 +264,16 @@ function FormFields({
             {form.tipo === 'Vacaciones'
               ? `Anticipación mínima: ${config.vacaciones_min_dias} días`
               : `Anticipación mínima: ${config.otros_min_dias} días · Motivo obligatorio`}
+          </p>
+        </div>
+      )}
+
+      {/* Aviso regla de vacaciones para recepcionistas */}
+      {showRecepHint && form.tipo === 'Vacaciones' && (
+        <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-50 border border-blue-100 rounded-xl">
+          <IconAlertCircle size={14} className="text-blue-500 shrink-0 mt-0.5" />
+          <p className="text-[12px] text-blue-700">
+            Las recepcionistas solo pueden tomar vacaciones en bloques de <strong>7 o 14 días corridos</strong>.
           </p>
         </div>
       )}
@@ -580,7 +591,11 @@ function HistorialModal({ sol, onClose }: { sol: Solicitud; onClose: () => void 
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-interface Empleado { id: string; nombre: string }
+interface Empleado { id: string; nombre: string; equipo?: string }
+
+function isRecepcionEquipo(equipo: string): boolean {
+  return equipo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes('recep')
+}
 
 export default function SolicitudesClient({ user }: { user: SessionUser }) {
   const isAdmin = user.rol === 'admin' || user.rol === 'Admin'
@@ -671,8 +686,8 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
     if (!isAdminOrHR) return
     fetch('/api/empleados?estado=activo')
       .then(r => r.json())
-      .then((d: { id: string; nombre: string }[]) =>
-        setEmpleados(Array.isArray(d) ? d.map(e => ({ id: e.id, nombre: e.nombre })) : [])
+      .then((d: { id: string; nombre: string; equipo?: { nombre: string } }[]) =>
+        setEmpleados(Array.isArray(d) ? d.map(e => ({ id: e.id, nombre: e.nombre, equipo: e.equipo?.nombre ?? '' })) : [])
       )
   }, [isAdminOrHR])
 
@@ -727,6 +742,14 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
         if (form.fecha_inicio < minFecha) {
           setFormError(`Las vacaciones deben pedirse con al menos ${config.vacaciones_min_dias} días de anticipación`)
           setSaving(false); return
+        }
+        // Recepcionistas: solo pueden pedir 7 o 14 días corridos
+        if (isRecepcionEquipo(user.equipo)) {
+          const diasVac = calcDias(form.fecha_inicio, form.fecha_fin)
+          if (diasVac !== 7 && diasVac !== 14) {
+            setFormError('Las recepcionistas solo pueden pedir vacaciones en bloques de 7 o 14 días corridos')
+            setSaving(false); return
+          }
         }
       } else if (form.tipo === 'Solicitud de Días' || isHorario) {
         const minFecha = addDaysStr(today, config.otros_min_dias)
@@ -1287,7 +1310,7 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
             {editId ? 'Guardar' : form.tipo === 'Feriado/Local cerrado' ? 'Crear feriado' : 'Enviar'}
           </Button>
         </>}>
-        <FormFields form={form} setForm={setForm} isAdmin={isAdminOrHR} isAdminOrHR={isAdminOrHR} editMode={!!editId} empleados={empleados} certFile={modalCertFile} setCertFile={setModalCertFile} config={config} />
+        <FormFields form={form} setForm={setForm} isAdmin={isAdminOrHR} isAdminOrHR={isAdminOrHR} editMode={!!editId} empleados={empleados} certFile={modalCertFile} setCertFile={setModalCertFile} config={config} showRecepHint={!isAdminOrHR && isRecepcionEquipo(user.equipo)} />
         {formError && (
           <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl mt-4">
             <IconAlertCircle size={16} className="text-red-500 shrink-0" />
