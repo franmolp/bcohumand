@@ -67,25 +67,40 @@ export async function GET(request: NextRequest) {
   finDatosDplusOne.setDate(finDatosDplusOne.getDate() + 1)
   const finDatosUTC = `${finDatosDplusOne.toISOString().slice(0, 10)}T02:59:59.999Z`
 
+  // Paginación para tablas con >1000 filas (límite por defecto de Supabase)
+  async function fetchAll<T>(query: () => ReturnType<typeof supabaseAdmin.from>['select']): Promise<T[]> {
+    const PAGE = 1000
+    const rows: T[] = []
+    let offset = 0
+    while (true) {
+      const { data, error } = await (query() as any).range(offset, offset + PAGE - 1)
+      if (error) throw new Error(error.message)
+      rows.push(...(data ?? []))
+      if (!data || data.length < PAGE) break
+      offset += PAGE
+    }
+    return rows
+  }
+
   const [
-    { data: citas },
-    { data: loyTickets },
+    citas,
+    loyTickets,
     { data: asistencia },
     { data: comprasData },
     { data: usuarios },
   ] = await Promise.all([
-    supabaseAdmin
+    fetchAll(() => supabaseAdmin
       .from('fresha_citas_detalle')
       .select('usuario_id, nombre_empleada, estado, categoria, servicio, duracion_min, franja_inicio, franja_fin, venta_neta, fecha')
       .gte('fecha', inicio)
       .lte('fecha', finDatos)
-      .limit(10000),
-    supabaseAdmin
+    ),
+    fetchAll(() => supabaseAdmin
       .from('loyverse_tickets')
       .select('profesional, total_money, payment_type, receipt_date')
       .gte('receipt_date', inicioUTC)
       .lte('receipt_date', finDatosUTC)
-      .limit(10000),
+    ),
     supabaseAdmin
       .from('asistencia_procesada')
       .select('usuario_id, estado, horas_base, fecha, horario_base_entrada, horario_base_salida')
@@ -108,7 +123,7 @@ export async function GET(request: NextRequest) {
   }
 
   // ─── Loyverse: ventas netas y pagos ───────────────────────────────────────────
-  const tickets = loyTickets ?? []
+  const tickets = loyTickets
   const ventasNetas = tickets.reduce((s, t) => s + (t.total_money || 0), 0)
   const proyeccion = diasTranscurridos < diasDelMes && diasTranscurridos > 0
     ? Math.round(ventasNetas / diasTranscurridos * diasDelMes)
@@ -134,7 +149,7 @@ export async function GET(request: NextRequest) {
   }
 
   // ─── Fresha: citas y ocupación ───────────────────────────────────────────────
-  const citasTodas = citas ?? []
+  const citasTodas = citas
   const citasNoCanc = citasTodas.filter(c => !esCancelada(c.estado))
   const citasCanceladas = citasTodas.filter(c => esCancelada(c.estado))
 
