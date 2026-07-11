@@ -67,7 +67,7 @@ async function fetchReceipts(from, to) {
           receipt_number: r.receipt_number,
           receipt_date:   date,
           payment_name:   p.name ?? 'Desconocido',
-          payment_money:  sign * (p.money ?? 0),
+          payment_money:  sign * (p.money_amount ?? 0),
         })
       }
 
