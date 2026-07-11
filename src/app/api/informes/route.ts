@@ -85,6 +85,7 @@ export async function GET(request: NextRequest) {
   const [
     citas,
     loyTickets,
+    loyPagos,
     { data: asistencia },
     { data: comprasData },
     { data: usuarios },
@@ -97,10 +98,16 @@ export async function GET(request: NextRequest) {
     ),
     fetchAll(() => supabaseAdmin
       .from('loyverse_tickets')
-      .select('profesional, total_money, total_discount, payment_type, receipt_date')
+      .select('profesional, total_money, receipt_date')
       .gte('receipt_date', inicioUTC)
       .lte('receipt_date', finDatosUTC)
     ),
+    fetchAll(() => supabaseAdmin
+      .from('loyverse_pagos')
+      .select('payment_name, payment_money')
+      .gte('receipt_date', inicioUTC)
+      .lte('receipt_date', finDatosUTC)
+    ).catch(() => [] as { payment_name: string; payment_money: number }[]),
     supabaseAdmin
       .from('asistencia_procesada')
       .select('usuario_id, estado, horas_base, fecha, horario_base_entrada, horario_base_salida')
@@ -122,39 +129,33 @@ export async function GET(request: NextRequest) {
     nombreMap.set(u.id, u.nombre)
   }
 
-  // ─── Loyverse: ventas netas y pagos ───────────────────────────────────────────
-  const tickets = loyTickets
-  // total_money = bruto por línea; total_discount = descuento de línea; neto = resta
-  const ventasNetas = tickets.reduce((s, t) => s + (t.total_money || 0) - (t.total_discount || 0), 0)
+  // ─── Loyverse: ventas netas exactas desde loyverse_pagos ────────────────────
+  // loyverse_pagos tiene SALE (positivo) + REFUND (negativo) → suma = ventas netas reales
+  const pagos = loyPagos
+  const ventasNetas = pagos.reduce((s, p) => s + (p.payment_money || 0), 0)
   const proyeccion = diasTranscurridos < diasDelMes && diasTranscurridos > 0
     ? Math.round(ventasNetas / diasTranscurridos * diasDelMes)
     : null
   const gastos = (comprasData ?? []).reduce((s, c) => s + (c.monto || 0), 0)
 
-  // Normaliza payment_type: "QR, Efectivo" y "Efectivo, QR" → "Efectivo + QR"; "QR, QR" → "QR"
-  function normPago(raw: string): string {
-    const parts = [...new Set(raw.split(',').map(s => s.trim()).filter(Boolean))].sort()
-    return parts.length ? parts.join(' + ') : 'Otro'
-  }
-
-  // Ventas por tipo de pago
+  // Ventas por medio de pago (un row por recibo × método, sin combinar)
   const pagoMap = new Map<string, number>()
-  for (const t of tickets) {
-    const tipo = normPago(t.payment_type || '')
-    const neto = (t.total_money || 0) - (t.total_discount || 0)
-    pagoMap.set(tipo, (pagoMap.get(tipo) ?? 0) + neto)
+  for (const p of pagos) {
+    const tipo = p.payment_name || 'Otro'
+    pagoMap.set(tipo, (pagoMap.get(tipo) ?? 0) + (p.payment_money || 0))
   }
   const pagosPorTipo = [...pagoMap.entries()]
+    .filter(([, total]) => Math.abs(total) > 0)
     .map(([tipo, total]) => ({ tipo, total: Math.round(total) }))
     .sort((a, b) => b.total - a.total)
 
-  // Ventas Loyverse por profesional (también neto)
+  // Ventas Loyverse por profesional (desde loyverse_tickets, proporcional por item)
+  const tickets = loyTickets
   const loyVentaMap = new Map<string, number>()
   for (const t of tickets) {
     if (!t.profesional) continue
     const key = normStr(t.profesional)
-    const neto = (t.total_money || 0) - (t.total_discount || 0)
-    loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + neto)
+    loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + (t.total_money || 0))
   }
 
   // ─── Fresha: citas y ocupación ───────────────────────────────────────────────
