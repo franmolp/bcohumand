@@ -24,14 +24,9 @@ function getDateRange() {
   if (process.env.FROM && process.env.TO) {
     return { from: process.env.FROM, to: process.env.TO }
   }
-  const tz   = 'America/Argentina/Buenos_Aires'
-  const hoy  = new Date().toLocaleDateString('en-CA', { timeZone: tz })
-  const [y, m] = hoy.split('-').map(Number)
-  const from = `${y}-${String(m).padStart(2, '0')}-01`
-  const ayer = new Date()
-  ayer.setDate(ayer.getDate() - 1)
-  const to = ayer.toLocaleDateString('en-CA', { timeZone: tz })
-  return { from, to }
+  // Por defecto: solo el día de hoy en AR (el trigger corre a las 21hs cuando el local ya cerró)
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+  return { from: hoy, to: hoy }
 }
 
 async function fetchReceipts(from, to) {
