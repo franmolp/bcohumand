@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
     ),
     fetchAll(() => supabaseAdmin
       .from('loyverse_tickets')
-      .select('profesional, total_money, payment_type, receipt_date')
+      .select('profesional, total_money, total_discount, payment_type, receipt_date')
       .gte('receipt_date', inicioUTC)
       .lte('receipt_date', finDatosUTC)
     ),
@@ -124,28 +124,37 @@ export async function GET(request: NextRequest) {
 
   // ─── Loyverse: ventas netas y pagos ───────────────────────────────────────────
   const tickets = loyTickets
-  const ventasNetas = tickets.reduce((s, t) => s + (t.total_money || 0), 0)
+  // total_money = bruto por línea; total_discount = descuento de línea; neto = resta
+  const ventasNetas = tickets.reduce((s, t) => s + (t.total_money || 0) - (t.total_discount || 0), 0)
   const proyeccion = diasTranscurridos < diasDelMes && diasTranscurridos > 0
     ? Math.round(ventasNetas / diasTranscurridos * diasDelMes)
     : null
   const gastos = (comprasData ?? []).reduce((s, c) => s + (c.monto || 0), 0)
 
+  // Normaliza payment_type: "QR, Efectivo" y "Efectivo, QR" → "Efectivo + QR"; "QR, QR" → "QR"
+  function normPago(raw: string): string {
+    const parts = [...new Set(raw.split(',').map(s => s.trim()).filter(Boolean))].sort()
+    return parts.length ? parts.join(' + ') : 'Otro'
+  }
+
   // Ventas por tipo de pago
   const pagoMap = new Map<string, number>()
   for (const t of tickets) {
-    const tipo = t.payment_type || 'Otro'
-    pagoMap.set(tipo, (pagoMap.get(tipo) ?? 0) + (t.total_money || 0))
+    const tipo = normPago(t.payment_type || '')
+    const neto = (t.total_money || 0) - (t.total_discount || 0)
+    pagoMap.set(tipo, (pagoMap.get(tipo) ?? 0) + neto)
   }
   const pagosPorTipo = [...pagoMap.entries()]
     .map(([tipo, total]) => ({ tipo, total: Math.round(total) }))
     .sort((a, b) => b.total - a.total)
 
-  // Ventas Loyverse por profesional
+  // Ventas Loyverse por profesional (también neto)
   const loyVentaMap = new Map<string, number>()
   for (const t of tickets) {
     if (!t.profesional) continue
     const key = normStr(t.profesional)
-    loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + (t.total_money || 0))
+    const neto = (t.total_money || 0) - (t.total_discount || 0)
+    loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + neto)
   }
 
   // ─── Fresha: citas y ocupación ───────────────────────────────────────────────
