@@ -103,11 +103,25 @@ function BaraCSS({ pct, color = 'var(--primary)' }: { pct: number; color?: strin
   )
 }
 
+type SortKey = 'nombre' | 'citas' | 'ventas' | 'sueldo' | 'coef' | 'ocup' | 'asist'
+
+function coefPct(e: EmpleadaRow): number | null {
+  if (e.sueldo === null || e.ventaNeta <= 0) return null
+  return Math.round(e.sueldo / e.ventaNeta * 100)
+}
+
 export default function InformesClient({ user }: { user: SessionUser }) {
   const [mes, setMes] = useState(mesActual)
   const [datos, setDatos] = useState<ApiData | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [sortKey, setSortKey] = useState<SortKey>('coef')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+
+  function toggleSort(k: SortKey) {
+    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(k); setSortDir('desc') }
+  }
 
   useEffect(() => {
     setCargando(true)
@@ -122,6 +136,28 @@ export default function InformesClient({ user }: { user: SessionUser }) {
   const actual = mesActual()
   const puedeAvanzar = mes < actual
   const k = datos?.kpis
+
+  const prodOrdenada = [...(datos?.productividad ?? [])].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1
+    switch (sortKey) {
+      case 'nombre': return dir * a.nombre.localeCompare(b.nombre, 'es')
+      case 'citas':  return dir * (a.citas - b.citas)
+      case 'ventas': return dir * (a.ventaNeta - b.ventaNeta)
+      case 'sueldo': return dir * ((a.sueldo ?? -1) - (b.sueldo ?? -1))
+      case 'coef':   return dir * ((coefPct(a) ?? -1) - (coefPct(b) ?? -1))
+      case 'ocup':   return dir * ((a.ocupacionPct ?? -1) - (b.ocupacionPct ?? -1))
+      case 'asist': {
+        const ra = a.diasHabiles > 0 ? a.diasPresente / a.diasHabiles : -1
+        const rb = b.diasHabiles > 0 ? b.diasPresente / b.diasHabiles : -1
+        return dir * (ra - rb)
+      }
+      default: return 0
+    }
+  })
+
+  const sortIcon = (k: SortKey) => sortKey === k ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''
+  const thCls = (k: SortKey, right = true) =>
+    `${right ? 'text-right' : 'text-left'} px-3 py-2.5 font-medium cursor-pointer select-none hover:text-[var(--text)] whitespace-nowrap transition-colors`
 
   return (
     <div className="pb-6">
@@ -213,29 +249,38 @@ export default function InformesClient({ user }: { user: SessionUser }) {
               </div>
 
               {/* Mobile */}
-              <div className="lg:hidden">
-                <div className="flex items-center px-4 py-2 border-b border-gray-100 text-[9px] text-[var(--text-muted)] uppercase tracking-wide">
-                  <span className="flex-1">Empleada</span>
-                  <span className="w-8 text-right">Citas</span>
-                  <span className="w-[80px] text-right">Ventas</span>
-                  <span className="w-[72px] text-right">Sueldo</span>
-                  <span className="w-10 text-right">Ocup.</span>
-                </div>
-                {datos.productividad.map((e, i) => (
-                  <div key={i} className="flex items-center px-4 py-2.5 border-b border-gray-50 last:border-0">
-                    <span className="flex-1 text-[12px] font-semibold truncate pr-2">{e.nombre}</span>
-                    <span className="w-8 text-right text-[12px] text-[var(--text-muted)]">{e.citas}</span>
-                    <span className="w-[80px] text-right text-[12px] font-semibold">{fmt$(e.ventaNeta)}</span>
-                    <span className="w-[72px] text-right text-[12px]">
-                      {e.sueldo !== null ? <span className="font-semibold text-amber-600">{fmt$(e.sueldo)}</span> : <span className="text-gray-300">—</span>}
-                    </span>
-                    <span className="w-10 text-right text-[12px]">
-                      {e.ocupacionPct !== null
-                        ? <span className={`font-semibold ${e.ocupacionPct >= 70 ? 'text-green-600' : e.ocupacionPct >= 40 ? 'text-amber-500' : 'text-red-500'}`}>{e.ocupacionPct}%</span>
-                        : <span className="text-gray-300">—</span>}
-                    </span>
-                  </div>
-                ))}
+              <div className="lg:hidden overflow-x-auto">
+                <table className="w-full text-[11px] min-w-[380px]">
+                  <thead>
+                    <tr className="border-b border-gray-100 text-[var(--text-muted)] uppercase tracking-wide">
+                      <th className={thCls('nombre', false) + ' pl-4'} onClick={() => toggleSort('nombre')}>Empleada{sortIcon('nombre')}</th>
+                      <th className={thCls('citas')} onClick={() => toggleSort('citas')}>Citas{sortIcon('citas')}</th>
+                      <th className={thCls('ventas')} onClick={() => toggleSort('ventas')}>Ventas{sortIcon('ventas')}</th>
+                      <th className={thCls('sueldo')} onClick={() => toggleSort('sueldo')}>Sueldo{sortIcon('sueldo')}</th>
+                      <th className={thCls('coef') + ' pr-4'} onClick={() => toggleSort('coef')}>Coef.{sortIcon('coef')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {prodOrdenada.map((e, i) => {
+                      const c = coefPct(e)
+                      return (
+                        <tr key={i} className="border-b border-gray-50 last:border-0">
+                          <td className="pl-4 pr-2 py-2.5 font-semibold text-[var(--text)] max-w-[120px] truncate">{e.nombre}</td>
+                          <td className="px-3 py-2.5 text-right text-[var(--text-muted)]">{e.citas}</td>
+                          <td className="px-3 py-2.5 text-right font-semibold">{fmt$(e.ventaNeta)}</td>
+                          <td className="px-3 py-2.5 text-right">
+                            {e.sueldo !== null ? <span className="font-semibold text-amber-600">{fmt$(e.sueldo)}</span> : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="pr-4 pl-3 py-2.5 text-right">
+                            {c !== null
+                              ? <span className={`font-bold ${c > 65 ? 'text-red-500' : c > 50 ? 'text-amber-500' : 'text-green-600'}`}>{c}%</span>
+                              : <span className="text-gray-300">—</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
 
               {/* Desktop */}
@@ -243,40 +288,49 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                 <table className="w-full text-[12px]">
                   <thead>
                     <tr className="border-b border-[var(--border)] text-[var(--text-muted)]">
-                      <th className="text-left px-4 py-2.5 font-medium">Empleada</th>
-                      <th className="text-right px-3 py-2.5 font-medium">Citas</th>
-                      <th className="text-right px-3 py-2.5 font-medium">Ventas (Loyverse)</th>
-                      <th className="text-right px-3 py-2.5 font-medium">Sueldo</th>
-                      <th className="text-right px-3 py-2.5 font-medium">T. ocup.</th>
-                      <th className="text-right px-3 py-2.5 font-medium">T. libre</th>
-                      <th className="text-right px-3 py-2.5 font-medium">% ocup.</th>
-                      <th className="text-right px-4 py-2.5 font-medium">Asist.</th>
+                      <th className={thCls('nombre', false) + ' pl-4'} onClick={() => toggleSort('nombre')}>Empleada{sortIcon('nombre')}</th>
+                      <th className={thCls('citas')} onClick={() => toggleSort('citas')}>Citas{sortIcon('citas')}</th>
+                      <th className={thCls('ventas')} onClick={() => toggleSort('ventas')}>Ventas{sortIcon('ventas')}</th>
+                      <th className={thCls('sueldo')} onClick={() => toggleSort('sueldo')}>Sueldo{sortIcon('sueldo')}</th>
+                      <th className={thCls('coef')} onClick={() => toggleSort('coef')}>Coef. sueldo/ventas{sortIcon('coef')}</th>
+                      <th className={thCls('ocup')} onClick={() => toggleSort('ocup')}>T. ocup.{sortIcon('ocup')}</th>
+                      <th className="text-right px-3 py-2.5 font-medium text-[var(--text-muted)] whitespace-nowrap">T. libre</th>
+                      <th className={thCls('ocup')} onClick={() => toggleSort('ocup')}>% ocup.{sortIcon('ocup')}</th>
+                      <th className={thCls('asist') + ' pr-4'} onClick={() => toggleSort('asist')}>Asist.{sortIcon('asist')}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {datos.productividad.map((e, i) => (
-                      <tr key={i} className="border-b border-gray-50 last:border-0">
-                        <td className="px-4 py-3 font-medium text-[var(--text)]">{e.nombre}</td>
-                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.citas}</td>
-                        <td className="px-3 py-3 text-right font-semibold text-[var(--text)]">{e.ventaNeta > 0 ? fmt$(e.ventaNeta) : <span className="text-gray-300">—</span>}</td>
-                        <td className="px-3 py-3 text-right">
-                          {e.sueldo !== null ? <span className="font-semibold text-amber-600">{fmt$(e.sueldo)}</span> : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.minOcupada > 0 ? fmtMin(e.minOcupada) : <span className="text-gray-300">—</span>}</td>
-                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.minLibre > 0 ? fmtMin(e.minLibre) : <span className="text-gray-300">—</span>}</td>
-                        <td className="px-3 py-3 text-right">
-                          {e.ocupacionPct !== null
-                            ? <span className={`font-semibold ${e.ocupacionPct >= 70 ? 'text-green-600' : e.ocupacionPct >= 40 ? 'text-amber-500' : 'text-red-500'}`}>{e.ocupacionPct}%</span>
-                            : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-4 py-3 text-right text-[var(--text-muted)]">{e.diasHabiles > 0 ? `${e.diasPresente}/${e.diasHabiles}d` : '—'}</td>
-                      </tr>
-                    ))}
+                    {prodOrdenada.map((e, i) => {
+                      const c = coefPct(e)
+                      return (
+                        <tr key={i} className="border-b border-gray-50 last:border-0">
+                          <td className="pl-4 pr-3 py-3 font-medium text-[var(--text)]">{e.nombre}</td>
+                          <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.citas}</td>
+                          <td className="px-3 py-3 text-right font-semibold text-[var(--text)]">{e.ventaNeta > 0 ? fmt$(e.ventaNeta) : <span className="text-gray-300">—</span>}</td>
+                          <td className="px-3 py-3 text-right">
+                            {e.sueldo !== null ? <span className="font-semibold text-amber-600">{fmt$(e.sueldo)}</span> : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-3 py-3 text-right">
+                            {c !== null
+                              ? <span className={`font-bold ${c > 65 ? 'text-red-500' : c > 50 ? 'text-amber-500' : 'text-green-600'}`}>{c}%</span>
+                              : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.minOcupada > 0 ? fmtMin(e.minOcupada) : <span className="text-gray-300">—</span>}</td>
+                          <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.minLibre > 0 ? fmtMin(e.minLibre) : <span className="text-gray-300">—</span>}</td>
+                          <td className="px-3 py-3 text-right">
+                            {e.ocupacionPct !== null
+                              ? <span className={`font-semibold ${e.ocupacionPct >= 70 ? 'text-green-600' : e.ocupacionPct >= 40 ? 'text-amber-500' : 'text-red-500'}`}>{e.ocupacionPct}%</span>
+                              : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="pr-4 pl-3 py-3 text-right text-[var(--text-muted)]">{e.diasHabiles > 0 ? `${e.diasPresente}/${e.diasHabiles}d` : '—'}</td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
               <p className="px-4 py-2 text-[10px] text-[var(--text-muted)] border-t border-gray-50">
-                Ventas: precio de lista -10% (bruto Loyverse, incluye servicios de cortesía) · Sueldo: bruto hoja "Todas" del Excel · Ocup.: tiempo en citas vs horario base (Fresha)
+                Ventas: precio de lista -10% · Sueldo: bruto hoja "Todas" · Coef.: sueldo/ventas (verde &lt;50%, rojo &gt;65%) · Ocup.: tiempo en citas vs horario base
               </p>
             </div>
           )}
