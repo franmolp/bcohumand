@@ -157,13 +157,15 @@ export async function GET(request: NextRequest) {
     .map(([tipo, total]) => ({ tipo, total: Math.round(total) }))
     .sort((a, b) => b.total - a.total)
 
-  // Ventas Loyverse por profesional (total_money ya es neto por ítem)
-  // Usa shortNorm para que coincida con los mapas de lookup (p.ej. "Romina DG" → "romina d")
+  // Ventas por profesional = bruto * 90%
+  // bruto = total_money + total_discount (precio de lista, sin descuento real aplicado)
+  // Así los servicios de regalo/cortesía igual cuentan al 90% del precio de lista
   const loyVentaMap = new Map<string, number>()
   for (const t of tickets) {
     if (!t.profesional) continue
     const key = shortNorm(t.profesional)
-    loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + (t.total_money || 0))
+    const bruto = (t.total_money || 0) + (t.total_discount || 0)
+    loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + bruto * 0.9)
   }
 
   // ─── Fresha: citas y ocupación ───────────────────────────────────────────────
