@@ -116,7 +116,7 @@ export default function InformesClient({ user }: { user: SessionUser }) {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('coef')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   function toggleSort(k: SortKey) {
     if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -139,17 +139,24 @@ export default function InformesClient({ user }: { user: SessionUser }) {
 
   const prodOrdenada = [...(datos?.productividad ?? [])].sort((a, b) => {
     const dir = sortDir === 'asc' ? 1 : -1
+    // helper: null siempre al fondo independientemente de la dirección
+    function cmp(va: number | null, vb: number | null): number {
+      if (va === null && vb === null) return 0
+      if (va === null) return 1
+      if (vb === null) return -1
+      return dir * (va - vb)
+    }
     switch (sortKey) {
       case 'nombre': return dir * a.nombre.localeCompare(b.nombre, 'es')
       case 'citas':  return dir * (a.citas - b.citas)
       case 'ventas': return dir * (a.ventaNeta - b.ventaNeta)
-      case 'sueldo': return dir * ((a.sueldo ?? -1) - (b.sueldo ?? -1))
-      case 'coef':   return dir * ((coefPct(a) ?? -1) - (coefPct(b) ?? -1))
-      case 'ocup':   return dir * ((a.ocupacionPct ?? -1) - (b.ocupacionPct ?? -1))
+      case 'sueldo': return cmp(a.sueldo, b.sueldo)
+      case 'coef':   return cmp(coefPct(a), coefPct(b))
+      case 'ocup':   return cmp(a.ocupacionPct, b.ocupacionPct)
       case 'asist': {
-        const ra = a.diasHabiles > 0 ? a.diasPresente / a.diasHabiles : -1
-        const rb = b.diasHabiles > 0 ? b.diasPresente / b.diasHabiles : -1
-        return dir * (ra - rb)
+        const ra = a.diasHabiles > 0 ? a.diasPresente / a.diasHabiles : null
+        const rb = b.diasHabiles > 0 ? b.diasPresente / b.diasHabiles : null
+        return cmp(ra, rb)
       }
       default: return 0
     }
