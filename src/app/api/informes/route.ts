@@ -89,6 +89,7 @@ export async function GET(request: NextRequest) {
     { data: asistencia },
     { data: comprasData },
     { data: usuarios },
+    { data: sueldosData },
   ] = await Promise.all([
     fetchAll(() => supabaseAdmin
       .from('fresha_citas_detalle')
@@ -119,6 +120,11 @@ export async function GET(request: NextRequest) {
       .gte('fecha', inicio)
       .lte('fecha', fin),
     supabaseAdmin.from('usuarios').select('id, nombre'),
+    supabaseAdmin
+      .from('liquidaciones_pagos')
+      .select('usuario_id, nombre_excel, total')
+      .eq('anio', y)
+      .eq('mes', m),
   ])
 
   // Map: shortNorm(nombre) → usuario_id  (para cruzar Loyverse con empleadas)
@@ -231,12 +237,21 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const productividad = [...empMap.values()]
-    .filter(e => e.citas > 0 || e.diasPresente > 0)
-    .map(e => ({
+  // Sueldos: uid → total cobrado del mes
+  const sueldoMap = new Map<string, number>()
+  let totalSueldos = 0
+  for (const p of (sueldosData ?? [])) {
+    totalSueldos += p.total || 0
+    if (p.usuario_id) sueldoMap.set(p.usuario_id, (sueldoMap.get(p.usuario_id) ?? 0) + (p.total || 0))
+  }
+
+  const productividad = [...empMap.entries()]
+    .filter(([, e]) => e.citas > 0 || e.diasPresente > 0)
+    .map(([uid, e]) => ({
       nombre: e.nombre,
       citas: e.citas,
       ventaNeta: Math.round(e.ventaNeta),
+      sueldo: sueldoMap.has(uid) ? Math.round(sueldoMap.get(uid)!) : null,
       minOcupada: e.minOcupada,
       minLibre: Math.max(0, e.minBase - e.minOcupada),
       ocupacionPct: e.minBase > 0 ? Math.round(e.minOcupada / e.minBase * 100) : null,
@@ -281,6 +296,7 @@ export async function GET(request: NextRequest) {
       tasaCancelacion: citasTodas.length > 0 ? Math.round(citasCanceladas.length / citasTodas.length * 100) : 0,
       ventasNetas: Math.round(ventasNetas),
       gastos: Math.round(gastos),
+      sueldos: Math.round(totalSueldos),
       balance: Math.round(ventasNetas - gastos),
       proyeccion,
       diasTranscurridos,

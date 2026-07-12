@@ -11,6 +11,7 @@ interface Kpis {
   tasaCancelacion: number
   ventasNetas: number
   gastos: number
+  sueldos: number
   balance: number
   proyeccion: number | null
   diasTranscurridos: number
@@ -21,6 +22,7 @@ interface EmpleadaRow {
   nombre: string
   citas: number
   ventaNeta: number
+  sueldo: number | null
   minOcupada: number
   minLibre: number
   ocupacionPct: number | null
@@ -150,6 +152,11 @@ export default function InformesClient({ user }: { user: SessionUser }) {
             <KpiCard label="Ventas netas" value={fmt$(k.ventasNetas)} sub="Loyverse" />
             <KpiCard label="Gastos" value={fmt$(k.gastos)} />
             <KpiCard label="Balance estimado" value={fmt$(k.balance)} color={k.balance >= 0 ? 'text-green-600' : 'text-red-500'} />
+            {k.sueldos > 0 && (
+              <div className="col-span-2">
+                <KpiCard label="Masa salarial" value={fmt$(k.sueldos)} sub="Total liquidaciones cargadas del mes" />
+              </div>
+            )}
           </div>
 
           {/* Proyección */}
@@ -211,21 +218,21 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                   <span className="flex-1">Empleada</span>
                   <span className="w-8 text-right">Citas</span>
                   <span className="w-[80px] text-right">Ventas</span>
+                  <span className="w-[72px] text-right">Sueldo</span>
                   <span className="w-10 text-right">Ocup.</span>
-                  <span className="w-10 text-right">Asist.</span>
                 </div>
                 {datos.productividad.map((e, i) => (
                   <div key={i} className="flex items-center px-4 py-2.5 border-b border-gray-50 last:border-0">
                     <span className="flex-1 text-[12px] font-semibold truncate pr-2">{e.nombre}</span>
                     <span className="w-8 text-right text-[12px] text-[var(--text-muted)]">{e.citas}</span>
                     <span className="w-[80px] text-right text-[12px] font-semibold">{fmt$(e.ventaNeta)}</span>
+                    <span className="w-[72px] text-right text-[12px]">
+                      {e.sueldo !== null ? <span className="font-semibold text-amber-600">{fmt$(e.sueldo)}</span> : <span className="text-gray-300">—</span>}
+                    </span>
                     <span className="w-10 text-right text-[12px]">
                       {e.ocupacionPct !== null
                         ? <span className={`font-semibold ${e.ocupacionPct >= 70 ? 'text-green-600' : e.ocupacionPct >= 40 ? 'text-amber-500' : 'text-red-500'}`}>{e.ocupacionPct}%</span>
                         : <span className="text-gray-300">—</span>}
-                    </span>
-                    <span className="w-10 text-right text-[11px] text-[var(--text-muted)]">
-                      {e.diasHabiles > 0 ? `${e.diasPresente}/${e.diasHabiles}d` : '—'}
                     </span>
                   </div>
                 ))}
@@ -239,6 +246,7 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                       <th className="text-left px-4 py-2.5 font-medium">Empleada</th>
                       <th className="text-right px-3 py-2.5 font-medium">Citas</th>
                       <th className="text-right px-3 py-2.5 font-medium">Ventas (Loyverse)</th>
+                      <th className="text-right px-3 py-2.5 font-medium">Sueldo</th>
                       <th className="text-right px-3 py-2.5 font-medium">T. ocup.</th>
                       <th className="text-right px-3 py-2.5 font-medium">T. libre</th>
                       <th className="text-right px-3 py-2.5 font-medium">% ocup.</th>
@@ -251,6 +259,9 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                         <td className="px-4 py-3 font-medium text-[var(--text)]">{e.nombre}</td>
                         <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.citas}</td>
                         <td className="px-3 py-3 text-right font-semibold text-[var(--text)]">{e.ventaNeta > 0 ? fmt$(e.ventaNeta) : <span className="text-gray-300">—</span>}</td>
+                        <td className="px-3 py-3 text-right">
+                          {e.sueldo !== null ? <span className="font-semibold text-amber-600">{fmt$(e.sueldo)}</span> : <span className="text-gray-300">—</span>}
+                        </td>
                         <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.minOcupada > 0 ? fmtMin(e.minOcupada) : <span className="text-gray-300">—</span>}</td>
                         <td className="px-3 py-3 text-right text-[var(--text-muted)]">{e.minLibre > 0 ? fmtMin(e.minLibre) : <span className="text-gray-300">—</span>}</td>
                         <td className="px-3 py-3 text-right">
@@ -265,7 +276,7 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                 </table>
               </div>
               <p className="px-4 py-2 text-[10px] text-[var(--text-muted)] border-t border-gray-50">
-                Ventas: precio con descuento aplicado (Loyverse) · Ocup.: tiempo en citas vs horario base (Fresha)
+                Ventas: precio con descuento aplicado (Loyverse) · Sueldo: liquidación cargada del mes · Ocup.: tiempo en citas vs horario base (Fresha)
               </p>
             </div>
           )}
