@@ -36,7 +36,7 @@ async function fetchReceipts(from, to) {
   toDate.setDate(toDate.getDate() + 1)
   const toNext = toDate.toISOString().slice(0, 10)
 
-  // Solo SALE — los recibos REFUND se inspeccionan por separado para detectar devoluciones reales
+  // Solo SALE — la API de Loyverse no filtra correctamente receipt_types=REFUND
   const baseUrl = `https://api.loyverse.com/v1.0/receipts?receipt_types=SALE&limit=250`
                 + `&created_at_min=${from}T03:00:00.000Z`
                 + `&created_at_max=${toNext}T02:59:59.999Z`
@@ -95,8 +95,8 @@ async function fetchReceipts(from, to) {
     }
   }
 
-  // Agregar pagos por (receipt_number, payment_name) para evitar conflictos de PK
-  // cuando un recibo tiene dos pagos del mismo tipo
+  // Agregar pagos por (receipt_number, payment_name) — un recibo puede tener
+  // dos líneas de mismo método (ej. dos pagos QR) → sumar en lugar de duplicar PK
   const pagoMap = new Map()
   for (const p of pagoRows) {
     const key = `${p.receipt_number}||${p.payment_name}`
@@ -125,35 +125,9 @@ async function postToApp(rows, pagoRows, from, to) {
   return data
 }
 
-async function inspectRefunds(from, to) {
-  const toDate = new Date(to)
-  toDate.setDate(toDate.getDate() + 1)
-  const toNext = toDate.toISOString().slice(0, 10)
-
-  const url = `https://api.loyverse.com/v1.0/receipts?receipt_types=REFUND&limit=5`
-            + `&created_at_min=${from}T03:00:00.000Z`
-            + `&created_at_max=${toNext}T02:59:59.999Z`
-
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${TOKEN}` } })
-  if (!res.ok) return
-  const data = await res.json()
-  const sample = data.receipts?.[0]
-  if (!sample) return
-  console.log('\n[refund-sample] Campos clave del primer REFUND:')
-  console.log('  receipt_number:', sample.receipt_number)
-  console.log('  receipt_type:  ', sample.receipt_type)
-  console.log('  refund_for:    ', sample.refund_for ?? '(ausente)')
-  console.log('  total_money:   ', sample.total_money)
-  console.log('  note:          ', sample.note ?? '(sin nota)')
-  console.log('  payments:      ', JSON.stringify(sample.payments?.slice(0, 2)))
-  console.log('  line_items:    ', sample.line_items?.length ?? 0, 'items')
-}
-
 async function main() {
   const { from, to } = getDateRange()
   console.log(`\n═══ Importación Loyverse: ${from} → ${to} ═══\n`)
-
-  await inspectRefunds(from, to)
 
   const { rows, pagoRows } = await fetchReceipts(from, to)
   console.log(`\n[loyverse] Items: ${rows.length} | Pagos: ${pagoRows.length}`)
