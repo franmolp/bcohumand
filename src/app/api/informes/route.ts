@@ -129,11 +129,12 @@ export async function GET(request: NextRequest) {
     nombreMap.set(u.id, u.nombre)
   }
 
-  // ─── Loyverse: ventas netas = ventas brutas − descuentos (desde tickets por ítem) ──
-  // loyverse_pagos se usa solo para el desglose por medio de pago
+  // ─── Loyverse: ventas netas desde loyverse_tickets ──────────────────────────
+  // total_money por ítem YA incluye el descuento aplicado (es el neto).
+  // loyverse_pagos se usa solo para el desglose por medio de pago.
   const pagos = loyPagos
   const tickets = loyTickets
-  const ventasNetas = tickets.reduce((s, t) => s + ((t.total_money || 0) - (t.total_discount || 0)), 0)
+  const ventasNetas = tickets.reduce((s, t) => s + (t.total_money || 0), 0)
   const proyeccion = diasTranscurridos < diasDelMes && diasTranscurridos > 0
     ? Math.round(ventasNetas / diasTranscurridos * diasDelMes)
     : null
@@ -150,12 +151,12 @@ export async function GET(request: NextRequest) {
     .map(([tipo, total]) => ({ tipo, total: Math.round(total) }))
     .sort((a, b) => b.total - a.total)
 
-  // Ventas Loyverse por profesional (netas = brutas − descuentos, por ítem)
+  // Ventas Loyverse por profesional (total_money ya es neto por ítem)
   const loyVentaMap = new Map<string, number>()
   for (const t of tickets) {
     if (!t.profesional) continue
     const key = normStr(t.profesional)
-    loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + ((t.total_money || 0) - (t.total_discount || 0)))
+    loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + (t.total_money || 0))
   }
 
   // ─── Fresha: citas y ocupación ───────────────────────────────────────────────
