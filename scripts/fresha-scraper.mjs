@@ -132,12 +132,18 @@ function parseCitasDetalle(text) {
     const durRaw = iDur >= 0 ? (r[iDur] ?? '').trim() : ''
     const duracion_min = (() => {
       if (!durRaw) return 0
-      // Formato "H:MM" → ej. "0:45" → 45, "1:30" → 90
+      // "H:MM" → ej. "0:45" → 45, "1:30" → 90
       const hm = durRaw.match(/^(\d+):(\d{2})$/)
       if (hm) return parseInt(hm[1]) * 60 + parseInt(hm[2])
-      // Formato "Xh Ymin" → ej. "1h 15min" → 75, "2h 0min" → 120
+      // "Xh Ymin" → ej. "1h 30min" → 90, "2h 0min" → 120
       const hmin = durRaw.match(/^(\d+)h\s+(\d+)min$/i)
       if (hmin) return parseInt(hmin[1]) * 60 + parseInt(hmin[2])
+      // "Xh" → ej. "1h" → 60, "2h" → 120
+      const hOnly = durRaw.match(/^(\d+)h$/i)
+      if (hOnly) return parseInt(hOnly[1]) * 60
+      // "Xmin" → ej. "45min" → 45
+      const mOnly = durRaw.match(/^(\d+)min$/i)
+      if (mOnly) return parseInt(mOnly[1])
       return parseInt(durRaw) || 0
     })()
     const ventaRaw    = iVnt >= 0 ? (r[iVnt] ?? '').replace(/[^0-9.,-]/g, '').replace(',', '.') : '0'
