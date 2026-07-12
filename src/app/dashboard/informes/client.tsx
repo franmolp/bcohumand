@@ -196,12 +196,13 @@ export default function InformesClient({ user }: { user: SessionUser }) {
             <KpiCard label="Citas realizadas" value={String(k.totalCitas)} sub={k.canceladas > 0 ? `${k.canceladas} canceladas (${k.tasaCancelacion}%)` : undefined} />
             <KpiCard label="Ventas netas" value={fmt$(k.ventasNetas)} sub="Loyverse" />
             <KpiCard label="Gastos" value={fmt$(k.gastos)} />
-            <KpiCard label="Balance estimado" value={fmt$(k.balance)} color={k.balance >= 0 ? 'text-green-600' : 'text-red-500'} />
-            {k.sueldos > 0 && (
-              <div className="col-span-2">
-                <KpiCard label="Masa salarial" value={fmt$(k.sueldos)} sub="Total liquidaciones cargadas del mes" />
-              </div>
-            )}
+            <KpiCard label="Masa salarial" value={k.sueldos > 0 ? fmt$(k.sueldos) : '—'} sub={k.sueldos > 0 ? 'Liquidaciones del mes' : 'Sin liquidaciones cargadas'} />
+            <div className="col-span-2">
+              {(() => {
+                const rem = k.ventasNetas - k.sueldos - k.gastos
+                return <KpiCard label="Remanente del mes" value={fmt$(rem)} color={rem >= 0 ? 'text-green-600' : 'text-red-500'} sub="Ventas netas − sueldos − compras" />
+              })()}
+            </div>
           </div>
 
           {/* Proyección */}
