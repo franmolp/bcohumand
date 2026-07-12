@@ -56,13 +56,15 @@ async function fetchReceipts(from, to) {
     for (const r of receipts) {
       if (r.cancelled_at) continue
       const date = r.receipt_date ?? r.created_at
+      // La API devuelve REFUND mezclados con SALE — los negamos para que resten correctamente
+      const sign = r.receipt_type === 'REFUND' ? -1 : 1
 
       for (const p of (r.payments ?? []).filter(p => p.type !== 'CASHROUNDING')) {
         pagoRows.push({
           receipt_number: r.receipt_number,
           receipt_date:   date,
           payment_name:   p.name ?? 'Desconocido',
-          payment_money:  p.money_amount ?? 0,
+          payment_money:  (p.money_amount ?? 0) * sign,
         })
       }
 
@@ -80,8 +82,8 @@ async function fetchReceipts(from, to) {
           item_name:      item.item_name ?? '',
           categoria:      modifier?.name    ?? '',
           profesional:    modifier?.option  ?? '',
-          total_money:    item.total_money   ?? 0,
-          total_discount: item.total_discount ?? 0,
+          total_money:    (item.total_money   ?? 0) * sign,
+          total_discount: (item.total_discount ?? 0) * sign,
           payment_type:   paymentType,
           store_id:       r.store_id ?? '',
         })
