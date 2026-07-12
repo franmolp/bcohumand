@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
       .from('asistencia_procesada')
       .select('usuario_id, estado, horas_base, fecha, horario_base_entrada, horario_base_salida')
       .gte('fecha', inicio)
-      .lte('fecha', fin),
+      .lte('fecha', finDatos),
     supabaseAdmin
       .from('compras')
       .select('monto')
