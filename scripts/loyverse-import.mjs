@@ -28,19 +28,16 @@ function getDateRange() {
   return { from: hoy, to: hoy }
 }
 
-/**
- * Trae todos los recibos de un tipo (SALE o REFUND) paginando hasta el final.
- * sign = +1 para SALE, -1 para REFUND.
- */
-async function fetchByType(receiptType, from, to, sign) {
-  const rows     = []  // line items (solo SALE)
-  const pagoRows = []  // pagos por recibo
+async function fetchReceipts(from, to) {
+  const rows     = []  // line items para atribución por profesional
+  const pagoRows = []  // pagos por recibo × medio de pago
 
   const toDate = new Date(to)
   toDate.setDate(toDate.getDate() + 1)
   const toNext = toDate.toISOString().slice(0, 10)
 
-  const baseUrl = `https://api.loyverse.com/v1.0/receipts?receipt_types=${receiptType}&limit=250`
+  // Solo SALE — los recibos REFUND en este negocio son cierres de caja, no devoluciones reales
+  const baseUrl = `https://api.loyverse.com/v1.0/receipts?receipt_types=SALE&limit=250`
                 + `&created_at_min=${from}T03:00:00.000Z`
                 + `&created_at_max=${toNext}T02:59:59.999Z`
 
@@ -51,47 +48,43 @@ async function fetchByType(receiptType, from, to, sign) {
     page++
     const url = cursor ? `${baseUrl}&cursor=${encodeURIComponent(cursor)}` : baseUrl
     const res = await fetch(url, { headers: { Authorization: `Bearer ${TOKEN}` } })
-    if (!res.ok) throw new Error(`Loyverse API error ${res.status} (${receiptType}): ${await res.text()}`)
+    if (!res.ok) throw new Error(`Loyverse API error ${res.status}: ${await res.text()}`)
     const data     = await res.json()
     const receipts = data.receipts ?? []
-    console.log(`[loyverse] ${receiptType} página ${page}: ${receipts.length} recibos`)
+    console.log(`[loyverse] Página ${page}: ${receipts.length} recibos`)
 
     for (const r of receipts) {
       if (r.cancelled_at) continue
       const date = r.receipt_date ?? r.created_at
 
-      // Pago por medio de pago (positivo para SALE, negativo para REFUND)
       for (const p of (r.payments ?? []).filter(p => p.type !== 'CASHROUNDING')) {
         pagoRows.push({
           receipt_number: r.receipt_number,
           receipt_date:   date,
           payment_name:   p.name ?? 'Desconocido',
-          payment_money:  sign * (p.money_amount ?? 0),
+          payment_money:  p.money_amount ?? 0,
         })
       }
 
-      // Line items solo para SALE (atribución por profesional)
-      if (sign > 0) {
-        const paymentType = [...new Set(
-          (r.payments ?? [])
-            .filter(p => p.type !== 'CASHROUNDING')
-            .map(p => p.name)
-        )].join(', ') || 'Desconocido'
+      const paymentType = [...new Set(
+        (r.payments ?? [])
+          .filter(p => p.type !== 'CASHROUNDING')
+          .map(p => p.name)
+      )].join(', ') || 'Desconocido'
 
-        for (const item of (r.line_items ?? [])) {
-          const modifier = (item.line_modifiers ?? [])[0]
-          rows.push({
-            id:             `${r.receipt_number}__${item.id}`,
-            receipt_date:   date,
-            item_name:      item.item_name ?? '',
-            categoria:      modifier?.name    ?? '',
-            profesional:    modifier?.option  ?? '',
-            total_money:    item.total_money   ?? 0,
-            total_discount: item.total_discount ?? 0,
-            payment_type:   paymentType,
-            store_id:       r.store_id ?? '',
-          })
-        }
+      for (const item of (r.line_items ?? [])) {
+        const modifier = (item.line_modifiers ?? [])[0]
+        rows.push({
+          id:             `${r.receipt_number}__${item.id}`,
+          receipt_date:   date,
+          item_name:      item.item_name ?? '',
+          categoria:      modifier?.name    ?? '',
+          profesional:    modifier?.option  ?? '',
+          total_money:    item.total_money   ?? 0,
+          total_discount: item.total_discount ?? 0,
+          payment_type:   paymentType,
+          store_id:       r.store_id ?? '',
+        })
       }
     }
 
@@ -102,18 +95,19 @@ async function fetchByType(receiptType, from, to, sign) {
     }
   }
 
-  return { rows, pagoRows }
-}
-
-async function fetchReceipts(from, to) {
-  // Dos llamadas separadas: Loyverse no acepta receipt_types=SALE,REFUND combinado
-  const sale   = await fetchByType('SALE',   from, to, +1)
-  const refund = await fetchByType('REFUND', from, to, -1)
-
-  return {
-    rows:     sale.rows,
-    pagoRows: [...sale.pagoRows, ...refund.pagoRows],
+  // Agregar pagos por (receipt_number, payment_name) para evitar conflictos de PK
+  // cuando un recibo tiene dos pagos del mismo tipo
+  const pagoMap = new Map()
+  for (const p of pagoRows) {
+    const key = `${p.receipt_number}||${p.payment_name}`
+    if (pagoMap.has(key)) {
+      pagoMap.get(key).payment_money += p.payment_money
+    } else {
+      pagoMap.set(key, { ...p })
+    }
   }
+
+  return { rows, pagoRows: [...pagoMap.values()] }
 }
 
 async function postToApp(rows, pagoRows, from, to) {
