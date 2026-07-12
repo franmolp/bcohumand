@@ -24,44 +24,43 @@ function getDateRange() {
   if (process.env.FROM && process.env.TO) {
     return { from: process.env.FROM, to: process.env.TO }
   }
-  // Por defecto: solo el día de hoy en AR (el trigger corre a las 21hs cuando el local ya cerró)
   const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
   return { from: hoy, to: hoy }
 }
 
-async function fetchReceipts(from, to) {
-  const rows     = []  // line items de SALE (para atribución por profesional)
-  const pagoRows = []  // pagos por recibo: SALE positivo, REFUND negativo
+/**
+ * Trae todos los recibos de un tipo (SALE o REFUND) paginando hasta el final.
+ * sign = +1 para SALE, -1 para REFUND.
+ */
+async function fetchByType(receiptType, from, to, sign) {
+  const rows     = []  // line items (solo SALE)
+  const pagoRows = []  // pagos por recibo
 
   const toDate = new Date(to)
   toDate.setDate(toDate.getDate() + 1)
   const toNext = toDate.toISOString().slice(0, 10)
 
-  // Traemos tanto SALE como REFUND para calcular ventas netas exactas
-  const url = `https://api.loyverse.com/v1.0/receipts?receipt_types=SALE,REFUND&limit=250`
-            + `&created_at_min=${from}T03:00:00.000Z`
-            + `&created_at_max=${toNext}T02:59:59.999Z`
+  const baseUrl = `https://api.loyverse.com/v1.0/receipts?receipt_types=${receiptType}&limit=250`
+                + `&created_at_min=${from}T03:00:00.000Z`
+                + `&created_at_max=${toNext}T02:59:59.999Z`
 
   let cursor = null
   let page   = 0
 
   while (true) {
     page++
-    const pageUrl = cursor ? `${url}&cursor=${encodeURIComponent(cursor)}` : url
-    const res = await fetch(pageUrl, { headers: { Authorization: `Bearer ${TOKEN}` } })
-    if (!res.ok) throw new Error(`Loyverse API error ${res.status}: ${await res.text()}`)
+    const url = cursor ? `${baseUrl}&cursor=${encodeURIComponent(cursor)}` : baseUrl
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${TOKEN}` } })
+    if (!res.ok) throw new Error(`Loyverse API error ${res.status} (${receiptType}): ${await res.text()}`)
     const data     = await res.json()
     const receipts = data.receipts ?? []
-    console.log(`[loyverse] Página ${page}: ${receipts.length} recibos`)
+    console.log(`[loyverse] ${receiptType} página ${page}: ${receipts.length} recibos`)
 
     for (const r of receipts) {
       if (r.cancelled_at) continue
-      const date     = r.receipt_date ?? r.created_at
-      const isRefund = r.receipt_type === 'REFUND'
-      const sign     = isRefund ? -1 : 1
+      const date = r.receipt_date ?? r.created_at
 
-      // ─── Pagos por medio de pago ───────────────────────────────────────────
-      // Excluimos CASHROUNDING (redondeo de efectivo, céntimos)
+      // Pago por medio de pago (positivo para SALE, negativo para REFUND)
       for (const p of (r.payments ?? []).filter(p => p.type !== 'CASHROUNDING')) {
         pagoRows.push({
           receipt_number: r.receipt_number,
@@ -71,8 +70,8 @@ async function fetchReceipts(from, to) {
         })
       }
 
-      // ─── Line items (solo SALE, para atribución por profesional) ──────────
-      if (!isRefund) {
+      // Line items solo para SALE (atribución por profesional)
+      if (sign > 0) {
         const paymentType = [...new Set(
           (r.payments ?? [])
             .filter(p => p.type !== 'CASHROUNDING')
@@ -106,6 +105,17 @@ async function fetchReceipts(from, to) {
   return { rows, pagoRows }
 }
 
+async function fetchReceipts(from, to) {
+  // Dos llamadas separadas: Loyverse no acepta receipt_types=SALE,REFUND combinado
+  const sale   = await fetchByType('SALE',   from, to, +1)
+  const refund = await fetchByType('REFUND', from, to, -1)
+
+  return {
+    rows:     sale.rows,
+    pagoRows: [...sale.pagoRows, ...refund.pagoRows],
+  }
+}
+
 async function postToApp(rows, pagoRows, from, to) {
   const url = `${APP_URL}/api/importar/loyverse`
   const res = await fetch(url, {
@@ -126,7 +136,7 @@ async function main() {
   console.log(`\n═══ Importación Loyverse: ${from} → ${to} ═══\n`)
 
   const { rows, pagoRows } = await fetchReceipts(from, to)
-  console.log(`\n[loyverse] Líneas de items: ${rows.length} | Filas de pagos: ${pagoRows.length}`)
+  console.log(`\n[loyverse] Items: ${rows.length} | Pagos: ${pagoRows.length}`)
 
   if (!rows.length && !pagoRows.length) {
     console.log('[loyverse] Sin datos para el período.')
