@@ -157,27 +157,38 @@ export async function GET(request: NextRequest) {
     .map(([tipo, total]) => ({ tipo, total: Math.round(total) }))
     .sort((a, b) => b.total - a.total)
 
-  // Precios de referencia: item_name → bruto máximo visto en el mes
-  // Para resolver ítems tipo "Canje X" que entran como $0/$0 en Loyverse
+  // Normaliza nombres de ítems para emparejar canjes con su servicio base.
+  // "$ VENTA DIA DE SPA" → "dia de spa"
+  // "$0 CANJE DIA DE SPA" → "dia de spa"
+  function normItem(name: string): string {
+    return name
+      .replace(/^\$0?\s*/i, '')
+      .replace(/\b(canje|venta)\b\s*/gi, '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+  }
+
+  // Precios de referencia: normItem(name) → bruto máximo visto en el mes
   const precioRefMap = new Map<string, number>()
   for (const t of tickets) {
     const bruto = (t.total_money || 0) + (t.total_discount || 0)
     if (bruto > 0 && t.item_name) {
-      precioRefMap.set(t.item_name, Math.max(precioRefMap.get(t.item_name) ?? 0, bruto))
+      const k = normItem(t.item_name)
+      if (k) precioRefMap.set(k, Math.max(precioRefMap.get(k) ?? 0, bruto))
     }
   }
 
   // Ventas por profesional = bruto * 90%
-  // Si total_money=0 y total_discount=0 (ej. "Canje Día de Spa"), usa el precio
-  // del servicio base quitando el prefijo "Canje " para no contar esos servicios como $0
+  // Si bruto=0 (ítem a $0 sin descuento registrado, ej. "$0 CANJE DIA DE SPA"),
+  // busca el precio del servicio base por nombre normalizado
   const loyVentaMap = new Map<string, number>()
   for (const t of tickets) {
     if (!t.profesional) continue
     const key = shortNorm(t.profesional)
     let bruto = (t.total_money || 0) + (t.total_discount || 0)
     if (bruto === 0 && t.item_name) {
-      const baseName = t.item_name.replace(/^canje\s+/i, '')
-      bruto = precioRefMap.get(baseName) ?? 0
+      bruto = precioRefMap.get(normItem(t.item_name)) ?? 0
     }
     loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + bruto * 0.9)
   }
