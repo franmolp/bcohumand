@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
     ),
     fetchAll(() => supabaseAdmin
       .from('loyverse_tickets')
-      .select('profesional, total_money, total_discount, receipt_date')
+      .select('profesional, total_money, total_discount, item_name, receipt_date')
       .gte('receipt_date', inicioUTC)
       .lte('receipt_date', finDatosUTC)
     ),
@@ -157,14 +157,28 @@ export async function GET(request: NextRequest) {
     .map(([tipo, total]) => ({ tipo, total: Math.round(total) }))
     .sort((a, b) => b.total - a.total)
 
+  // Precios de referencia: item_name → bruto máximo visto en el mes
+  // Para resolver ítems tipo "Canje X" que entran como $0/$0 en Loyverse
+  const precioRefMap = new Map<string, number>()
+  for (const t of tickets) {
+    const bruto = (t.total_money || 0) + (t.total_discount || 0)
+    if (bruto > 0 && t.item_name) {
+      precioRefMap.set(t.item_name, Math.max(precioRefMap.get(t.item_name) ?? 0, bruto))
+    }
+  }
+
   // Ventas por profesional = bruto * 90%
-  // bruto = total_money + total_discount (precio de lista, sin descuento real aplicado)
-  // Así los servicios de regalo/cortesía igual cuentan al 90% del precio de lista
+  // Si total_money=0 y total_discount=0 (ej. "Canje Día de Spa"), usa el precio
+  // del servicio base quitando el prefijo "Canje " para no contar esos servicios como $0
   const loyVentaMap = new Map<string, number>()
   for (const t of tickets) {
     if (!t.profesional) continue
     const key = shortNorm(t.profesional)
-    const bruto = (t.total_money || 0) + (t.total_discount || 0)
+    let bruto = (t.total_money || 0) + (t.total_discount || 0)
+    if (bruto === 0 && t.item_name) {
+      const baseName = t.item_name.replace(/^canje\s+/i, '')
+      bruto = precioRefMap.get(baseName) ?? 0
+    }
     loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + bruto * 0.9)
   }
 
