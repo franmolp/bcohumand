@@ -2,8 +2,8 @@ name: Importar datos Fresha
 
 on:
   schedule:
-    # Lunes a sábado a las 07:00 ART (10:00 UTC — Argentina no usa horario de verano)
-    - cron: '0 10 * * 1-6'
+    # Todos los días a las 21:15 ART (00:15 UTC) — 15 min después de Loyverse
+    - cron: '15 0 * * *'
   workflow_dispatch:
     inputs:
       from:

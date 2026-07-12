@@ -167,10 +167,12 @@ export default function InformesClient({ user }: { user: SessionUser }) {
     `${right ? 'text-right' : 'text-left'} px-3 py-2.5 font-medium cursor-pointer select-none hover:text-[var(--text)] whitespace-nowrap transition-colors`
 
   return (
-    <div className="pb-6">
-      <div className="flex items-center gap-3 mb-5">
-        <IconBarChart size={22} className="text-[var(--primary)]" />
-        <h1 className="text-[19px] font-bold text-[var(--text)]">Informes</h1>
+    <div className="py-4 fade-in">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
+          <IconBarChart size={18} className="text-white" />
+        </div>
+        <h1 className="text-[17px] font-bold text-[var(--text)]">Informes</h1>
       </div>
 
       <div className="flex items-center justify-between bg-white rounded-2xl border border-[var(--border)] px-4 py-3 mb-5">
