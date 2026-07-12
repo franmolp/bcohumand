@@ -276,7 +276,7 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                 </table>
               </div>
               <p className="px-4 py-2 text-[10px] text-[var(--text-muted)] border-t border-gray-50">
-                Ventas: precio de lista -10% (bruto Loyverse, incluye servicios de cortesía) · Sueldo: liquidación cargada del mes · Ocup.: tiempo en citas vs horario base (Fresha)
+                Ventas: precio de lista -10% (bruto Loyverse, incluye servicios de cortesía) · Sueldo: bruto hoja "Todas" del Excel · Ocup.: tiempo en citas vs horario base (Fresha)
               </p>
             </div>
           )}

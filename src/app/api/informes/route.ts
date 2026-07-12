@@ -121,8 +121,8 @@ export async function GET(request: NextRequest) {
       .lte('fecha', fin),
     supabaseAdmin.from('usuarios').select('id, nombre'),
     supabaseAdmin
-      .from('liquidaciones_pagos')
-      .select('usuario_id, nombre_excel, total')
+      .from('liquidaciones_bruto')
+      .select('usuario_id, nombre_excel, bruto')
       .eq('anio', y)
       .eq('mes', m),
   ])
@@ -239,12 +239,12 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Sueldos: uid → total cobrado del mes
+  // Sueldos brutos por empleada (hoja "Todas" del Excel → liquidaciones_bruto)
   const sueldoMap = new Map<string, number>()
   let totalSueldos = 0
   for (const p of (sueldosData ?? [])) {
-    totalSueldos += p.total || 0
-    if (p.usuario_id) sueldoMap.set(p.usuario_id, (sueldoMap.get(p.usuario_id) ?? 0) + (p.total || 0))
+    totalSueldos += p.bruto || 0
+    if (p.usuario_id) sueldoMap.set(p.usuario_id, (sueldoMap.get(p.usuario_id) ?? 0) + (p.bruto || 0))
   }
 
   const productividad = [...empMap.entries()]
