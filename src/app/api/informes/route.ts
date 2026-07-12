@@ -152,10 +152,11 @@ export async function GET(request: NextRequest) {
     .sort((a, b) => b.total - a.total)
 
   // Ventas Loyverse por profesional (total_money ya es neto por ítem)
+  // Usa shortNorm para que coincida con los mapas de lookup (p.ej. "Romina DG" → "romina d")
   const loyVentaMap = new Map<string, number>()
   for (const t of tickets) {
     if (!t.profesional) continue
-    const key = normStr(t.profesional)
+    const key = shortNorm(t.profesional)
     loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + (t.total_money || 0))
   }
 
@@ -248,7 +249,7 @@ export async function GET(request: NextRequest) {
   const srvMap = new Map<string, { categoria: string; cantidad: number; ventaNeta: number; duracionMin: number; cantConDur: number }>()
   for (const c of citasNoCanc) {
     const key = c.servicio || 'Sin servicio'
-    const dur = (c.duracion_min && c.duracion_min > 0) ? c.duracion_min : 0
+    const dur = (c.duracion_min && c.duracion_min >= 15) ? c.duracion_min : 0
     const prev = srvMap.get(key) ?? { categoria: c.categoria || '', cantidad: 0, ventaNeta: 0, duracionMin: 0, cantConDur: 0 }
     srvMap.set(key, {
       categoria: prev.categoria || c.categoria || '',

@@ -325,7 +325,7 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                           {s.categoria && <p className="text-[10px] text-[var(--text-muted)]">{s.categoria}</p>}
                         </td>
                         <td className="px-3 py-3 text-right text-[var(--text-muted)]">{s.cantidad}</td>
-                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">{s.duracionMin !== null ? `${s.duracionMin}m` : '—'}</td>
+                        <td className="px-3 py-3 text-right text-[var(--text-muted)]">{s.duracionMin !== null ? fmtMin(s.duracionMin) : '—'}</td>
                         <td className="px-3 py-3 text-right text-[var(--text-muted)]">{fmt$(s.ventaNeta / s.cantidad)}</td>
                         <td className="px-4 py-3 text-right font-semibold text-[var(--primary)]">{fmt$(s.precioPorHora!)}</td>
                       </tr>
