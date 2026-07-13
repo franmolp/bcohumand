@@ -75,13 +75,18 @@ async function fetchReceipts(from, to) {
       )].join(', ') || 'Desconocido'
 
       for (const item of (r.line_items ?? [])) {
-        const modifier = (item.line_modifiers ?? [])[0]
+        const modifiers  = item.line_modifiers ?? []
+        const firstMod   = modifiers[0]
+        // Todos los empleados asignados al ítem, separados por coma.
+        // Si hay 2 (ej. DIA DE SPA con 2 profesionales), el análisis
+        // les atribuye el 50% del valor a cada una.
+        const profesional = modifiers.map(m => m.option).filter(Boolean).join(', ') || ''
         rows.push({
           id:             `${r.receipt_number}__${item.id}`,
           receipt_date:   date,
           item_name:      item.item_name ?? '',
-          categoria:      modifier?.name    ?? '',
-          profesional:    modifier?.option  ?? '',
+          categoria:      firstMod?.name    ?? '',
+          profesional,
           total_money:    (item.total_money   ?? 0) * sign,
           total_discount: (item.total_discount ?? 0) * sign,
           payment_type:   paymentType,
