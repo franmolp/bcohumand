@@ -182,15 +182,21 @@ export async function GET(request: NextRequest) {
   // Ventas por profesional = columna "Venta" de Loyverse (total_money + total_discount).
   // Si bruto=0 (ítem a $0 sin descuento registrado, ej. "$0 CANJE DIA DE SPA"),
   // busca el precio del servicio base por nombre normalizado.
+  // Si el ticket tiene múltiples profesionales (ej. "Claudia S, Luciana M"),
+  // se divide el valor en partes iguales entre ellas.
   const loyVentaMap = new Map<string, number>()
   for (const t of tickets) {
     if (!t.profesional) continue
-    const key = shortNorm(t.profesional)
+    const pros = t.profesional.split(',').map((p: string) => p.trim()).filter(Boolean)
+    const share = 1 / pros.length
     let bruto = (t.total_money || 0) + (t.total_discount || 0)
     if (bruto === 0 && t.item_name) {
       bruto = precioRefMap.get(normItem(t.item_name)) ?? 0
     }
-    loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + bruto)
+    for (const pro of pros) {
+      const key = shortNorm(pro)
+      loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + bruto * share)
+    }
   }
 
   // ─── Fresha: citas y ocupación ───────────────────────────────────────────────
