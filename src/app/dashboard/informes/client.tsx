@@ -340,7 +340,7 @@ export default function InformesClient({ user }: { user: SessionUser }) {
                 </table>
               </div>
               <p className="px-4 py-2 text-[10px] text-[var(--text-muted)] border-t border-gray-50">
-                Ventas: precio de lista Loyverse (canjes al precio del servicio base) · Sueldo: bruto hoja "Todas" · Coef.: sueldo/ventas · Ocup.: tiempo en citas vs horario base
+                Ventas: precio Loyverse ×0.9 (canjes al precio del servicio base) · Sueldo: bruto hoja "Todas" · Coef.: sueldo/ventas · Ocup.: tiempo en citas vs horario base
               </p>
             </div>
           )}

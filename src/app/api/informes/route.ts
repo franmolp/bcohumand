@@ -169,21 +169,37 @@ export async function GET(request: NextRequest) {
       .normalize('NFD').replace(/[̀-ͯ]/g, '')
   }
 
-  // Precios de referencia: normItem(name) → bruto máximo visto en el mes
-  const precioRefMap = new Map<string, number>()
+  // Precios de referencia: normItem(name) → precio más común (moda) del mes.
+  // Se usa moda en lugar de máximo para evitar que tickets combinados de 2 personas
+  // (ej. DIA DE SPA a $102.222 = 2 × $51.111) inflen el precio de referencia.
+  const precioRefCounts = new Map<string, Map<number, number>>()
   for (const t of tickets) {
     const bruto = (t.total_money || 0) + (t.total_discount || 0)
     if (bruto > 0 && t.item_name) {
       const k = normItem(t.item_name)
-      if (k) precioRefMap.set(k, Math.max(precioRefMap.get(k) ?? 0, bruto))
+      if (k) {
+        if (!precioRefCounts.has(k)) precioRefCounts.set(k, new Map())
+        const c = precioRefCounts.get(k)!
+        c.set(bruto, (c.get(bruto) ?? 0) + 1)
+      }
     }
   }
+  const precioRefMap = new Map<string, number>()
+  for (const [k, counts] of precioRefCounts) {
+    let modePrice = 0, modeCount = 0
+    for (const [price, count] of counts) {
+      if (count > modeCount) { modePrice = price; modeCount = count }
+    }
+    precioRefMap.set(k, modePrice)
+  }
 
-  // Ventas por profesional = columna "Venta" de Loyverse (total_money + total_discount).
-  // Si bruto=0 (ítem a $0 sin descuento registrado, ej. "$0 CANJE DIA DE SPA"),
-  // busca el precio del servicio base por nombre normalizado.
-  // Si el ticket tiene múltiples profesionales (ej. "Claudia S, Luciana M"),
-  // se divide el valor en partes iguales entre ellas.
+  // Ventas por profesional = (total_money + total_discount) × 0.9.
+  // Loyverse almacena los precios con un markup del ~11% respecto al precio real
+  // del servicio; el factor 0.9 convierte al precio que figura en la liquidación.
+  // Si bruto=0 (canje sin precio, ej. "$0 CANJE DIA DE SPA"), se resuelve al
+  // precio de referencia del servicio base (moda del mes) × 0.9.
+  // Si el campo profesional tiene varios nombres separados por coma, se divide
+  // el valor en partes iguales.
   const loyVentaMap = new Map<string, number>()
   for (const t of tickets) {
     if (!t.profesional) continue
@@ -195,7 +211,7 @@ export async function GET(request: NextRequest) {
     }
     for (const pro of pros) {
       const key = shortNorm(pro)
-      loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + bruto * share)
+      loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + bruto * share * 0.9)
     }
   }
 
