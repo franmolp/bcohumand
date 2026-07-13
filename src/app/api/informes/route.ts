@@ -179,9 +179,9 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Ventas por profesional = bruto * 90%
+  // Ventas por profesional = columna "Venta" de Loyverse (total_money + total_discount).
   // Si bruto=0 (ítem a $0 sin descuento registrado, ej. "$0 CANJE DIA DE SPA"),
-  // busca el precio del servicio base por nombre normalizado
+  // busca el precio del servicio base por nombre normalizado.
   const loyVentaMap = new Map<string, number>()
   for (const t of tickets) {
     if (!t.profesional) continue
@@ -190,7 +190,7 @@ export async function GET(request: NextRequest) {
     if (bruto === 0 && t.item_name) {
       bruto = precioRefMap.get(normItem(t.item_name)) ?? 0
     }
-    loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + bruto * 0.9)
+    loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + bruto)
   }
 
   // ─── Fresha: citas y ocupación ───────────────────────────────────────────────
