@@ -2,8 +2,8 @@ name: Importar datos Fresha
 
 on:
   schedule:
-    # Todos los días a las 06:15 UTC = 03:15 ART — 15 min después de Loyverse
-    - cron: '15 6 * * *'
+    # Todos los días a las 00:15 UTC = 21:15 ART — 15 min después de Loyverse
+    - cron: '15 0 * * *'
   workflow_dispatch:
     inputs:
       from:
