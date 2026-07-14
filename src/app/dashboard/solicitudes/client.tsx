@@ -539,7 +539,7 @@ function HistorialModal({ sol, onClose }: { sol: Solicitud; onClose: () => void 
   const todasEdiciones = (sol.ediciones ?? []) as any[]
   const creacionAdmin = todasEdiciones.find((e: any) => e.tipo === 'creacion_admin')
   const creadorDetalle = creacionAdmin
-    ? `por ${creacionAdmin.creadaPor} en nombre de ${sol.empleado_nombre}`
+    ? `por ${creacionAdmin.creadaPor}`
     : `por ${sol.empleado_nombre}`
   eventos.push({
     fecha: sol.fecha_creacion,
