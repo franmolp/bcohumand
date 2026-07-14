@@ -535,16 +535,21 @@ function HistorialModal({ sol, onClose }: { sol: Solicitud; onClose: () => void 
   type Evento = { fecha: string; titulo: string; detalle?: string; color: string }
   const eventos: Evento[] = []
 
-  // 1. Creación
+  // 1. Creación — si admin creó en nombre de otro, ediciones[0] tiene tipo:'creacion_admin'
+  const todasEdiciones = (sol.ediciones ?? []) as any[]
+  const creacionAdmin = todasEdiciones.find((e: any) => e.tipo === 'creacion_admin')
+  const creadorDetalle = creacionAdmin
+    ? `por ${creacionAdmin.creadaPor} en nombre de ${sol.empleado_nombre}`
+    : `por ${sol.empleado_nombre}`
   eventos.push({
     fecha: sol.fecha_creacion,
     titulo: 'Solicitud creada',
-    detalle: `por ${sol.empleado_nombre}`,
+    detalle: creadorDetalle,
     color: 'bg-[var(--primary)]',
   })
 
-  // 2. Ediciones registradas (campo por campo)
-  const edicions = (sol.ediciones ?? []) as EdicionEntry[]
+  // 2. Ediciones registradas (campo por campo) — excluir la entrada de creacion_admin
+  const edicions = todasEdiciones.filter((e: any) => e.tipo !== 'creacion_admin') as EdicionEntry[]
   const estadoEnEdiciones = edicions.some(e => e.campo === 'estado')
   for (const e of edicions) {
     eventos.push({

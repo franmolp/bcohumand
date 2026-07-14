@@ -143,6 +143,11 @@ export async function POST(request: NextRequest) {
       insertData.hora_ultima_actividad = new Date().toISOString()
     }
 
+    // Si admin/HR crea en nombre de otro, guardar el creador real en ediciones
+    if (canManage && targetUserId !== session.id) {
+      insertData.ediciones = [{ tipo: 'creacion_admin', creadaPor: session.nombre, fecha: new Date().toISOString() }]
+    }
+
     const { data, error } = await supabase
       .from('solicitudes')
       .insert(insertData)
