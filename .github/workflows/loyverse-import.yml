@@ -2,12 +2,12 @@ name: Importar datos Loyverse
 
 on:
   schedule:
-    # Todos los días a las 00:00 UTC = 21:00 ART (Argentina = UTC-3, sin cambio de horario)
-    - cron: '0 0 * * *'
+    # Todos los días a las 06:00 UTC = 03:00 ART — importa el día anterior completo
+    - cron: '0 6 * * *'
   workflow_dispatch:
     inputs:
       from:
-        description: 'Fecha inicio (YYYY-MM-DD). Vacío = 1° del mes actual'
+        description: 'Fecha inicio (YYYY-MM-DD). Vacío = ayer'
         required: false
       to:
         description: 'Fecha fin (YYYY-MM-DD). Vacío = ayer'

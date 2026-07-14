@@ -24,8 +24,12 @@ function getDateRange() {
   if (process.env.FROM && process.env.TO) {
     return { from: process.env.FROM, to: process.env.TO }
   }
-  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-  return { from: hoy, to: hoy }
+  // Por defecto importa AYER completo (el cron corre a las 03:00 ART,
+  // cuando ya terminó el día anterior en Argentina).
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  const ayer = d.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+  return { from: ayer, to: ayer }
 }
 
 async function fetchReceipts(from, to) {
