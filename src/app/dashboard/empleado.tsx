@@ -408,7 +408,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <div className="flex items-center gap-2">
               <IconWall size={15} className="text-indigo-500" />
-              <h2 className="text-[14px] font-bold text-indigo-600">Últimas novedades</h2>
+              <h2 className="text-[14px] font-bold text-indigo-600">Últimos posts</h2>
             </div>
             <IconChevronRight size={14} className="text-gray-300" />
           </div>
