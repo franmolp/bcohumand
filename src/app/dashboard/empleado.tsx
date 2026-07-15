@@ -168,7 +168,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   const today = new Date(yr, mo - 1, dy)
   const in30 = new Date(today); in30.setDate(today.getDate() + 30)
   const in30Str = `${in30.getFullYear()}-${String(in30.getMonth()+1).padStart(2,'0')}-${String(in30.getDate()).padStart(2,'0')}`
-  const hace24Str = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const hace48Str = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
   const nextMo = mo === 12 ? 1 : mo + 1
   const nextMoYr = mo === 12 ? yr + 1 : yr
 
@@ -236,7 +236,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
     supabase
       .from('muro_posts')
       .select('id, contenido, tipo, created_at, usuario_id')
-      .gte('created_at', hace24Str)
+      .gte('created_at', hace48Str)
       .order('created_at', { ascending: false })
       .limit(1),
 
