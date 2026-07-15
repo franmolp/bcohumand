@@ -168,8 +168,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   const today = new Date(yr, mo - 1, dy)
   const in30 = new Date(today); in30.setDate(today.getDate() + 30)
   const in30Str = `${in30.getFullYear()}-${String(in30.getMonth()+1).padStart(2,'0')}-${String(in30.getDate()).padStart(2,'0')}`
-  const hace7 = new Date(today); hace7.setDate(today.getDate() - 7)
-  const hace7Str = hace7.toISOString()
+  const hace24Str = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
   const nextMo = mo === 12 ? 1 : mo + 1
   const nextMoYr = mo === 12 ? yr + 1 : yr
 
@@ -237,7 +236,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
     supabase
       .from('muro_posts')
       .select('id, contenido, tipo, created_at, usuario_id')
-      .gte('created_at', hace7Str)
+      .gte('created_at', hace24Str)
       .order('created_at', { ascending: false })
       .limit(1),
 
@@ -402,6 +401,34 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
         posicionMes={posicionMes}
         mesNombre={mesNombre}
       />
+
+      {/* Últimas novedades del muro — solo si hubo posts en las últimas 24hs */}
+      {muroPost && muroAutor && (
+        <Link href="/dashboard/muro" className="block bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <div className="flex items-center gap-2">
+              <IconWall size={15} className="text-indigo-500" />
+              <h2 className="text-[14px] font-bold text-indigo-600">Últimas novedades</h2>
+            </div>
+            <IconChevronRight size={14} className="text-gray-300" />
+          </div>
+          <div className="p-4 flex items-start gap-3">
+            {muroAutor.foto_perfil
+              ? <img src={muroAutor.foto_perfil} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" />
+              : <div className="w-9 h-9 rounded-full bg-[image:var(--gradient)] flex items-center justify-center shrink-0">
+                  <span className="text-[11px] font-bold text-white">
+                    {muroAutor.nombre.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                  </span>
+                </div>
+            }
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-semibold text-gray-700 mb-0.5">{muroAutor.nombre}</p>
+              <p className="text-[13px] text-gray-600 line-clamp-3 leading-snug">{muroPost.contenido}</p>
+              <p className="text-[11px] text-gray-400 mt-1">{timeAgo(muroPost.created_at)}</p>
+            </div>
+          </div>
+        </Link>
+      )}
 
       {/* Ausentes hoy — visible para HR y Encargada */}
       {showAusentes && (
@@ -614,35 +641,6 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
         </div>
       </div>
 
-      {/* Última publicación del muro */}
-      <Link href="/dashboard/muro" className="block bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <IconWall size={15} className="text-indigo-500" />
-            <h2 className="text-[14px] font-bold text-indigo-600">Últimas novedades</h2>
-          </div>
-          <IconChevronRight size={14} className="text-gray-300" />
-        </div>
-        {muroPost && muroAutor ? (
-          <div className="p-4 flex items-start gap-3">
-            {muroAutor.foto_perfil
-              ? <img src={muroAutor.foto_perfil} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" />
-              : <div className="w-9 h-9 rounded-full bg-[image:var(--gradient)] flex items-center justify-center shrink-0">
-                  <span className="text-[11px] font-bold text-white">
-                    {muroAutor.nombre.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
-                  </span>
-                </div>
-            }
-            <div className="flex-1 min-w-0">
-              <p className="text-[12px] font-semibold text-gray-700 mb-0.5">{muroAutor.nombre}</p>
-              <p className="text-[13px] text-gray-600 line-clamp-3 leading-snug">{muroPost.contenido}</p>
-              <p className="text-[11px] text-gray-400 mt-1">{timeAgo(muroPost.created_at)}</p>
-            </div>
-          </div>
-        ) : (
-          <p className="px-5 py-6 text-[13px] text-gray-400 italic">Sin novedades.</p>
-        )}
-      </Link>
     </div>
   )
 }
