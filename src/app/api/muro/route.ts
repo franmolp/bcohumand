@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
   const { searchParams } = new URL(request.url)
   const offset = parseInt(searchParams.get('offset') ?? '0')
-  const limit = 20
+  const limit = 5
 
   const { data: posts, error } = await supabaseAdmin
     .from('muro_posts')

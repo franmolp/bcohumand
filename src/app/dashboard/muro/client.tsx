@@ -139,7 +139,7 @@ export default function MuroClient({ session }: { session: SessionUser }) {
   const [toast, setToast] = useState('')
   const [myFoto, setMyFoto] = useState<string | null>(null)
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
-  const LIMIT = 20
+  const LIMIT = 5
 
   useEffect(() => {
     setMyFoto(localStorage.getItem(`bco_foto_perfil_${session.id}`))
@@ -214,7 +214,7 @@ export default function MuroClient({ session }: { session: SessionUser }) {
                   disabled={loadingMore}
                   className="px-5 py-2.5 border border-gray-200 rounded-xl text-[13px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 cursor-pointer transition-colors"
                 >
-                  {loadingMore ? 'Cargando...' : 'Cargar más'}
+                  {loadingMore ? 'Cargando...' : 'Ver más'}
                 </button>
               </div>
             )}
