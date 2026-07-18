@@ -41,12 +41,13 @@ export async function GET() {
 
   const bloqueados = new Set((yaReconocidos ?? []).map(r => r.id_receptor))
 
-  // Todos los usuarios activos excepto yo mismo
+  // Todos los usuarios activos excepto yo mismo y usuarios de prueba
   const { data: usuarios } = await supabase
     .from('usuarios')
     .select('id, nombre, foto_perfil, equipo_id')
     .eq('estado_cuenta', 'activo')
     .neq('id', session.id)
+    .not('nombre', 'ilike', 'prueba')
 
   const disponibles = (usuarios ?? []).map(u => ({
     id: u.id,
