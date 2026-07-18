@@ -159,7 +159,6 @@ function WordleCard({ tieneHoy, revelado, resuelta, posicionMes, mesNombre }: {
   )
 }
 
-const BETA_RECO = ['fmoran', 'prueba', 'francomoran@gmail.com']
 const TEXTOS_RECO = [
   '¿Alguien del equipo te salvó el día, te contagió buena onda o tomó la iniciativa? Reconocela con un mensaje y hacela sentir valorada.',
   'Reconocer a alguien del equipo tarda 2 minutos y puede cambiarle el día. ¿A quién querés destacar este mes?',
@@ -180,8 +179,6 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   const nextMoYr = mo === 12 ? yr + 1 : yr
 
   const showAusentes = session.rol === 'HR' || session.rol === 'Encargada'
-  const isBetaReco = BETA_RECO.includes(session.usuario ?? '') || BETA_RECO.includes(session.email)
-
   // Período de vacaciones: 01/04/YYYY → 31/03/YYYY+1
   const periodYear = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1
   const periodStart = `${periodYear}-04-01`
@@ -277,10 +274,8 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
       .in('mes', [mo, nextMo])
       .or(`anio.is.null,anio.eq.${yr}${nextMoYr !== yr ? `,anio.eq.${nextMoYr}` : ''}`),
 
-    // Reconocimientos del mes para card home (solo beta)
-    isBetaReco
-      ? supabaseAdmin.from('reconocimientos').select('id_receptor, categoria_pilar').eq('estado', 'aprobado').eq('mes_ciclo', mesCiclo)
-      : Promise.resolve({ data: [] }),
+    // Reconocimientos del mes para card home
+    supabaseAdmin.from('reconocimientos').select('id_receptor, categoria_pilar').eq('estado', 'aprobado').eq('mes_ciclo', mesCiclo),
   ])
 
   // Vacaciones
@@ -460,9 +455,8 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
         </Link>
       )}
 
-      {/* Reconocimientos — solo beta */}
-      {isBetaReco && (
-        <Link href="/dashboard/reconocimientos" className="block bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+      {/* Reconocimientos */}
+      <Link href="/dashboard/reconocimientos" className="block bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden">
           {hayRecoMes ? (
             <>
               <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-50">
@@ -511,8 +505,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
               <p className="text-[12px] font-semibold text-[var(--primary)]">Reconocer →</p>
             </div>
           )}
-        </Link>
-      )}
+      </Link>
 
       {/* Ausentes hoy — visible para HR y Encargada */}
       {showAusentes && (

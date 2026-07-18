@@ -100,8 +100,6 @@ function fmtDateLabel(d: Date): string {
   return `${cap(wd)} ${d.getDate()} de ${cap(mon)} de ${d.getFullYear()}`
 }
 
-const BETA_RECO = ['fmoran', 'prueba', 'francomoran@gmail.com']
-
 export default async function AdminDashboard({ session }: { session: SessionUser }) {
   // Fecha en timezone Argentina para evitar desfase UTC
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
@@ -109,8 +107,6 @@ export default async function AdminDashboard({ session }: { session: SessionUser
   const today = new Date(yr, mo - 1, dy)
   const hace7 = new Date(today); hace7.setDate(today.getDate() - 7)
   const hace7Str = hace7.toISOString()
-  const isBetaReco = BETA_RECO.includes(session.usuario ?? '') || BETA_RECO.includes(session.email)
-
   const [empData, ausentesData, pendData, actData, usersData, repData, recoData] = await Promise.all([
     // Empleados activos
     supabase.from('usuarios').select('id').eq('estado_cuenta', 'activo'),
@@ -146,10 +142,8 @@ export default async function AdminDashboard({ session }: { session: SessionUser
     // Reparaciones pendientes
     supabaseAdmin.from('reparaciones').select('id').eq('estado', 'pendiente'),
 
-    // Reconocimientos pendientes de moderación (solo beta)
-    isBetaReco
-      ? supabaseAdmin.from('reconocimientos').select('id').eq('estado', 'pendiente')
-      : Promise.resolve({ data: [] }),
+    // Reconocimientos pendientes de moderación
+    supabaseAdmin.from('reconocimientos').select('id').eq('estado', 'pendiente'),
   ])
 
   const totalEmpleados = empData.data?.length ?? 0
@@ -309,8 +303,8 @@ export default async function AdminDashboard({ session }: { session: SessionUser
           </Link>
         )}
 
-        {/* Reconocimientos pendientes — solo admin beta */}
-        {isAdminRole && isBetaReco && (
+        {/* Reconocimientos pendientes — solo admin */}
+        {isAdminRole && (
           <Link href="/dashboard/reconocimientos"
             className="lg:col-span-1 rounded-2xl p-4 text-white shadow-sm hover:opacity-90 transition-opacity cursor-pointer"
             style={{ background: 'linear-gradient(135deg, #eab308, #ca8a04)' }}>

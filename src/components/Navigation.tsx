@@ -21,7 +21,7 @@ const allNav = [
   { href: '/dashboard/monotributo',  label: 'Monotributo',    icon: IconReceipt },
   { href: '/dashboard/calendario',   label: 'Calendario',     icon: IconCalendar,    mobile: true },
   { href: '/dashboard/muro',            label: 'Muro Social',      icon: IconWall },
-  { href: '/dashboard/reconocimientos', label: 'Reconocimientos',  icon: IconTrophy, beta: ['fmoran', 'prueba', 'francomoran@gmail.com'] },
+  { href: '/dashboard/reconocimientos', label: 'Reconocimientos',  icon: IconTrophy },
   { href: '/dashboard/reparaciones',  label: 'Reparaciones',    icon: IconWrench },
   { href: '/dashboard/juegos',        label: 'Juegos',          icon: IconStar,        mobile: true },
   { href: '/dashboard/informes',       label: 'Informes',        icon: IconBarChart,   roles: ['Admin', 'admin'] },
