@@ -738,8 +738,8 @@ export default function ReconocimientosClient({ session }: { session: SessionUse
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'mural',     label: 'Mural' },
-    { key: 'medallas',  label: 'Mis medallas' },
     { key: 'reconocer', label: 'Reconocer' },
+    { key: 'medallas',  label: 'Mis medallas' },
     ...(isAdmin ? [{ key: 'moderar' as Tab, label: 'Moderar' }] : []),
   ]
 
@@ -756,17 +756,30 @@ export default function ReconocimientosClient({ session }: { session: SessionUse
       </div>
 
       <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-5">
-        {tabs.map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)}
-            className={`relative flex-1 py-2 text-[13px] font-medium rounded-[10px] cursor-pointer transition-all ${tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
-            {t.label}
-            {t.key === 'moderar' && pendingCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
-                {pendingCount}
-              </span>
-            )}
-          </button>
-        ))}
+        {tabs.map(t => {
+          const isReco = t.key === 'reconocer'
+          return (
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className={`relative flex-1 py-2 text-[13px] rounded-[10px] cursor-pointer transition-all ${
+                isReco
+                  ? 'font-semibold text-white'
+                  : tab === t.key
+                  ? 'bg-white text-gray-900 shadow-sm font-medium'
+                  : 'text-gray-500 font-medium'
+              }`}
+              style={isReco ? {
+                background: 'linear-gradient(135deg, #eab308, #ca8a04)',
+                boxShadow: '0 4px 10px rgba(202,138,4,0.45)',
+              } : undefined}>
+              {t.label}
+              {t.key === 'moderar' && pendingCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+          )
+        })}
       </div>
 
       {tab === 'mural'     && <TabMural key={muralKey} />}
