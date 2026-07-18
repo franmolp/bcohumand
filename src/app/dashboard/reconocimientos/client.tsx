@@ -483,6 +483,14 @@ function TabReconocer({ onEnviado }: { onEnviado: () => void }) {
 
   return (
     <div className="space-y-5">
+      {/* Info */}
+      <div className="bg-yellow-50 border border-yellow-100 rounded-2xl p-4 flex items-start gap-3">
+        <IconTrophy size={16} className="text-yellow-600 flex-shrink-0 mt-0.5" />
+        <p className="text-[12px] text-yellow-800 leading-relaxed">
+          ¿Alguien del equipo te salvó el día, te contagió buena onda o tomó la iniciativa? Reconocela con un mensaje y hacela sentir valorada.
+        </p>
+      </div>
+
       {/* Cuota */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
         <div className="flex items-center justify-between mb-2">

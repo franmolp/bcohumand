@@ -272,15 +272,29 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
       .in('mes', [mo, nextMo])
       .or(`anio.is.null,anio.eq.${yr}${nextMoYr !== yr ? `,anio.eq.${nextMoYr}` : ''}`),
 
-    // Reconocimientos recibidos este mes (solo beta)
+    // Reconocimientos del mes para card home (solo beta)
     isBetaReco
-      ? supabaseAdmin.from('reconocimientos').select('id').eq('id_receptor', session.id).eq('mes_ciclo', mesCiclo).eq('estado', 'aprobado')
+      ? supabaseAdmin.from('reconocimientos').select('id_receptor, categoria_pilar').eq('estado', 'aprobado').eq('mes_ciclo', mesCiclo)
       : Promise.resolve({ data: [] }),
   ])
 
   // Vacaciones
   const vacUsadas = (vacRes.data ?? []).reduce((s, r) => s + (r.dias ?? 0), 0)
-  const recoCount = recoRes.data?.length ?? 0
+
+  // Mural para card home
+  const PILAR_EMOJI: Record<string, string> = { salvavidas: '🛟', buena_vibra: '☀️', iniciativa: '⚡' }
+  const muralMapa: Record<string, { nombre: string; foto: string | null; pilares: string[]; total: number }> = {}
+  for (const r of (recoRes.data ?? []) as { id_receptor: string; categoria_pilar: string }[]) {
+    if (!muralMapa[r.id_receptor]) {
+      const u = (usersRes.data ?? []).find((u: { id: string }) => u.id === r.id_receptor)
+      if (!u) continue
+      muralMapa[r.id_receptor] = { nombre: u.nombre, foto: (u as { foto_perfil?: string | null }).foto_perfil ?? null, pilares: [], total: 0 }
+    }
+    muralMapa[r.id_receptor].pilares.push(r.categoria_pilar)
+    muralMapa[r.id_receptor].total++
+  }
+  const muralTop = Object.values(muralMapa).sort((a, b) => b.total - a.total).slice(0, 5)
+  const hayRecoMes = muralTop.length > 0
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const vacTotal  = (configRes.data as any)?.dias_vacaciones ?? VACACIONES_DEFAULT
   const vacRest   = vacTotal - vacUsadas
@@ -442,21 +456,55 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
 
       {/* Reconocimientos — solo beta */}
       {isBetaReco && (
-        <Link href="/dashboard/reconocimientos" className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-shadow">
-          <div className="w-10 h-10 rounded-xl bg-yellow-100 flex items-center justify-center shrink-0">
-            <IconTrophy size={20} className="text-yellow-600" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[14px] font-bold text-[var(--text)]">
-              {recoCount > 0
-                ? `¡Recibiste ${recoCount} reconocimiento${recoCount > 1 ? 's' : ''} este mes!`
-                : 'Reconocimientos del equipo'}
-            </p>
-            <p className="text-[12px] text-gray-400">
-              {recoCount > 0 ? 'Ver mis medallas' : 'Reconocé a un compañero'}
-            </p>
-          </div>
-          <IconChevronRight size={14} className="text-gray-300 shrink-0" />
+        <Link href="/dashboard/reconocimientos" className="block bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+          {hayRecoMes ? (
+            <>
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-50">
+                <div className="w-7 h-7 rounded-lg bg-yellow-100 flex items-center justify-center flex-shrink-0">
+                  <IconTrophy size={14} className="text-yellow-600" />
+                </div>
+                <p className="text-[13px] font-bold text-[var(--text)] flex-1">Reconocimientos del mes</p>
+                <IconChevronRight size={14} className="text-gray-300" />
+              </div>
+              <div className="flex gap-5 px-4 py-4 overflow-x-auto">
+                {muralTop.map(e => {
+                  const uniquePilares = [...new Set(e.pilares)]
+                  const initials = e.nombre.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+                  return (
+                    <div key={e.nombre} className="flex flex-col items-center flex-shrink-0">
+                      <div className="relative mb-3">
+                        {e.foto
+                          ? <img src={e.foto} alt={e.nombre} className="w-12 h-12 rounded-full object-cover" />
+                          : <div className="w-12 h-12 rounded-full bg-[image:var(--gradient)] flex items-center justify-center">
+                              <span className="text-[12px] font-bold text-white">{initials}</span>
+                            </div>
+                        }
+                        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex gap-px text-[11px] leading-none">
+                          {uniquePilares.map(p => <span key={p}>{PILAR_EMOJI[p]}</span>)}
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-gray-600 text-center max-w-[52px] truncate leading-tight">
+                        {e.nombre.split(' ')[0]}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          ) : (
+            <div className="p-4">
+              <div className="flex items-center gap-2 mb-2.5">
+                <div className="w-7 h-7 rounded-lg bg-yellow-100 flex items-center justify-center flex-shrink-0">
+                  <IconTrophy size={14} className="text-yellow-600" />
+                </div>
+                <p className="text-[13px] font-bold text-[var(--text)]">Reconocimientos del equipo</p>
+              </div>
+              <p className="text-[12px] text-gray-500 leading-relaxed mb-2.5">
+                ¿Alguien del equipo te salvó el día, te contagió buena onda o tomó la iniciativa? Reconocela con un mensaje y hacela sentir valorada.
+              </p>
+              <p className="text-[12px] font-semibold text-[var(--primary)]">Reconocer →</p>
+            </div>
+          )}
         </Link>
       )}
 
