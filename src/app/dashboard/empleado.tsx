@@ -456,55 +456,55 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
       )}
 
       {/* Reconocimientos */}
-      <Link href="/dashboard/reconocimientos" className="block bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden">
-          {hayRecoMes ? (
-            <>
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-50">
-                <div className="w-7 h-7 rounded-lg bg-yellow-100 flex items-center justify-center flex-shrink-0">
-                  <IconTrophy size={14} className="text-yellow-600" />
-                </div>
-                <p className="text-[13px] font-bold text-[var(--text)] flex-1">Reconocimientos del mes</p>
-                <IconChevronRight size={14} className="text-gray-300" />
+      <Link href="/dashboard/reconocimientos"
+        className="block rounded-2xl shadow-sm hover:opacity-95 transition-opacity overflow-hidden"
+        style={{ background: 'linear-gradient(135deg, #eab308, #ca8a04)' }}>
+        {hayRecoMes ? (
+          <>
+            <div className="flex items-center gap-2.5 px-4 pt-4 pb-3">
+              <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+                <IconTrophy size={16} className="text-white" />
               </div>
-              <div className="flex gap-5 px-4 py-4 overflow-x-auto">
-                {muralTop.map(e => {
-                  const uniquePilares = [...new Set(e.pilares)]
-                  const initials = e.nombre.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
-                  return (
-                    <div key={e.nombre} className="flex flex-col items-center flex-shrink-0">
-                      <div className="relative mb-3">
-                        {e.foto
-                          ? <img src={e.foto} alt={e.nombre} className="w-12 h-12 rounded-full object-cover" />
-                          : <div className="w-12 h-12 rounded-full bg-[image:var(--gradient)] flex items-center justify-center">
-                              <span className="text-[12px] font-bold text-white">{initials}</span>
-                            </div>
-                        }
-                        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex gap-px text-[11px] leading-none">
-                          {uniquePilares.map(p => <span key={p}>{PILAR_EMOJI[p]}</span>)}
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-gray-600 text-center max-w-[52px] truncate leading-tight">
-                        {e.nombre.split(' ')[0]}
-                      </p>
-                    </div>
-                  )
-                })}
-              </div>
-            </>
-          ) : (
-            <div className="p-4">
-              <div className="flex items-center gap-2 mb-2.5">
-                <div className="w-7 h-7 rounded-lg bg-yellow-100 flex items-center justify-center flex-shrink-0">
-                  <IconTrophy size={14} className="text-yellow-600" />
-                </div>
-                <p className="text-[13px] font-bold text-[var(--text)]">Reconocimientos del equipo</p>
-              </div>
-              <p className="text-[12px] text-gray-500 leading-relaxed mb-2.5">
-                {textoReco}
-              </p>
-              <p className="text-[12px] font-semibold text-[var(--primary)]">Reconocer →</p>
+              <p className="text-[14px] font-bold text-white flex-1">Reconocimientos del mes</p>
+              <IconChevronRight size={14} className="text-white/60" />
             </div>
-          )}
+            <div className="flex gap-5 px-4 pb-4 overflow-x-auto">
+              {muralTop.map(e => {
+                const uniquePilares = [...new Set(e.pilares)]
+                const initials = e.nombre.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+                return (
+                  <div key={e.nombre} className="flex flex-col items-center flex-shrink-0">
+                    <div className="relative mb-3">
+                      {e.foto
+                        ? <img src={e.foto} alt={e.nombre} className="w-12 h-12 rounded-full object-cover ring-2 ring-white/40" />
+                        : <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center ring-2 ring-white/40">
+                            <span className="text-[12px] font-bold text-white">{initials}</span>
+                          </div>
+                      }
+                      <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex gap-px text-[11px] leading-none">
+                        {uniquePilares.map(p => <span key={p}>{PILAR_EMOJI[p]}</span>)}
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-white/90 text-center max-w-[52px] truncate leading-tight">
+                      {e.nombre.split(' ')[0]}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="flex items-start gap-3 p-4">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <IconTrophy size={20} className="text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[14px] font-bold text-white">Reconocimientos del equipo</p>
+              <p className="text-[12px] text-white/75 leading-relaxed mt-0.5">{textoReco}</p>
+              <p className="text-[12px] font-semibold text-white/90 mt-2">Reconocer →</p>
+            </div>
+          </div>
+        )}
       </Link>
 
       {/* Ausentes hoy — visible para HR y Encargada */}
