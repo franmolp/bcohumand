@@ -26,6 +26,7 @@ export interface Rol {
 
 export interface SessionUser {
   id: string
+  usuario?: string
   nombre: string
   email: string
   rol: string

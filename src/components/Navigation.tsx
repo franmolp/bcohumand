@@ -20,8 +20,8 @@ const allNav = [
   { href: '/dashboard/compras',      label: 'Compras',        icon: IconShoppingBag, roles: ['Admin', 'admin', 'Compras', 'Encargada'] },
   { href: '/dashboard/monotributo',  label: 'Monotributo',    icon: IconReceipt },
   { href: '/dashboard/calendario',   label: 'Calendario',     icon: IconCalendar,    mobile: true },
-  { href: '/dashboard/muro',           label: 'Muro Social',      icon: IconWall },
-  { href: '/dashboard/reconocimientos', label: 'Reconocimientos', icon: IconTrophy },
+  { href: '/dashboard/muro',            label: 'Muro Social',      icon: IconWall },
+  { href: '/dashboard/reconocimientos', label: 'Reconocimientos',  icon: IconTrophy, beta: ['fmoran', 'prueba'] },
   { href: '/dashboard/reparaciones',  label: 'Reparaciones',    icon: IconWrench },
   { href: '/dashboard/juegos',        label: 'Juegos',          icon: IconStar,        mobile: true },
   { href: '/dashboard/informes',       label: 'Informes',        icon: IconBarChart,   roles: ['Admin', 'admin'] },
@@ -52,6 +52,8 @@ export default function Navigation({ user }: { user: SessionUser }) {
     if ((i as {notAdmin?: boolean}).notAdmin && (isAdmin || isEncargada || isHR)) return false
     if (isHR && (i.href === '/dashboard/monotributo' || i.href === '/dashboard/liquidador')) return false
     if (i.roles && !i.roles.includes(user.rol)) return false
+    const beta = (i as {beta?: string[]}).beta
+    if (beta && (!user.usuario || !beta.includes(user.usuario))) return false
     return true
   })
   const mobileHrefs = isAdmin

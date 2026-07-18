@@ -115,6 +115,7 @@ export async function POST(request: NextRequest) {
     // Crear JWT
     const token = await new SignJWT({
       id: usuario.id,
+      usuario: usuarioTrimmed,
       nombre: usuario.nombre,
       email: usuario.email,
       rol: usuario.rol?.nombre || 'empleado',
@@ -128,6 +129,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       user: {
         id: usuario.id,
+        usuario: usuarioTrimmed,
         nombre: usuario.nombre,
         email: usuario.email,
         rol: usuario.rol?.nombre || 'empleado',
