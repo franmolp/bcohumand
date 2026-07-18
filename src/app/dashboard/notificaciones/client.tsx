@@ -55,8 +55,9 @@ function tipoConfig(tipo: string) {
     adelanto_rechazado:    { icon: <IconDollar size={14} />,           bg: 'bg-red-100',     color: 'text-red-500',     href: '/dashboard/adelantos' },
     reparacion_nueva:           { icon: <IconWrench size={14} />,  bg: 'bg-orange-100',  color: 'text-orange-600',  href: '/dashboard/reparaciones' },
     reparacion_actualizada:     { icon: <IconWrench size={14} />,  bg: 'bg-orange-100',  color: 'text-orange-600',  href: '/dashboard/reparaciones' },
-    reconocimiento_pendiente:   { icon: <IconTrophy size={14} />,  bg: 'bg-yellow-100',  color: 'text-yellow-600',  href: '/dashboard/reconocimientos' },
-    reconocimiento_aprobado:    { icon: <IconTrophy size={14} />,  bg: 'bg-yellow-100',  color: 'text-yellow-600',  href: '/dashboard/reconocimientos' },
+    reconocimiento_pendiente:      { icon: <IconTrophy size={14} />,  bg: 'bg-yellow-100',  color: 'text-yellow-600',  href: '/dashboard/reconocimientos' },
+    reconocimiento_aprobado:       { icon: <IconTrophy size={14} />,  bg: 'bg-yellow-100',  color: 'text-yellow-600',  href: '/dashboard/reconocimientos' },
+    reconocimiento_recordatorio:   { icon: <IconTrophy size={14} />,  bg: 'bg-yellow-100',  color: 'text-yellow-600',  href: '/dashboard/reconocimientos' },
   }
   return map[tipo] ?? { icon: <IconBell size={14} />, bg: 'bg-gray-100', color: 'text-gray-500', href: '/dashboard' }
 }

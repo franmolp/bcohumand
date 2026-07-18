@@ -88,8 +88,9 @@ export async function GET(request: NextRequest) {
       adelanto_solicitado:        '/dashboard/adelantos',
       adelanto_aprobado:          '/dashboard/adelantos',
       adelanto_rechazado:         '/dashboard/adelantos',
-      reconocimiento_pendiente:   '/dashboard/reconocimientos',
-      reconocimiento_aprobado:    '/dashboard/reconocimientos',
+      reconocimiento_pendiente:      '/dashboard/reconocimientos',
+      reconocimiento_aprobado:       '/dashboard/reconocimientos',
+      reconocimiento_recordatorio:   '/dashboard/reconocimientos',
     }
     const modulos: Record<string, number> = {}
     for (const n of (unread ?? [])) {
