@@ -160,6 +160,11 @@ function WordleCard({ tieneHoy, revelado, resuelta, posicionMes, mesNombre }: {
 }
 
 const BETA_RECO = ['fmoran', 'prueba', 'francomoran@gmail.com']
+const TEXTOS_RECO = [
+  '¿Alguien del equipo te salvó el día, te contagió buena onda o tomó la iniciativa? Reconocela con un mensaje y hacela sentir valorada.',
+  'Reconocer a alguien del equipo tarda 2 minutos y puede cambiarle el día. ¿A quién querés destacar este mes?',
+  'Cada persona del equipo hace algo que vale la pena decirle. Contale a alguien lo que hace bien y por qué importa.',
+]
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
@@ -295,6 +300,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   }
   const muralTop = Object.values(muralMapa).sort((a, b) => b.total - a.total).slice(0, 5)
   const hayRecoMes = muralTop.length > 0
+  const textoReco = TEXTOS_RECO[Math.floor(Math.random() * TEXTOS_RECO.length)]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const vacTotal  = (configRes.data as any)?.dias_vacaciones ?? VACACIONES_DEFAULT
   const vacRest   = vacTotal - vacUsadas
@@ -500,7 +506,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
                 <p className="text-[13px] font-bold text-[var(--text)]">Reconocimientos del equipo</p>
               </div>
               <p className="text-[12px] text-gray-500 leading-relaxed mb-2.5">
-                ¿Alguien del equipo te salvó el día, te contagió buena onda o tomó la iniciativa? Reconocela con un mensaje y hacela sentir valorada.
+                {textoReco}
               </p>
               <p className="text-[12px] font-semibold text-[var(--primary)]">Reconocer →</p>
             </div>

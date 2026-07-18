@@ -85,6 +85,12 @@ function pilarInfo(key: Pilar) { return PILARES.find(p => p.key === key) ?? PILA
 
 const PRIMER_MES = '2026-07'
 
+const TEXTOS_RECO = [
+  '¿Alguien del equipo te salvó el día, te contagió buena onda o tomó la iniciativa? Reconocela con un mensaje y hacela sentir valorada.',
+  'Reconocer a alguien del equipo tarda 2 minutos y puede cambiarle el día. ¿A quién querés destacar este mes?',
+  'Cada persona del equipo hace algo que vale la pena decirle. Contale a alguien lo que hace bien y por qué importa.',
+]
+
 function getMesCiclo(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).slice(0, 7)
 }
@@ -419,6 +425,7 @@ function TabMisMedallas() {
 
 // ─── Tab: Reconocer ───────────────────────────────────────────────────────────
 function TabReconocer({ onEnviado }: { onEnviado: () => void }) {
+  const [textoReco] = useState(() => TEXTOS_RECO[Math.floor(Math.random() * TEXTOS_RECO.length)])
   const [disponibles, setDisponibles] = useState<Disponible[]>([])
   const [cuotaRestante, setCuotaRestante] = useState(3)
   const [cuotaUsada, setCuotaUsada] = useState(0)
@@ -486,9 +493,7 @@ function TabReconocer({ onEnviado }: { onEnviado: () => void }) {
       {/* Info */}
       <div className="bg-yellow-50 border border-yellow-100 rounded-2xl p-4 flex items-start gap-3">
         <IconTrophy size={16} className="text-yellow-600 flex-shrink-0 mt-0.5" />
-        <p className="text-[12px] text-yellow-800 leading-relaxed">
-          ¿Alguien del equipo te salvó el día, te contagió buena onda o tomó la iniciativa? Reconocela con un mensaje y hacela sentir valorada.
-        </p>
+        <p className="text-[12px] text-yellow-800 leading-relaxed">{textoReco}</p>
       </div>
 
       {/* Cuota */}
