@@ -468,7 +468,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
               <p className="text-[14px] font-bold text-white flex-1">Reconocimientos del mes</p>
               <IconChevronRight size={14} className="text-white/60" />
             </div>
-            <div className="flex gap-5 px-4 pb-4 overflow-x-auto">
+            <div className="flex gap-5 px-4 pt-2 pb-4 overflow-x-auto">
               {muralTop.map(e => {
                 const uniquePilares = [...new Set(e.pilares)]
                 const initials = e.nombre.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
