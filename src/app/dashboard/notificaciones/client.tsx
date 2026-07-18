@@ -5,7 +5,7 @@ import Link from 'next/link'
 import type { SessionUser } from '@/types'
 import {
   IconBell, IconCheck, IconX, IconCalendar, IconCalendarCheck,
-  IconShoppingBag, IconReceipt, IconWall, IconAlertCircle, IconPlus, IconTrash, IconFilter, IconHeartFilled, IconFingerprint, IconDollar, IconWrench, IconFileText,
+  IconShoppingBag, IconReceipt, IconWall, IconAlertCircle, IconPlus, IconTrash, IconFilter, IconHeartFilled, IconFingerprint, IconDollar, IconWrench, IconFileText, IconTrophy,
 } from '@/components/ui/Icons'
 import { Spinner, Modal, Button, Input, Select, Toast } from '@/components/ui'
 
@@ -53,8 +53,10 @@ function tipoConfig(tipo: string) {
     adelanto_solicitado:   { icon: <IconDollar size={14} />,           bg: 'bg-emerald-100', color: 'text-emerald-600', href: '/dashboard/adelantos' },
     adelanto_aprobado:     { icon: <IconDollar size={14} />,           bg: 'bg-emerald-100', color: 'text-emerald-600', href: '/dashboard/adelantos' },
     adelanto_rechazado:    { icon: <IconDollar size={14} />,           bg: 'bg-red-100',     color: 'text-red-500',     href: '/dashboard/adelantos' },
-    reparacion_nueva:      { icon: <IconWrench size={14} />,          bg: 'bg-orange-100',  color: 'text-orange-600',  href: '/dashboard/reparaciones' },
-    reparacion_actualizada:{ icon: <IconWrench size={14} />,          bg: 'bg-orange-100',  color: 'text-orange-600',  href: '/dashboard/reparaciones' },
+    reparacion_nueva:           { icon: <IconWrench size={14} />,  bg: 'bg-orange-100',  color: 'text-orange-600',  href: '/dashboard/reparaciones' },
+    reparacion_actualizada:     { icon: <IconWrench size={14} />,  bg: 'bg-orange-100',  color: 'text-orange-600',  href: '/dashboard/reparaciones' },
+    reconocimiento_pendiente:   { icon: <IconTrophy size={14} />,  bg: 'bg-yellow-100',  color: 'text-yellow-600',  href: '/dashboard/reconocimientos' },
+    reconocimiento_aprobado:    { icon: <IconTrophy size={14} />,  bg: 'bg-yellow-100',  color: 'text-yellow-600',  href: '/dashboard/reconocimientos' },
   }
   return map[tipo] ?? { icon: <IconBell size={14} />, bg: 'bg-gray-100', color: 'text-gray-500', href: '/dashboard' }
 }
