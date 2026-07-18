@@ -611,6 +611,19 @@ function TabModerar({ onModerado }: { onModerado: () => void }) {
   const [moderando, setModerando] = useState<string | null>(null)
   const [subtab, setSubtab] = useState<'pendientes' | 'ranking'>('pendientes')
   const [mes, setMes] = useState(getMesCiclo())
+  const [enviandoNoti, setEnviandoNoti] = useState(false)
+  const [notiEnviada, setNotiEnviada] = useState<number | null>(null)
+
+  async function enviarRecordatorio() {
+    setEnviandoNoti(true)
+    try {
+      const res = await fetch('/api/reconocimientos/enviar-recordatorio', { method: 'POST' })
+      const d = await res.json()
+      if (res.ok) setNotiEnviada(d.enviadas)
+    } finally {
+      setEnviandoNoti(false)
+    }
+  }
 
   const cargar = useCallback((m: string) => {
     setLoading(true)
@@ -638,6 +651,27 @@ function TabModerar({ onModerado }: { onModerado: () => void }) {
 
   return (
     <div>
+      {/* Recordatorio */}
+      <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-4 mb-4 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl bg-yellow-50 border border-yellow-100 flex items-center justify-center flex-shrink-0">
+          <IconTrophy size={16} className="text-yellow-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[13px] font-semibold text-[var(--text)]">Recordatorio del mes</p>
+          <p className="text-[11px] text-gray-400 leading-snug">
+            {notiEnviada !== null ? `✓ Notificación enviada a ${notiEnviada} personas` : 'Invitá a todo el equipo a reconocer a alguien'}
+          </p>
+        </div>
+        <button
+          onClick={enviarRecordatorio}
+          disabled={enviandoNoti || notiEnviada !== null}
+          className="px-3 py-1.5 rounded-xl text-[12px] font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          style={notiEnviada !== null ? { background: '#f0fdf4', color: '#16a34a' } : { background: 'linear-gradient(135deg, #eab308, #ca8a04)', color: '#fff' }}
+        >
+          {enviandoNoti ? 'Enviando…' : notiEnviada !== null ? 'Enviada' : 'Enviar'}
+        </button>
+      </div>
+
       <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-4">
         {([['pendientes', `Pendientes (${pendientesCount})`], ['ranking', 'Ranking']] as const).map(([key, label]) => (
           <button key={key} onClick={() => setSubtab(key)}
