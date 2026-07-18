@@ -293,7 +293,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
     muralMapa[r.id_receptor].pilares.push(r.categoria_pilar)
     muralMapa[r.id_receptor].total++
   }
-  const muralTop = Object.values(muralMapa).sort((a, b) => b.total - a.total).slice(0, 5)
+  const muralTop = Object.values(muralMapa).sort((a, b) => b.total - a.total)
   const hayRecoMes = muralTop.length > 0
   const textoReco = TEXTOS_RECO[Math.floor(Math.random() * TEXTOS_RECO.length)]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -468,7 +468,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
               <p className="text-[14px] font-bold text-white flex-1">Reconocimientos del mes</p>
               <IconChevronRight size={14} className="text-white/60" />
             </div>
-            <div className="flex gap-5 px-4 pt-2 pb-4 overflow-x-auto">
+            <div className="flex gap-5 px-4 pt-2 pb-4 overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
               {muralTop.map(e => {
                 const uniquePilares = [...new Set(e.pilares)]
                 const initials = e.nombre.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
