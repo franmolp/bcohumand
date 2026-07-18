@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import type { SessionUser } from '@/types'
+import {
+  IconTrophy, IconCheck, IconX, IconEyeOff,
+} from '@/components/ui/Icons'
 
 type Pilar = 'salvavidas' | 'buena_vibra' | 'iniciativa'
 
@@ -71,8 +74,14 @@ const PILARES: { key: Pilar; label: string; emoji: string; color: string; bg: st
   { key: 'iniciativa',  label: 'Iniciativa',  emoji: '⚡', color: 'text-violet-600', bg: 'bg-violet-50 border-violet-200' },
 ]
 
-function pilarInfo(key: Pilar) {
-  return PILARES.find(p => p.key === key) ?? PILARES[0]
+function pilarInfo(key: Pilar) { return PILARES.find(p => p.key === key) ?? PILARES[0] }
+
+function Spinner() {
+  return (
+    <div className="flex justify-center py-12">
+      <div className="w-5 h-5 border-2 border-gray-200 border-t-[var(--primary)] rounded-full animate-spin" />
+    </div>
+  )
 }
 
 function Avatar({ nombre, foto, size = 36 }: { nombre: string; foto: string | null; size?: number }) {
@@ -85,19 +94,10 @@ function Avatar({ nombre, foto, size = 36 }: { nombre: string; foto: string | nu
   )
 }
 
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime()
-  const d = Math.floor(diff / 86400000)
-  if (d === 0) return 'hoy'
-  if (d === 1) return 'ayer'
-  if (d < 7)  return `hace ${d} días`
-  return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
-}
-
 function PilarBadge({ pilar }: { pilar: Pilar }) {
   const p = pilarInfo(pilar)
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${p.bg} ${p.color}`}>
+    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${p.bg} ${p.color}`}>
       {p.emoji} {p.label}
     </span>
   )
@@ -105,16 +105,25 @@ function PilarBadge({ pilar }: { pilar: Pilar }) {
 
 function EstadoBadge({ estado }: { estado: string }) {
   const map: Record<string, string> = {
-    pendiente: 'bg-yellow-50 text-yellow-700 border-yellow-200',
+    pendiente: 'bg-amber-50 text-amber-600 border-amber-200',
     aprobado:  'bg-green-50 text-green-700 border-green-200',
-    oculto:    'bg-gray-100 text-gray-500 border-gray-200',
+    oculto:    'bg-gray-100 text-gray-400 border-gray-200',
   }
   const label: Record<string, string> = { pendiente: 'Pendiente', aprobado: 'Aprobado', oculto: 'Ocultado' }
   return (
-    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${map[estado] ?? ''}`}>
+    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${map[estado] ?? ''}`}>
       {label[estado] ?? estado}
     </span>
   )
+}
+
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime()
+  const d = Math.floor(diff / 86400000)
+  if (d === 0) return 'hoy'
+  if (d === 1) return 'ayer'
+  if (d < 7) return `hace ${d} días`
+  return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
 }
 
 // ─── Tab: Mural ───────────────────────────────────────────────────────────────
@@ -130,48 +139,66 @@ function TabMural() {
       .finally(() => setLoading(false))
   }, [])
 
-  const filtrados = filtro ? recs.filter(r => r.categoria_pilar === filtro) : recs
+  if (loading) return <Spinner />
 
-  if (loading) return <div className="py-12 text-center text-gray-400 text-sm">Cargando…</div>
+  const filtrados = filtro ? recs.filter(r => r.categoria_pilar === filtro) : recs
 
   return (
     <div>
-      <div className="flex gap-2 mb-4 flex-wrap">
-        <button onClick={() => setFiltro('')} className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border transition-colors cursor-pointer ${filtro === '' ? 'bg-[var(--primary)] text-white border-transparent' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+      {/* Filtros por pilar */}
+      <div className="flex gap-2 mb-4" style={{ overflowX: 'auto', scrollbarWidth: 'none' }}>
+        <button
+          onClick={() => setFiltro('')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-semibold shrink-0 transition-all cursor-pointer ${
+            filtro === '' ? 'bg-[var(--primary)] text-white' : 'bg-white text-gray-500 border border-gray-200'
+          }`}
+        >
           Todos
+          <span className={`text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center ${filtro === '' ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500'}`}>
+            {recs.length}
+          </span>
         </button>
         {PILARES.map(p => (
-          <button key={p.key} onClick={() => setFiltro(filtro === p.key ? '' : p.key)}
-            className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border transition-colors cursor-pointer ${filtro === p.key ? `${p.bg} ${p.color} border-current` : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+          <button
+            key={p.key}
+            onClick={() => setFiltro(filtro === p.key ? '' : p.key)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-semibold shrink-0 transition-all cursor-pointer ${
+              filtro === p.key ? 'bg-[var(--primary)] text-white' : 'bg-white text-gray-500 border border-gray-200'
+            }`}
+          >
             {p.emoji} {p.label}
+            <span className={`text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center ${filtro === p.key ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500'}`}>
+              {recs.filter(r => r.categoria_pilar === p.key).length}
+            </span>
           </button>
         ))}
       </div>
 
       {!filtrados.length && (
-        <div className="py-12 text-center text-gray-400">
-          <p className="text-3xl mb-2">🏆</p>
-          <p className="text-sm">No hay reconocimientos este mes todavía</p>
+        <div className="text-center py-16">
+          <IconTrophy size={40} className="text-gray-200 mx-auto mb-3" />
+          <p className="text-[14px] text-gray-400">No hay reconocimientos este mes todavía</p>
         </div>
       )}
 
-      <div className="flex flex-col gap-3">
+      <div className="space-y-3">
         {filtrados.map(rec => (
-          <div key={rec.id} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-start justify-between gap-2 mb-3">
-              <div className="flex items-center gap-2.5">
-                <Avatar nombre={rec.receptor.nombre} foto={rec.receptor.foto_perfil} size={38} />
-                <div>
-                  <p className="text-[13px] font-semibold text-[var(--text)]">{rec.receptor.nombre}</p>
-                  <p className="text-[11px] text-gray-400">
-                    {rec.emisor ? `de ${rec.anonimo ? 'Anónimo' : rec.emisor.nombre}` : 'de Anónimo'}
-                    {' · '}{timeAgo(rec.fecha_creacion)}
+          <div key={rec.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="p-4">
+              <div className="flex items-start gap-3 mb-3">
+                <Avatar nombre={rec.receptor.nombre} foto={rec.receptor.foto_perfil} size={36} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[13px] font-semibold text-[var(--text)]">{rec.receptor.nombre}</span>
+                    <PilarBadge pilar={rec.categoria_pilar} />
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-0.5">
+                    de {rec.emisor && !rec.anonimo ? rec.emisor.nombre : 'Anónimo'} · {timeAgo(rec.fecha_creacion)}
                   </p>
                 </div>
               </div>
-              <PilarBadge pilar={rec.categoria_pilar} />
+              <p className="text-[13px] text-[var(--text-sub)] leading-relaxed">{rec.mensaje}</p>
             </div>
-            <p className="text-[13px] text-[var(--text-sub)] leading-relaxed">{rec.mensaje}</p>
           </div>
         ))}
       </div>
@@ -179,8 +206,8 @@ function TabMural() {
   )
 }
 
-// ─── Tab: Mis Medallitas ──────────────────────────────────────────────────────
-function TabMisMedallitas() {
+// ─── Tab: Mis medallas ────────────────────────────────────────────────────────
+function TabMisMedallas() {
   const [recibidos, setRecibidos] = useState<RecRecibido[]>([])
   const [enviados, setEnviados] = useState<RecEnviado[]>([])
   const [loading, setLoading] = useState(true)
@@ -196,46 +223,52 @@ function TabMisMedallitas() {
     }).finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="py-12 text-center text-gray-400 text-sm">Cargando…</div>
-
-  const conteo = PILARES.map(p => ({ ...p, count: recibidos.filter(r => r.categoria_pilar === p.key).length }))
+  if (loading) return <Spinner />
 
   return (
     <div>
-      {/* Contador por pilar */}
-      <div className="grid grid-cols-3 gap-3 mb-5">
-        {conteo.map(p => (
-          <div key={p.key} className={`rounded-xl border p-3 text-center ${p.bg}`}>
-            <p className="text-2xl mb-0.5">{p.emoji}</p>
-            <p className={`text-xl font-bold ${p.color}`}>{p.count}</p>
-            <p className={`text-[10px] font-semibold ${p.color}`}>{p.label}</p>
-          </div>
-        ))}
+      {/* Resumen por pilar */}
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        {PILARES.map(p => {
+          const count = recibidos.filter(r => r.categoria_pilar === p.key).length
+          return (
+            <div key={p.key} className={`rounded-xl border p-3 text-center ${p.bg}`}>
+              <p className="text-xl mb-0.5">{p.emoji}</p>
+              <p className={`text-xl font-bold leading-none ${p.color}`}>{count}</p>
+              <p className={`text-[10px] font-semibold mt-0.5 ${p.color}`}>{p.label}</p>
+            </div>
+          )
+        })}
       </div>
 
       {/* Subtabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-4">
-        {(['recibidos', 'enviados'] as const).map(t => (
-          <button key={t} onClick={() => setSubtab(t)}
-            className={`flex-1 py-1.5 rounded-lg text-[12px] font-semibold transition-colors cursor-pointer capitalize ${subtab === t ? 'bg-white text-[var(--primary)] shadow-sm' : 'text-gray-400'}`}>
-            {t === 'recibidos' ? `Recibidos (${recibidos.length})` : `Enviados (${enviados.length})`}
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-4">
+        {([['recibidos', `Recibidos (${recibidos.length})`], ['enviados', `Enviados (${enviados.length})`]] as const).map(([key, label]) => (
+          <button key={key} onClick={() => setSubtab(key)}
+            className={`flex-1 py-2 text-[13px] font-medium rounded-[10px] cursor-pointer transition-all ${subtab === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+            {label}
           </button>
         ))}
       </div>
 
       {subtab === 'recibidos' && (
-        <div className="flex flex-col gap-3">
-          {!recibidos.length && <p className="text-center text-gray-400 text-sm py-8">Todavía no recibiste reconocimientos</p>}
+        <div className="space-y-3">
+          {!recibidos.length && (
+            <div className="text-center py-12">
+              <IconTrophy size={36} className="text-gray-200 mx-auto mb-2" />
+              <p className="text-[13px] text-gray-400">Todavía no recibiste reconocimientos</p>
+            </div>
+          )}
           {recibidos.map(r => (
-            <div key={r.id} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+            <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   {r.emisor && !r.anonimo
-                    ? <Avatar nombre={r.emisor.nombre} foto={r.emisor.foto_perfil} size={30} />
-                    : <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-sm">?</div>}
+                    ? <Avatar nombre={r.emisor.nombre} foto={r.emisor.foto_perfil} size={28} />
+                    : <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0"><IconEyeOff size={13} className="text-gray-400" /></div>
+                  }
                   <p className="text-[12px] text-gray-500">
-                    {r.anonimo ? 'Anónimo' : (r.emisor?.nombre ?? 'Compañero')}
-                    {' · '}{timeAgo(r.fecha_creacion)}
+                    {r.anonimo ? 'Anónimo' : (r.emisor?.nombre ?? 'Compañero')} · {timeAgo(r.fecha_creacion)}
                   </p>
                 </div>
                 <PilarBadge pilar={r.categoria_pilar} />
@@ -247,15 +280,17 @@ function TabMisMedallitas() {
       )}
 
       {subtab === 'enviados' && (
-        <div className="flex flex-col gap-3">
-          {!enviados.length && <p className="text-center text-gray-400 text-sm py-8">No enviaste reconocimientos este mes</p>}
+        <div className="space-y-3">
+          {!enviados.length && (
+            <p className="text-center text-[13px] text-gray-400 py-12">No enviaste reconocimientos este mes</p>
+          )}
           {enviados.map(r => (
-            <div key={r.id} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+            <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2.5">
-                  <Avatar nombre={r.receptor.nombre} foto={r.receptor.foto_perfil} size={30} />
+                  <Avatar nombre={r.receptor.nombre} foto={r.receptor.foto_perfil} size={28} />
                   <div>
-                    <p className="text-[12px] font-semibold">{r.receptor.nombre}</p>
+                    <p className="text-[12px] font-semibold text-[var(--text)]">{r.receptor.nombre}</p>
                     <p className="text-[10px] text-gray-400">{timeAgo(r.fecha_creacion)}{r.anonimo ? ' · Anónimo' : ''}</p>
                   </div>
                 </div>
@@ -273,8 +308,8 @@ function TabMisMedallitas() {
   )
 }
 
-// ─── Tab: Dar Reconocimiento ──────────────────────────────────────────────────
-function TabDar({ onEnviado }: { onEnviado: () => void }) {
+// ─── Tab: Reconocer ───────────────────────────────────────────────────────────
+function TabReconocer({ onEnviado }: { onEnviado: () => void }) {
   const [disponibles, setDisponibles] = useState<Disponible[]>([])
   const [cuotaRestante, setCuotaRestante] = useState(3)
   const [cuotaUsada, setCuotaUsada] = useState(0)
@@ -305,6 +340,7 @@ function TabDar({ onEnviado }: { onEnviado: () => void }) {
   const filtrados = disponibles.filter(u =>
     !u.bloqueado && u.nombre.toLowerCase().includes(busqueda.toLowerCase())
   )
+  const bloqueadosCount = disponibles.filter(u => u.bloqueado).length
 
   async function enviar() {
     if (!receptor || !pilar || mensaje.trim().length < 50) return
@@ -319,24 +355,20 @@ function TabDar({ onEnviado }: { onEnviado: () => void }) {
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? 'Error al enviar'); return }
       setExito(true)
-      setReceptor(null)
-      setPilar('')
-      setMensaje('')
-      setAnonimo(false)
-      cargar()
-      onEnviado()
-    } finally {
-      setEnviando(false)
-    }
+      setReceptor(null); setPilar(''); setMensaje(''); setAnonimo(false)
+      cargar(); onEnviado()
+    } finally { setEnviando(false) }
   }
 
-  if (loading) return <div className="py-12 text-center text-gray-400 text-sm">Cargando…</div>
+  if (loading) return <Spinner />
 
   if (exito) return (
-    <div className="py-12 text-center">
-      <p className="text-4xl mb-3">🎉</p>
-      <p className="text-[15px] font-semibold text-[var(--text)] mb-1">¡Reconocimiento enviado!</p>
-      <p className="text-[13px] text-gray-400 mb-5">Está pendiente de aprobación por un admin.</p>
+    <div className="text-center py-14">
+      <div className="w-14 h-14 rounded-2xl bg-green-50 border border-green-100 flex items-center justify-center mx-auto mb-3">
+        <IconCheck size={28} className="text-green-600" />
+      </div>
+      <p className="text-[15px] font-semibold text-[var(--text)] mb-1">Reconocimiento enviado</p>
+      <p className="text-[13px] text-gray-400 mb-5">Quedó pendiente de aprobación por un admin.</p>
       <button onClick={() => setExito(false)} className="px-5 py-2 bg-[image:var(--gradient)] text-white rounded-xl text-[13px] font-semibold cursor-pointer">
         Dar otro
       </button>
@@ -344,119 +376,135 @@ function TabDar({ onEnviado }: { onEnviado: () => void }) {
   )
 
   return (
-    <div>
+    <div className="space-y-5">
       {/* Cuota */}
-      <div className="flex items-center gap-2 mb-4 p-3 rounded-xl bg-gray-50 border border-gray-100">
-        <div className="flex-1">
-          <p className="text-[12px] text-gray-500">Reconocimientos disponibles este mes</p>
-          <div className="flex gap-1 mt-1">
-            {[0, 1, 2].map(i => (
-              <div key={i} className={`h-2 w-8 rounded-full ${i < cuotaUsada ? 'bg-[var(--primary)]' : 'bg-gray-200'}`} />
-            ))}
-          </div>
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[12px] text-gray-500">Reconocimientos este mes</p>
+          <span className="text-[13px] font-bold text-[var(--primary)]">{cuotaRestante} disponible{cuotaRestante !== 1 ? 's' : ''}</span>
         </div>
-        <span className="text-[13px] font-bold text-[var(--primary)]">{cuotaRestante} restante{cuotaRestante !== 1 ? 's' : ''}</span>
+        <div className="flex gap-1.5">
+          {[0, 1, 2].map(i => (
+            <div key={i} className={`h-1.5 flex-1 rounded-full ${i < cuotaUsada ? 'bg-[var(--primary)]' : 'bg-gray-100'}`} />
+          ))}
+        </div>
       </div>
 
       {cuotaRestante === 0 && (
-        <div className="p-3 mb-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-[13px]">
-          Usaste todos tus reconocimientos de este mes. ¡Volvé el mes que viene!
+        <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-[13px]">
+          Usaste los 3 reconocimientos del mes. ¡Volvé el mes que viene!
         </div>
       )}
 
-      {/* Paso 1: Elegir persona */}
-      <div className="mb-4">
-        <p className="text-[12px] font-semibold text-gray-500 mb-2 uppercase tracking-wide">1. ¿A quién reconocés?</p>
+      {/* Paso 1: Persona */}
+      <div>
+        <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-2 block">
+          1. ¿A quién reconocés?
+        </label>
+
         {receptor ? (
           <div className="flex items-center gap-2.5 p-3 rounded-xl border border-[var(--primary)] bg-[var(--primary-light)]">
             <Avatar nombre={receptor.nombre} foto={receptor.foto_perfil} size={34} />
             <p className="text-[13px] font-semibold text-[var(--primary)] flex-1">{receptor.nombre}</p>
-            <button onClick={() => setReceptor(null)} className="text-[11px] text-gray-400 underline cursor-pointer">Cambiar</button>
+            <button onClick={() => setReceptor(null)} className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer">
+              <IconX size={15} />
+            </button>
           </div>
         ) : (
-          <>
-            <input
-              type="text"
-              placeholder="Buscar compañero…"
-              value={busqueda}
-              onChange={e => setBusqueda(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-gray-200 text-[13px] mb-2 focus:outline-none focus:border-[var(--primary)]"
-            />
-            <div className="max-h-44 overflow-y-auto flex flex-col gap-1">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+            <div className="p-3 border-b border-gray-100">
+              <input
+                type="text"
+                placeholder="Buscar compañero…"
+                value={busqueda}
+                onChange={e => setBusqueda(e.target.value)}
+                className="w-full text-[13px] outline-none placeholder:text-gray-300"
+              />
+            </div>
+            <div className="max-h-44 overflow-y-auto divide-y divide-gray-50">
               {filtrados.map(u => (
                 <button key={u.id} onClick={() => { setReceptor(u); setBusqueda('') }}
-                  className="flex items-center gap-2.5 p-2.5 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer text-left w-full">
-                  <Avatar nombre={u.nombre} foto={u.foto_perfil} size={32} />
-                  <span className="text-[13px] font-medium">{u.nombre}</span>
+                  className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 transition-colors cursor-pointer w-full text-left">
+                  <Avatar nombre={u.nombre} foto={u.foto_perfil} size={30} />
+                  <span className="text-[13px] font-medium text-[var(--text)]">{u.nombre}</span>
                 </button>
               ))}
-              {!filtrados.length && busqueda && (
-                <p className="text-[12px] text-gray-400 text-center py-3">Sin resultados</p>
+              {!filtrados.length && (
+                <p className="text-[12px] text-gray-400 text-center py-4">{busqueda ? 'Sin resultados' : 'Sin compañeros disponibles'}</p>
               )}
             </div>
-            {disponibles.filter(u => u.bloqueado).length > 0 && (
-              <p className="text-[11px] text-gray-400 mt-1.5">
-                {disponibles.filter(u => u.bloqueado).length} compañeros bloqueados (ya los reconociste este mes o el anterior)
+            {bloqueadosCount > 0 && (
+              <p className="text-[11px] text-gray-400 px-3 py-2 border-t border-gray-50">
+                {bloqueadosCount} {bloqueadosCount === 1 ? 'compañero bloqueado' : 'compañeros bloqueados'} (ya los reconociste este mes o el anterior)
               </p>
             )}
-          </>
+          </div>
         )}
       </div>
 
       {/* Paso 2: Pilar */}
-      <div className="mb-4">
-        <p className="text-[12px] font-semibold text-gray-500 mb-2 uppercase tracking-wide">2. ¿En qué pilar?</p>
-        <div className="flex flex-col gap-2">
+      <div>
+        <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-2 block">
+          2. ¿En qué pilar?
+        </label>
+        <div className="space-y-2">
           {PILARES.map(p => (
             <button key={p.key} onClick={() => setPilar(pilar === p.key ? '' : p.key)}
-              className={`flex items-center gap-3 p-3 rounded-xl border text-left cursor-pointer transition-colors ${pilar === p.key ? `${p.bg} border-current ${p.color}` : 'border-gray-100 hover:border-gray-200'}`}>
-              <span className="text-xl">{p.emoji}</span>
-              <div>
+              className={`flex items-center gap-3 p-3 rounded-xl border w-full text-left cursor-pointer transition-colors ${pilar === p.key ? `${p.bg} border-current` : 'bg-white border-gray-100 shadow-sm'}`}>
+              <span className="text-xl flex-shrink-0">{p.emoji}</span>
+              <div className="flex-1">
                 <p className={`text-[13px] font-semibold ${pilar === p.key ? p.color : 'text-[var(--text)]'}`}>{p.label}</p>
                 <p className="text-[11px] text-gray-400">
-                  {p.key === 'salvavidas' && 'Ayudó en un momento crítico o resolvió un problema urgente'}
-                  {p.key === 'buena_vibra' && 'Contagia energía positiva y hace que el equipo sea mejor'}
-                  {p.key === 'iniciativa' && 'Propuso o implementó algo nuevo sin que nadie se lo pidiera'}
+                  {p.key === 'salvavidas' && 'Ayudó en un momento crítico o resolvió algo urgente'}
+                  {p.key === 'buena_vibra' && 'Contagia energía positiva y hace mejor al equipo'}
+                  {p.key === 'iniciativa' && 'Propuso o hizo algo nuevo sin que nadie se lo pidiera'}
                 </p>
               </div>
+              {pilar === p.key && <IconCheck size={16} className={p.color} />}
             </button>
           ))}
         </div>
       </div>
 
       {/* Paso 3: Mensaje */}
-      <div className="mb-4">
-        <p className="text-[12px] font-semibold text-gray-500 mb-2 uppercase tracking-wide">3. Tu mensaje <span className="font-normal normal-case text-gray-400">(mín. 50 caracteres)</span></p>
+      <div>
+        <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-2 block">
+          3. Tu mensaje <span className="font-normal normal-case">(mínimo 50 caracteres)</span>
+        </label>
         <textarea
           value={mensaje}
           onChange={e => setMensaje(e.target.value)}
           rows={4}
           placeholder="Contá concretamente qué hizo esta persona y cómo impactó en vos o el equipo…"
-          className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-[13px] resize-none focus:outline-none focus:border-[var(--primary)]"
+          className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-[13px] resize-none outline-none focus:border-[var(--primary)] transition-colors"
         />
-        <p className={`text-[11px] mt-0.5 ${mensaje.length >= 50 ? 'text-green-600' : 'text-gray-400'}`}>
-          {mensaje.length}/50 mínimo
+        <p className={`text-[11px] mt-1 ${mensaje.length >= 50 ? 'text-green-600' : 'text-gray-400'}`}>
+          {mensaje.length} / 50 mínimo
         </p>
       </div>
 
       {/* Paso 4: Anónimo */}
-      <div className="mb-5">
-        <label className="flex items-center gap-2.5 cursor-pointer select-none">
-          <div onClick={() => setAnonimo(v => !v)}
-            className={`w-10 h-5 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${anonimo ? 'bg-[var(--primary)]' : 'bg-gray-200'}`}>
-            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${anonimo ? 'translate-x-5' : 'translate-x-0.5'}`} />
-          </div>
-          <span className="text-[13px] text-gray-600">Enviar de forma anónima</span>
-        </label>
-        {anonimo && <p className="text-[11px] text-gray-400 mt-1 ml-12">Solo los administradores sabrán quién lo envió.</p>}
-      </div>
+      <label className="flex items-center gap-3 cursor-pointer select-none bg-white rounded-xl border border-gray-100 shadow-sm p-3">
+        <div
+          onClick={() => setAnonimo(v => !v)}
+          className={`w-10 h-5 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${anonimo ? 'bg-[var(--primary)]' : 'bg-gray-200'}`}
+        >
+          <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${anonimo ? 'translate-x-5' : 'translate-x-0.5'}`} />
+        </div>
+        <div>
+          <p className="text-[13px] font-medium text-[var(--text)]">Enviar de forma anónima</p>
+          {anonimo && <p className="text-[11px] text-gray-400">Solo los admins sabrán que fuiste vos.</p>}
+        </div>
+      </label>
 
-      {error && <p className="mb-3 text-[13px] text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</p>}
+      {error && (
+        <p className="text-[13px] text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{error}</p>
+      )}
 
       <button
         onClick={enviar}
         disabled={!receptor || !pilar || mensaje.trim().length < 50 || cuotaRestante === 0 || enviando}
-        className="w-full py-3 bg-[image:var(--gradient)] text-white font-semibold rounded-xl text-[14px] disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed transition-opacity"
+        className="w-full py-3 bg-[image:var(--gradient)] text-white font-semibold rounded-xl text-[14px] disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
       >
         {enviando ? 'Enviando…' : 'Enviar reconocimiento'}
       </button>
@@ -464,8 +512,8 @@ function TabDar({ onEnviado }: { onEnviado: () => void }) {
   )
 }
 
-// ─── Tab: Moderación (solo admin) ─────────────────────────────────────────────
-function TabModeracion() {
+// ─── Tab: Moderar (solo admin) ────────────────────────────────────────────────
+function TabModerar() {
   const [data, setData] = useState<{ pendientes: RecAdmin[]; ranking: RankingItem[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [moderando, setModerando] = useState<string | null>(null)
@@ -492,57 +540,63 @@ function TabModeracion() {
     cargar()
   }
 
-  if (loading) return <div className="py-12 text-center text-gray-400 text-sm">Cargando…</div>
+  if (loading) return <Spinner />
+
+  const pendientesCount = data?.pendientes.length ?? 0
 
   return (
     <div>
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-4">
-        {(['pendientes', 'ranking'] as const).map(t => (
-          <button key={t} onClick={() => setSubtab(t)}
-            className={`flex-1 py-1.5 rounded-lg text-[12px] font-semibold transition-colors cursor-pointer capitalize ${subtab === t ? 'bg-white text-[var(--primary)] shadow-sm' : 'text-gray-400'}`}>
-            {t === 'pendientes' ? `Pendientes (${data?.pendientes.length ?? 0})` : 'Ranking del mes'}
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-4">
+        {([['pendientes', `Pendientes (${pendientesCount})`], ['ranking', 'Ranking del mes']] as const).map(([key, label]) => (
+          <button key={key} onClick={() => setSubtab(key)}
+            className={`flex-1 py-2 text-[13px] font-medium rounded-[10px] cursor-pointer transition-all ${subtab === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+            {label}
           </button>
         ))}
       </div>
 
       {subtab === 'pendientes' && (
-        <div className="flex flex-col gap-3">
-          {!data?.pendientes.length && (
-            <div className="py-10 text-center text-gray-400">
-              <p className="text-2xl mb-1">✅</p>
-              <p className="text-[13px]">No hay reconocimientos pendientes</p>
+        <div className="space-y-3">
+          {!pendientesCount && (
+            <div className="text-center py-14">
+              <div className="w-12 h-12 rounded-2xl bg-green-50 border border-green-100 flex items-center justify-center mx-auto mb-3">
+                <IconCheck size={24} className="text-green-500" />
+              </div>
+              <p className="text-[13px] text-gray-400">No hay reconocimientos pendientes</p>
             </div>
           )}
           {data?.pendientes.map(r => (
-            <div key={r.id} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="text-[12px] font-semibold text-[var(--text)]">{r.emisor.nombre}</span>
-                    <span className="text-[11px] text-gray-400">→</span>
-                    <span className="text-[12px] font-semibold text-[var(--text)]">{r.receptor.nombre}</span>
-                    {r.anonimo && <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">Anónimo</span>}
+            <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="p-4">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[12px] font-semibold text-[var(--text)]">{r.emisor.nombre}</span>
+                      <span className="text-[11px] text-gray-300">→</span>
+                      <span className="text-[12px] font-semibold text-[var(--text)]">{r.receptor.nombre}</span>
+                      {r.anonimo && <span className="text-[10px] bg-gray-100 text-gray-400 border border-gray-200 px-1.5 py-0.5 rounded-full">Anónimo</span>}
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-0.5">{timeAgo(r.fecha_creacion)} · Ciclo {r.mes_ciclo}</p>
                   </div>
-                  <p className="text-[10px] text-gray-400">{timeAgo(r.fecha_creacion)} · Ciclo {r.mes_ciclo}</p>
+                  <PilarBadge pilar={r.categoria_pilar} />
                 </div>
-                <PilarBadge pilar={r.categoria_pilar} />
-              </div>
-              <p className="text-[13px] text-[var(--text-sub)] leading-relaxed mb-3">{r.mensaje}</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => moderar(r.id, 'aprobado')}
-                  disabled={moderando === r.id}
-                  className="flex-1 py-2 bg-green-600 text-white text-[12px] font-semibold rounded-xl cursor-pointer disabled:opacity-50 hover:bg-green-700 transition-colors"
-                >
-                  {moderando === r.id ? '…' : '✓ Aprobar'}
-                </button>
-                <button
-                  onClick={() => moderar(r.id, 'oculto')}
-                  disabled={moderando === r.id}
-                  className="flex-1 py-2 bg-gray-100 text-gray-600 text-[12px] font-semibold rounded-xl cursor-pointer disabled:opacity-50 hover:bg-gray-200 transition-colors"
-                >
-                  {moderando === r.id ? '…' : '✗ Ocultar'}
-                </button>
+                <p className="text-[13px] text-[var(--text-sub)] leading-relaxed mb-3">{r.mensaje}</p>
+                <div className="flex gap-2 border-t border-gray-100 pt-3">
+                  <button
+                    onClick={() => moderar(r.id, 'oculto')}
+                    disabled={moderando === r.id}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-gray-200 text-gray-500 rounded-xl text-[13px] font-medium cursor-pointer disabled:opacity-50 hover:bg-gray-50 transition-colors"
+                  >
+                    <IconX size={14} /> Ocultar
+                  </button>
+                  <button
+                    onClick={() => moderar(r.id, 'aprobado')}
+                    disabled={moderando === r.id}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-green-600 text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-50 hover:bg-green-700 transition-colors"
+                  >
+                    <IconCheck size={14} /> Aprobar
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -550,25 +604,25 @@ function TabModeracion() {
       )}
 
       {subtab === 'ranking' && (
-        <div className="flex flex-col gap-2">
+        <div className="space-y-2">
           {!data?.ranking.length && (
-            <p className="text-center text-gray-400 text-sm py-8">No hay reconocimientos aprobados este mes</p>
+            <p className="text-center text-[13px] text-gray-400 py-12">No hay reconocimientos aprobados este mes</p>
           )}
           {data?.ranking.map((item, i) => (
             <div key={item.id} className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3 shadow-sm">
-              <span className="text-[15px] font-bold text-gray-400 w-5 text-center">
-                {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+              <span className="text-[15px] font-bold text-gray-300 w-5 text-center leading-none">
+                {i + 1}
               </span>
               <Avatar nombre={item.nombre} foto={item.foto_perfil} size={34} />
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-semibold truncate">{item.nombre}</p>
                 <div className="flex gap-2 mt-0.5">
-                  {item.salvavidas > 0  && <span className="text-[10px] text-blue-600">🛟 {item.salvavidas}</span>}
-                  {item.buena_vibra > 0 && <span className="text-[10px] text-amber-600">☀️ {item.buena_vibra}</span>}
-                  {item.iniciativa > 0  && <span className="text-[10px] text-violet-600">⚡ {item.iniciativa}</span>}
+                  {item.salvavidas > 0  && <span className="text-[10px] text-blue-500">🛟 {item.salvavidas}</span>}
+                  {item.buena_vibra > 0 && <span className="text-[10px] text-amber-500">☀️ {item.buena_vibra}</span>}
+                  {item.iniciativa > 0  && <span className="text-[10px] text-violet-500">⚡ {item.iniciativa}</span>}
                 </div>
               </div>
-              <span className="text-[15px] font-bold text-[var(--primary)]">{item.total}</span>
+              <span className="text-[17px] font-bold text-[var(--primary)]">{item.total}</span>
             </div>
           ))}
         </div>
@@ -577,42 +631,48 @@ function TabModeracion() {
   )
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function ReconocimientosClient({ session }: { session: SessionUser }) {
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
 
-  type Tab = 'mural' | 'medallitas' | 'dar' | 'moderacion'
+  type Tab = 'mural' | 'medallas' | 'reconocer' | 'moderar'
   const [tab, setTab] = useState<Tab>('mural')
   const [muralKey, setMuralKey] = useState(0)
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'mural',       label: '🏆 Mural' },
-    { key: 'medallitas',  label: '🎖️ Mis medallitas' },
-    { key: 'dar',         label: '✨ Dar reconocimiento' },
-    ...(isAdmin ? [{ key: 'moderacion' as Tab, label: '🛡️ Moderación' }] : []),
+    { key: 'mural',     label: 'Mural' },
+    { key: 'medallas',  label: 'Mis medallas' },
+    { key: 'reconocer', label: 'Reconocer' },
+    ...(isAdmin ? [{ key: 'moderar' as Tab, label: `Moderar` }] : []),
   ]
 
   return (
-    <div className="max-w-xl mx-auto px-4 py-6">
-      <div className="mb-5">
-        <h1 className="text-[20px] font-bold text-[var(--text)]">Reconocimientos</h1>
-        <p className="text-[13px] text-gray-400 mt-0.5">Reconocé el trabajo de tus compañeros</p>
+    <div className="py-4 fade-in">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-5">
+        <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
+          <IconTrophy size={18} className="text-white" />
+        </div>
+        <div>
+          <h1 className="text-[17px] font-bold text-[var(--text)]">Reconocimientos</h1>
+          <p className="text-xs text-[var(--text-sub)]">Reconocé el trabajo de tus compañeros</p>
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 overflow-x-auto pb-1 mb-5 scrollbar-hide">
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-5">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-[12px] font-semibold transition-colors cursor-pointer whitespace-nowrap ${tab === t.key ? 'bg-[var(--primary)] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+            className={`flex-1 py-2 text-[13px] font-medium rounded-[10px] cursor-pointer transition-all ${tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
             {t.label}
           </button>
         ))}
       </div>
 
-      {tab === 'mural'      && <TabMural key={muralKey} />}
-      {tab === 'medallitas' && <TabMisMedallitas />}
-      {tab === 'dar'        && <TabDar onEnviado={() => setMuralKey(k => k + 1)} />}
-      {tab === 'moderacion' && isAdmin && <TabModeracion />}
+      {tab === 'mural'     && <TabMural key={muralKey} />}
+      {tab === 'medallas'  && <TabMisMedallas />}
+      {tab === 'reconocer' && <TabReconocer onEnviado={() => { setMuralKey(k => k + 1); setTab('mural') }} />}
+      {tab === 'moderar'   && isAdmin && <TabModerar />}
     </div>
   )
 }
