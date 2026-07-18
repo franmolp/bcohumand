@@ -2,7 +2,7 @@ import React from 'react'
 import Link from 'next/link'
 import type { SessionUser } from '@/types'
 import { supabase, supabaseAdmin } from '@/lib/supabase'
-import { IconUsers, IconFileText, IconCalendar, IconChevronRight, IconCheck, IconX, IconAlertCircle, IconWall, IconShoppingBag, IconDollar, IconCamera, IconWrench } from '@/components/ui/Icons'
+import { IconUsers, IconFileText, IconCalendar, IconChevronRight, IconCheck, IconX, IconAlertCircle, IconWall, IconShoppingBag, IconDollar, IconCamera, IconWrench, IconTrophy } from '@/components/ui/Icons'
 import GoogleReviewsCarousel from '@/components/GoogleReviewsCarousel'
 import AdminKpiCard from './AdminKpiCard'
 
@@ -100,6 +100,8 @@ function fmtDateLabel(d: Date): string {
   return `${cap(wd)} ${d.getDate()} de ${cap(mon)} de ${d.getFullYear()}`
 }
 
+const BETA_RECO = ['fmoran', 'prueba', 'francomoran@gmail.com']
+
 export default async function AdminDashboard({ session }: { session: SessionUser }) {
   // Fecha en timezone Argentina para evitar desfase UTC
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
@@ -107,8 +109,9 @@ export default async function AdminDashboard({ session }: { session: SessionUser
   const today = new Date(yr, mo - 1, dy)
   const hace7 = new Date(today); hace7.setDate(today.getDate() - 7)
   const hace7Str = hace7.toISOString()
+  const isBetaReco = BETA_RECO.includes(session.usuario ?? '') || BETA_RECO.includes(session.email)
 
-  const [empData, ausentesData, pendData, actData, usersData, repData] = await Promise.all([
+  const [empData, ausentesData, pendData, actData, usersData, repData, recoData] = await Promise.all([
     // Empleados activos
     supabase.from('usuarios').select('id').eq('estado_cuenta', 'activo'),
 
@@ -142,10 +145,16 @@ export default async function AdminDashboard({ session }: { session: SessionUser
 
     // Reparaciones pendientes
     supabaseAdmin.from('reparaciones').select('id').eq('estado', 'pendiente'),
+
+    // Reconocimientos pendientes de moderación (solo beta)
+    isBetaReco
+      ? supabaseAdmin.from('reconocimientos').select('id').eq('estado', 'pendiente')
+      : Promise.resolve({ data: [] }),
   ])
 
   const totalEmpleados = empData.data?.length ?? 0
   const repPendientes  = repData.data?.length ?? 0
+  const recoPendientes = recoData.data?.length ?? 0
   const TIPOS_AUSENCIA = ['Ausencia por Salud', 'Ausencia Injustificada', 'Vacaciones', 'Solicitud de Días', 'Cambio de horario/día']
   const ausentesHoyList = (ausentesData.data ?? []).filter(r => {
     if (!TIPOS_AUSENCIA.includes(r.tipo)) return false
@@ -297,6 +306,22 @@ export default async function AdminDashboard({ session }: { session: SessionUser
             </div>
             <p className="text-[32px] font-bold leading-none mb-1">{repPendientes}</p>
             <p className="text-[11px] text-white/70">Reparaciones pend.</p>
+          </Link>
+        )}
+
+        {/* Reconocimientos pendientes — solo admin beta */}
+        {isAdminRole && isBetaReco && (
+          <Link href="/dashboard/reconocimientos"
+            className="lg:col-span-1 rounded-2xl p-4 text-white shadow-sm hover:opacity-90 transition-opacity cursor-pointer"
+            style={{ background: 'linear-gradient(135deg, #eab308, #ca8a04)' }}>
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-8 h-8 bg-white/15 rounded-xl flex items-center justify-center">
+                <IconTrophy size={16} className="text-white" />
+              </div>
+              <IconChevronRight size={14} className="text-white/50 mt-1" />
+            </div>
+            <p className="text-[32px] font-bold leading-none mb-1">{recoPendientes}</p>
+            <p className="text-[11px] text-white/70">Reconoc. pend.</p>
           </Link>
         )}
 

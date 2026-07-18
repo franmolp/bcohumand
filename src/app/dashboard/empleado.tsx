@@ -2,7 +2,7 @@ import Link from 'next/link'
 import type { SessionUser } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { IconCalendar, IconBell, IconAlertCircle, IconChevronRight, IconStar, IconClock, IconWall } from '@/components/ui/Icons'
+import { IconCalendar, IconBell, IconAlertCircle, IconChevronRight, IconStar, IconClock, IconWall, IconTrophy } from '@/components/ui/Icons'
 import GoogleReviewsCarousel from '@/components/GoogleReviewsCarousel'
 
 const VACACIONES_DEFAULT = 14
@@ -159,6 +159,8 @@ function WordleCard({ tieneHoy, revelado, resuelta, posicionMes, mesNombre }: {
   )
 }
 
+const BETA_RECO = ['fmoran', 'prueba', 'francomoran@gmail.com']
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export default async function EmpleadoDashboard({ session }: { session: SessionUser }) {
@@ -173,6 +175,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   const nextMoYr = mo === 12 ? yr + 1 : yr
 
   const showAusentes = session.rol === 'HR' || session.rol === 'Encargada'
+  const isBetaReco = BETA_RECO.includes(session.usuario ?? '') || BETA_RECO.includes(session.email)
 
   // Período de vacaciones: 01/04/YYYY → 31/03/YYYY+1
   const periodYear = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1
@@ -183,8 +186,9 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   const mesStart = `${yr}-${String(mo).padStart(2,'0')}-01`
   const mesEnd   = `${yr}-${String(mo).padStart(2,'0')}-${String(new Date(yr, mo, 0).getDate()).padStart(2,'0')}`
   const mesNombre = today.toLocaleString('es', { month: 'long' })
+  const mesCiclo  = `${yr}-${String(mo).padStart(2,'0')}`
 
-  const [vacRes, notifRes, usersRes, evRes, configRes, solPendRes, ausentesRes, muroRes, palabraHoyRes, partidaHoyRes, rankingMesRes, efemRes] = await Promise.all([
+  const [vacRes, notifRes, usersRes, evRes, configRes, solPendRes, ausentesRes, muroRes, palabraHoyRes, partidaHoyRes, rankingMesRes, efemRes, recoRes] = await Promise.all([
     supabase
       .from('solicitudes')
       .select('dias')
@@ -267,10 +271,16 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
       .select('id, titulo, mes, dia, anio, tipo')
       .in('mes', [mo, nextMo])
       .or(`anio.is.null,anio.eq.${yr}${nextMoYr !== yr ? `,anio.eq.${nextMoYr}` : ''}`),
+
+    // Reconocimientos recibidos este mes (solo beta)
+    isBetaReco
+      ? supabaseAdmin.from('reconocimientos').select('id').eq('id_receptor', session.id).eq('mes_ciclo', mesCiclo).eq('estado', 'aprobado')
+      : Promise.resolve({ data: [] }),
   ])
 
   // Vacaciones
   const vacUsadas = (vacRes.data ?? []).reduce((s, r) => s + (r.dias ?? 0), 0)
+  const recoCount = recoRes.data?.length ?? 0
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const vacTotal  = (configRes.data as any)?.dias_vacaciones ?? VACACIONES_DEFAULT
   const vacRest   = vacTotal - vacUsadas
@@ -427,6 +437,26 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
               <p className="text-[11px] text-gray-400 mt-1">{timeAgo(muroPost.created_at)}</p>
             </div>
           </div>
+        </Link>
+      )}
+
+      {/* Reconocimientos — solo beta */}
+      {isBetaReco && (
+        <Link href="/dashboard/reconocimientos" className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-shadow">
+          <div className="w-10 h-10 rounded-xl bg-yellow-100 flex items-center justify-center shrink-0">
+            <IconTrophy size={20} className="text-yellow-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[14px] font-bold text-[var(--text)]">
+              {recoCount > 0
+                ? `¡Recibiste ${recoCount} reconocimiento${recoCount > 1 ? 's' : ''} este mes!`
+                : 'Reconocimientos del equipo'}
+            </p>
+            <p className="text-[12px] text-gray-400">
+              {recoCount > 0 ? 'Ver mis medallas' : 'Reconocé a un compañero'}
+            </p>
+          </div>
+          <IconChevronRight size={14} className="text-gray-300 shrink-0" />
         </Link>
       )}
 
