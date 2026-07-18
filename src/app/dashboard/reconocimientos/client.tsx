@@ -598,7 +598,7 @@ function TabReconocer({ onEnviado }: { onEnviado: () => void }) {
 }
 
 // ─── Tab: Moderar (solo admin) ────────────────────────────────────────────────
-function TabModerar() {
+function TabModerar({ onModerado }: { onModerado: () => void }) {
   const [data, setData] = useState<{ pendientes: RecAdmin[]; ranking: RankingItem[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [moderando, setModerando] = useState<string | null>(null)
@@ -623,6 +623,7 @@ function TabModerar() {
       body: JSON.stringify({ accion }),
     })
     setModerando(null)
+    onModerado()
     cargar(mes)
   }
 
@@ -718,6 +719,15 @@ export default function ReconocimientosClient({ session }: { session: SessionUse
   type Tab = 'mural' | 'medallas' | 'reconocer' | 'moderar'
   const [tab, setTab] = useState<Tab>('mural')
   const [muralKey, setMuralKey] = useState(0)
+  const [pendingCount, setPendingCount] = useState(0)
+
+  useEffect(() => {
+    if (!isAdmin) return
+    fetch(`/api/reconocimientos/admin?mes=${getMesCiclo()}`)
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d?.pendientes)) setPendingCount(d.pendientes.length) })
+      .catch(() => {})
+  }, [isAdmin])
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'mural',     label: 'Mural' },
@@ -741,8 +751,13 @@ export default function ReconocimientosClient({ session }: { session: SessionUse
       <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-5">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`flex-1 py-2 text-[13px] font-medium rounded-[10px] cursor-pointer transition-all ${tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+            className={`relative flex-1 py-2 text-[13px] font-medium rounded-[10px] cursor-pointer transition-all ${tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
             {t.label}
+            {t.key === 'moderar' && pendingCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                {pendingCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -750,7 +765,7 @@ export default function ReconocimientosClient({ session }: { session: SessionUse
       {tab === 'mural'     && <TabMural key={muralKey} />}
       {tab === 'medallas'  && <TabMisMedallas />}
       {tab === 'reconocer' && <TabReconocer onEnviado={() => { setMuralKey(k => k + 1); setTab('mural') }} />}
-      {tab === 'moderar'   && isAdmin && <TabModerar />}
+      {tab === 'moderar'   && isAdmin && <TabModerar onModerado={() => setPendingCount(c => Math.max(0, c - 1))} />}
     </div>
   )
 }
