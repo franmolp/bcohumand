@@ -171,7 +171,7 @@ function timeAgo(iso: string) {
 }
 
 function fmtFecha(iso: string) {
-  return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
 // ─── Popup de detalle de pilar ─────────────────────────────────────────────
@@ -185,17 +185,11 @@ function PilarPopup({
 }) {
   const p = pilarInfo(pilar)
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div
-        className="relative bg-white w-full max-w-md rounded-t-2xl lg:rounded-2xl shadow-2xl max-h-[75dvh] flex flex-col"
+        className="bg-white rounded-2xl w-full max-w-sm shadow-2xl max-h-[80dvh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
-        {/* Handle */}
-        <div className="flex justify-center pt-2.5 pb-1 lg:hidden">
-          <div className="w-9 h-1 bg-gray-200 rounded-full" />
-        </div>
-
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-100">
           <span className="text-xl">{p.emoji}</span>
