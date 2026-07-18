@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import type { SessionUser } from '@/types'
 import {
-  IconTrophy, IconCheck, IconX, IconEyeOff,
+  IconTrophy, IconCheck, IconX, IconEyeOff, IconChevronLeft, IconChevronRight,
 } from '@/components/ui/Icons'
 
 type Pilar = 'salvavidas' | 'buena_vibra' | 'iniciativa'
@@ -68,13 +69,60 @@ interface RankingItem {
   iniciativa: number
 }
 
-const PILARES: { key: Pilar; label: string; emoji: string; color: string; bg: string }[] = [
-  { key: 'salvavidas',  label: 'Salvavidas',  emoji: '🛟', color: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200' },
-  { key: 'buena_vibra', label: 'Buena vibra', emoji: '☀️', color: 'text-amber-600',  bg: 'bg-amber-50 border-amber-200' },
-  { key: 'iniciativa',  label: 'Iniciativa',  emoji: '⚡', color: 'text-violet-600', bg: 'bg-violet-50 border-violet-200' },
+interface GrupoEmpleado {
+  receptor: { nombre: string; foto_perfil: string | null }
+  total: number
+  pilares: Record<Pilar, RecMural[]>
+}
+
+const PILARES: { key: Pilar; label: string; emoji: string; color: string; bg: string; dot: string }[] = [
+  { key: 'salvavidas',  label: 'Salvavidas',  emoji: '🛟', color: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200',    dot: 'bg-blue-400' },
+  { key: 'buena_vibra', label: 'Buena vibra', emoji: '☀️', color: 'text-amber-600',  bg: 'bg-amber-50 border-amber-200',  dot: 'bg-amber-400' },
+  { key: 'iniciativa',  label: 'Iniciativa',  emoji: '⚡', color: 'text-violet-600', bg: 'bg-violet-50 border-violet-200', dot: 'bg-violet-400' },
 ]
 
 function pilarInfo(key: Pilar) { return PILARES.find(p => p.key === key) ?? PILARES[0] }
+
+const PRIMER_MES = '2026-07'
+
+function getMesCiclo(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).slice(0, 7)
+}
+
+function formatMes(mes: string): string {
+  const [y, m] = mes.split('-')
+  const nombres = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+  return `${nombres[parseInt(m) - 1]} ${y}`
+}
+
+function mesOffset(mes: string, delta: number): string {
+  const [y, m] = mes.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function NavMes({ mes, onChange }: { mes: string; onChange: (m: string) => void }) {
+  const mesActual = getMesCiclo()
+  return (
+    <div className="flex items-center gap-2 mb-4">
+      <button
+        onClick={() => onChange(mesOffset(mes, -1))}
+        disabled={mes <= PRIMER_MES}
+        className="p-1.5 rounded-lg border border-gray-200 text-gray-400 disabled:opacity-30 cursor-pointer hover:bg-gray-50 transition-colors"
+      >
+        <IconChevronLeft size={16} />
+      </button>
+      <span className="flex-1 text-center text-[13px] font-semibold text-[var(--text)]">{formatMes(mes)}</span>
+      <button
+        onClick={() => onChange(mesOffset(mes, 1))}
+        disabled={mes >= mesActual}
+        className="p-1.5 rounded-lg border border-gray-200 text-gray-400 disabled:opacity-30 cursor-pointer hover:bg-gray-50 transition-colors"
+      >
+        <IconChevronRight size={16} />
+      </button>
+    </div>
+  )
+}
 
 function Spinner() {
   return (
@@ -110,11 +158,7 @@ function EstadoBadge({ estado }: { estado: string }) {
     oculto:    'bg-gray-100 text-gray-400 border-gray-200',
   }
   const label: Record<string, string> = { pendiente: 'Pendiente', aprobado: 'Aprobado', oculto: 'Ocultado' }
-  return (
-    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${map[estado] ?? ''}`}>
-      {label[estado] ?? estado}
-    </span>
-  )
+  return <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${map[estado] ?? ''}`}>{label[estado] ?? estado}</span>
 }
 
 function timeAgo(iso: string) {
@@ -126,82 +170,147 @@ function timeAgo(iso: string) {
   return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
 }
 
+function fmtFecha(iso: string) {
+  return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
+
+// ─── Popup de detalle de pilar ─────────────────────────────────────────────
+function PilarPopup({
+  empleado, pilar, recs, onClose,
+}: {
+  empleado: string
+  pilar: Pilar
+  recs: RecMural[]
+  onClose: () => void
+}) {
+  const p = pilarInfo(pilar)
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div
+        className="relative bg-white w-full max-w-md rounded-t-2xl lg:rounded-2xl shadow-2xl max-h-[75dvh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Handle */}
+        <div className="flex justify-center pt-2.5 pb-1 lg:hidden">
+          <div className="w-9 h-1 bg-gray-200 rounded-full" />
+        </div>
+
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-100">
+          <span className="text-xl">{p.emoji}</span>
+          <div className="flex-1">
+            <p className="text-[14px] font-semibold text-[var(--text)]">{empleado}</p>
+            <p className={`text-[11px] font-semibold ${p.color}`}>{p.label} · {recs.length} reconocimiento{recs.length !== 1 ? 's' : ''}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full cursor-pointer">
+            <IconX size={16} />
+          </button>
+        </div>
+
+        {/* Lista */}
+        <div className="overflow-y-auto flex-1 p-4 space-y-3">
+          {recs.map(r => (
+            <div key={r.id} className="bg-gray-50 rounded-xl p-3">
+              <p className="text-[13px] text-[var(--text)] leading-relaxed mb-2">{r.mensaje}</p>
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] text-gray-400">
+                  de {r.emisor && !r.anonimo ? r.emisor.nombre : 'Anónimo'}
+                </p>
+                <p className="text-[10px] text-gray-400">{fmtFecha(r.fecha_creacion)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 // ─── Tab: Mural ───────────────────────────────────────────────────────────────
 function TabMural() {
   const [recs, setRecs] = useState<RecMural[]>([])
   const [loading, setLoading] = useState(true)
-  const [filtro, setFiltro] = useState<Pilar | ''>('')
+  const [mes, setMes] = useState(getMesCiclo())
+  const [popup, setPopup] = useState<{ empleado: string; pilar: Pilar; recs: RecMural[] } | null>(null)
 
   useEffect(() => {
-    fetch('/api/reconocimientos')
+    setLoading(true)
+    fetch(`/api/reconocimientos?mes=${mes}`)
       .then(r => r.json())
       .then(d => { if (Array.isArray(d)) setRecs(d) })
       .finally(() => setLoading(false))
-  }, [])
+  }, [mes])
 
-  if (loading) return <Spinner />
-
-  const filtrados = filtro ? recs.filter(r => r.categoria_pilar === filtro) : recs
+  // Agrupar por receptor y ordenar por total desc
+  const grupos: GrupoEmpleado[] = []
+  const mapaGrupos: Record<string, GrupoEmpleado> = {}
+  for (const r of recs) {
+    const key = r.receptor.nombre
+    if (!mapaGrupos[key]) {
+      mapaGrupos[key] = { receptor: r.receptor, total: 0, pilares: { salvavidas: [], buena_vibra: [], iniciativa: [] } }
+      grupos.push(mapaGrupos[key])
+    }
+    mapaGrupos[key].pilares[r.categoria_pilar].push(r)
+    mapaGrupos[key].total++
+  }
+  grupos.sort((a, b) => b.total - a.total)
 
   return (
     <div>
-      {/* Filtros por pilar */}
-      <div className="flex gap-2 mb-4" style={{ overflowX: 'auto', scrollbarWidth: 'none' }}>
-        <button
-          onClick={() => setFiltro('')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-semibold shrink-0 transition-all cursor-pointer ${
-            filtro === '' ? 'bg-[var(--primary)] text-white' : 'bg-white text-gray-500 border border-gray-200'
-          }`}
-        >
-          Todos
-          <span className={`text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center ${filtro === '' ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500'}`}>
-            {recs.length}
-          </span>
-        </button>
-        {PILARES.map(p => (
-          <button
-            key={p.key}
-            onClick={() => setFiltro(filtro === p.key ? '' : p.key)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-semibold shrink-0 transition-all cursor-pointer ${
-              filtro === p.key ? 'bg-[var(--primary)] text-white' : 'bg-white text-gray-500 border border-gray-200'
-            }`}
-          >
-            {p.emoji} {p.label}
-            <span className={`text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center ${filtro === p.key ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500'}`}>
-              {recs.filter(r => r.categoria_pilar === p.key).length}
-            </span>
-          </button>
-        ))}
-      </div>
+      <NavMes mes={mes} onChange={m => { setMes(m); setRecs([]) }} />
 
-      {!filtrados.length && (
+      {loading && <Spinner />}
+
+      {!loading && !grupos.length && (
         <div className="text-center py-16">
           <IconTrophy size={40} className="text-gray-200 mx-auto mb-3" />
-          <p className="text-[14px] text-gray-400">No hay reconocimientos este mes todavía</p>
+          <p className="text-[14px] text-gray-400">No hay reconocimientos en {formatMes(mes)}</p>
         </div>
       )}
 
-      <div className="space-y-3">
-        {filtrados.map(rec => (
-          <div key={rec.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="p-4">
-              <div className="flex items-start gap-3 mb-3">
-                <Avatar nombre={rec.receptor.nombre} foto={rec.receptor.foto_perfil} size={36} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[13px] font-semibold text-[var(--text)]">{rec.receptor.nombre}</span>
-                    <PilarBadge pilar={rec.categoria_pilar} />
-                  </div>
-                  <p className="text-[11px] text-gray-400 mt-0.5">
-                    de {rec.emisor && !rec.anonimo ? rec.emisor.nombre : 'Anónimo'} · {timeAgo(rec.fecha_creacion)}
-                  </p>
-                </div>
+      {!loading && grupos.length > 0 && (
+        <div className="grid grid-cols-2 gap-3">
+          {grupos.map(g => (
+            <div key={g.receptor.nombre} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col items-center text-center">
+              {/* Avatar grande */}
+              <Avatar nombre={g.receptor.nombre} foto={g.receptor.foto_perfil} size={56} />
+              <p className="text-[12px] font-semibold text-[var(--text)] mt-2 mb-3 leading-tight line-clamp-2">
+                {g.receptor.nombre}
+              </p>
+
+              {/* Pilares con count */}
+              <div className="flex flex-col gap-1.5 w-full">
+                {PILARES.map(p => {
+                  const count = g.pilares[p.key].length
+                  if (!count) return null
+                  return (
+                    <button
+                      key={p.key}
+                      onClick={() => setPopup({ empleado: g.receptor.nombre, pilar: p.key, recs: g.pilares[p.key] })}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border w-full cursor-pointer transition-colors hover:opacity-80 ${p.bg}`}
+                    >
+                      <span className="text-sm leading-none">{p.emoji}</span>
+                      <span className={`text-[12px] font-bold ${p.color}`}>{count}</span>
+                      <span className={`text-[10px] ${p.color} flex-1 text-left`}>{p.label}</span>
+                    </button>
+                  )
+                })}
               </div>
-              <p className="text-[13px] text-[var(--text-sub)] leading-relaxed">{rec.mensaje}</p>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
+
+      {popup && (
+        <PilarPopup
+          empleado={popup.empleado}
+          pilar={popup.pilar}
+          recs={popup.recs}
+          onClose={() => setPopup(null)}
+        />
+      )}
     </div>
   )
 }
@@ -212,21 +321,25 @@ function TabMisMedallas() {
   const [enviados, setEnviados] = useState<RecEnviado[]>([])
   const [loading, setLoading] = useState(true)
   const [subtab, setSubtab] = useState<'recibidos' | 'enviados'>('recibidos')
+  const [mes, setMes] = useState(getMesCiclo())
 
-  useEffect(() => {
+  const cargar = useCallback((m: string) => {
+    setLoading(true)
     Promise.all([
-      fetch('/api/reconocimientos/mis-recibidos').then(r => r.json()),
-      fetch('/api/reconocimientos/mis-enviados').then(r => r.json()),
+      fetch(`/api/reconocimientos/mis-recibidos?mes=${m}`).then(r => r.json()),
+      fetch(`/api/reconocimientos/mis-enviados?mes=${m}`).then(r => r.json()),
     ]).then(([rec, env]) => {
       if (Array.isArray(rec)) setRecibidos(rec)
       if (Array.isArray(env)) setEnviados(env)
     }).finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <Spinner />
+  useEffect(() => { cargar(mes) }, [mes, cargar])
 
   return (
     <div>
+      <NavMes mes={mes} onChange={m => { setMes(m); setRecibidos([]); setEnviados([]) }} />
+
       {/* Resumen por pilar */}
       <div className="grid grid-cols-3 gap-2 mb-4">
         {PILARES.map(p => {
@@ -251,12 +364,14 @@ function TabMisMedallas() {
         ))}
       </div>
 
-      {subtab === 'recibidos' && (
+      {loading && <Spinner />}
+
+      {!loading && subtab === 'recibidos' && (
         <div className="space-y-3">
           {!recibidos.length && (
             <div className="text-center py-12">
               <IconTrophy size={36} className="text-gray-200 mx-auto mb-2" />
-              <p className="text-[13px] text-gray-400">Todavía no recibiste reconocimientos</p>
+              <p className="text-[13px] text-gray-400">Sin reconocimientos en {formatMes(mes)}</p>
             </div>
           )}
           {recibidos.map(r => (
@@ -279,10 +394,10 @@ function TabMisMedallas() {
         </div>
       )}
 
-      {subtab === 'enviados' && (
+      {!loading && subtab === 'enviados' && (
         <div className="space-y-3">
           {!enviados.length && (
-            <p className="text-center text-[13px] text-gray-400 py-12">No enviaste reconocimientos este mes</p>
+            <p className="text-center text-[13px] text-gray-400 py-12">Sin reconocimientos enviados en {formatMes(mes)}</p>
           )}
           {enviados.map(r => (
             <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
@@ -337,15 +452,12 @@ function TabReconocer({ onEnviado }: { onEnviado: () => void }) {
 
   useEffect(() => { cargar() }, [cargar])
 
-  const filtrados = disponibles.filter(u =>
-    !u.bloqueado && u.nombre.toLowerCase().includes(busqueda.toLowerCase())
-  )
+  const filtrados = disponibles.filter(u => !u.bloqueado && u.nombre.toLowerCase().includes(busqueda.toLowerCase()))
   const bloqueadosCount = disponibles.filter(u => u.bloqueado).length
 
   async function enviar() {
     if (!receptor || !pilar || mensaje.trim().length < 50) return
-    setEnviando(true)
-    setError('')
+    setEnviando(true); setError('')
     try {
       const res = await fetch('/api/reconocimientos', {
         method: 'POST',
@@ -396,30 +508,20 @@ function TabReconocer({ onEnviado }: { onEnviado: () => void }) {
         </div>
       )}
 
-      {/* Paso 1: Persona */}
+      {/* Paso 1 */}
       <div>
-        <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-2 block">
-          1. ¿A quién reconocés?
-        </label>
-
+        <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-2 block">1. ¿A quién reconocés?</label>
         {receptor ? (
           <div className="flex items-center gap-2.5 p-3 rounded-xl border border-[var(--primary)] bg-[var(--primary-light)]">
             <Avatar nombre={receptor.nombre} foto={receptor.foto_perfil} size={34} />
             <p className="text-[13px] font-semibold text-[var(--primary)] flex-1">{receptor.nombre}</p>
-            <button onClick={() => setReceptor(null)} className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer">
-              <IconX size={15} />
-            </button>
+            <button onClick={() => setReceptor(null)} className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer"><IconX size={15} /></button>
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
             <div className="p-3 border-b border-gray-100">
-              <input
-                type="text"
-                placeholder="Buscar compañero…"
-                value={busqueda}
-                onChange={e => setBusqueda(e.target.value)}
-                className="w-full text-[13px] outline-none placeholder:text-gray-300"
-              />
+              <input type="text" placeholder="Buscar compañero…" value={busqueda} onChange={e => setBusqueda(e.target.value)}
+                className="w-full text-[13px] outline-none placeholder:text-gray-300" />
             </div>
             <div className="max-h-44 overflow-y-auto divide-y divide-gray-50">
               {filtrados.map(u => (
@@ -429,9 +531,7 @@ function TabReconocer({ onEnviado }: { onEnviado: () => void }) {
                   <span className="text-[13px] font-medium text-[var(--text)]">{u.nombre}</span>
                 </button>
               ))}
-              {!filtrados.length && (
-                <p className="text-[12px] text-gray-400 text-center py-4">{busqueda ? 'Sin resultados' : 'Sin compañeros disponibles'}</p>
-              )}
+              {!filtrados.length && <p className="text-[12px] text-gray-400 text-center py-4">{busqueda ? 'Sin resultados' : 'Sin compañeros disponibles'}</p>}
             </div>
             {bloqueadosCount > 0 && (
               <p className="text-[11px] text-gray-400 px-3 py-2 border-t border-gray-50">
@@ -442,11 +542,9 @@ function TabReconocer({ onEnviado }: { onEnviado: () => void }) {
         )}
       </div>
 
-      {/* Paso 2: Pilar */}
+      {/* Paso 2 */}
       <div>
-        <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-2 block">
-          2. ¿En qué pilar?
-        </label>
+        <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-2 block">2. ¿En qué pilar?</label>
         <div className="space-y-2">
           {PILARES.map(p => (
             <button key={p.key} onClick={() => setPilar(pilar === p.key ? '' : p.key)}
@@ -466,29 +564,21 @@ function TabReconocer({ onEnviado }: { onEnviado: () => void }) {
         </div>
       </div>
 
-      {/* Paso 3: Mensaje */}
+      {/* Paso 3 */}
       <div>
         <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-2 block">
           3. Tu mensaje <span className="font-normal normal-case">(mínimo 50 caracteres)</span>
         </label>
-        <textarea
-          value={mensaje}
-          onChange={e => setMensaje(e.target.value)}
-          rows={4}
+        <textarea value={mensaje} onChange={e => setMensaje(e.target.value)} rows={4}
           placeholder="Contá concretamente qué hizo esta persona y cómo impactó en vos o el equipo…"
-          className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-[13px] resize-none outline-none focus:border-[var(--primary)] transition-colors"
-        />
-        <p className={`text-[11px] mt-1 ${mensaje.length >= 50 ? 'text-green-600' : 'text-gray-400'}`}>
-          {mensaje.length} / 50 mínimo
-        </p>
+          className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-[13px] resize-none outline-none focus:border-[var(--primary)] transition-colors" />
+        <p className={`text-[11px] mt-1 ${mensaje.length >= 50 ? 'text-green-600' : 'text-gray-400'}`}>{mensaje.length} / 50 mínimo</p>
       </div>
 
-      {/* Paso 4: Anónimo */}
+      {/* Paso 4 */}
       <label className="flex items-center gap-3 cursor-pointer select-none bg-white rounded-xl border border-gray-100 shadow-sm p-3">
-        <div
-          onClick={() => setAnonimo(v => !v)}
-          className={`w-10 h-5 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${anonimo ? 'bg-[var(--primary)]' : 'bg-gray-200'}`}
-        >
+        <div onClick={() => setAnonimo(v => !v)}
+          className={`w-10 h-5 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${anonimo ? 'bg-[var(--primary)]' : 'bg-gray-200'}`}>
           <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${anonimo ? 'translate-x-5' : 'translate-x-0.5'}`} />
         </div>
         <div>
@@ -497,15 +587,10 @@ function TabReconocer({ onEnviado }: { onEnviado: () => void }) {
         </div>
       </label>
 
-      {error && (
-        <p className="text-[13px] text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{error}</p>
-      )}
+      {error && <p className="text-[13px] text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{error}</p>}
 
-      <button
-        onClick={enviar}
-        disabled={!receptor || !pilar || mensaje.trim().length < 50 || cuotaRestante === 0 || enviando}
-        className="w-full py-3 bg-[image:var(--gradient)] text-white font-semibold rounded-xl text-[14px] disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-      >
+      <button onClick={enviar} disabled={!receptor || !pilar || mensaje.trim().length < 50 || cuotaRestante === 0 || enviando}
+        className="w-full py-3 bg-[image:var(--gradient)] text-white font-semibold rounded-xl text-[14px] disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed">
         {enviando ? 'Enviando…' : 'Enviar reconocimiento'}
       </button>
     </div>
@@ -518,16 +603,17 @@ function TabModerar() {
   const [loading, setLoading] = useState(true)
   const [moderando, setModerando] = useState<string | null>(null)
   const [subtab, setSubtab] = useState<'pendientes' | 'ranking'>('pendientes')
+  const [mes, setMes] = useState(getMesCiclo())
 
-  const cargar = useCallback(() => {
+  const cargar = useCallback((m: string) => {
     setLoading(true)
-    fetch('/api/reconocimientos/admin')
+    fetch(`/api/reconocimientos/admin?mes=${m}`)
       .then(r => r.json())
       .then(d => { if (d.pendientes) setData(d) })
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { cargar() }, [cargar])
+  useEffect(() => { cargar(mes) }, [mes, cargar])
 
   async function moderar(id: string, accion: 'aprobado' | 'oculto') {
     setModerando(id)
@@ -537,17 +623,15 @@ function TabModerar() {
       body: JSON.stringify({ accion }),
     })
     setModerando(null)
-    cargar()
+    cargar(mes)
   }
-
-  if (loading) return <Spinner />
 
   const pendientesCount = data?.pendientes.length ?? 0
 
   return (
     <div>
       <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-4">
-        {([['pendientes', `Pendientes (${pendientesCount})`], ['ranking', 'Ranking del mes']] as const).map(([key, label]) => (
+        {([['pendientes', `Pendientes (${pendientesCount})`], ['ranking', 'Ranking']] as const).map(([key, label]) => (
           <button key={key} onClick={() => setSubtab(key)}
             className={`flex-1 py-2 text-[13px] font-medium rounded-[10px] cursor-pointer transition-all ${subtab === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
             {label}
@@ -555,7 +639,11 @@ function TabModerar() {
         ))}
       </div>
 
-      {subtab === 'pendientes' && (
+      {subtab === 'ranking' && <NavMes mes={mes} onChange={m => { setMes(m); setData(null) }} />}
+
+      {loading && <Spinner />}
+
+      {!loading && subtab === 'pendientes' && (
         <div className="space-y-3">
           {!pendientesCount && (
             <div className="text-center py-14">
@@ -576,24 +664,18 @@ function TabModerar() {
                       <span className="text-[12px] font-semibold text-[var(--text)]">{r.receptor.nombre}</span>
                       {r.anonimo && <span className="text-[10px] bg-gray-100 text-gray-400 border border-gray-200 px-1.5 py-0.5 rounded-full">Anónimo</span>}
                     </div>
-                    <p className="text-[10px] text-gray-400 mt-0.5">{timeAgo(r.fecha_creacion)} · Ciclo {r.mes_ciclo}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">{timeAgo(r.fecha_creacion)} · {r.mes_ciclo}</p>
                   </div>
                   <PilarBadge pilar={r.categoria_pilar} />
                 </div>
                 <p className="text-[13px] text-[var(--text-sub)] leading-relaxed mb-3">{r.mensaje}</p>
                 <div className="flex gap-2 border-t border-gray-100 pt-3">
-                  <button
-                    onClick={() => moderar(r.id, 'oculto')}
-                    disabled={moderando === r.id}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-gray-200 text-gray-500 rounded-xl text-[13px] font-medium cursor-pointer disabled:opacity-50 hover:bg-gray-50 transition-colors"
-                  >
+                  <button onClick={() => moderar(r.id, 'oculto')} disabled={moderando === r.id}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-gray-200 text-gray-500 rounded-xl text-[13px] font-medium cursor-pointer disabled:opacity-50 hover:bg-gray-50 transition-colors">
                     <IconX size={14} /> Ocultar
                   </button>
-                  <button
-                    onClick={() => moderar(r.id, 'aprobado')}
-                    disabled={moderando === r.id}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-green-600 text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-50 hover:bg-green-700 transition-colors"
-                  >
+                  <button onClick={() => moderar(r.id, 'aprobado')} disabled={moderando === r.id}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-green-600 text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-50 hover:bg-green-700 transition-colors">
                     <IconCheck size={14} /> Aprobar
                   </button>
                 </div>
@@ -603,23 +685,21 @@ function TabModerar() {
         </div>
       )}
 
-      {subtab === 'ranking' && (
+      {!loading && subtab === 'ranking' && (
         <div className="space-y-2">
           {!data?.ranking.length && (
-            <p className="text-center text-[13px] text-gray-400 py-12">No hay reconocimientos aprobados este mes</p>
+            <p className="text-center text-[13px] text-gray-400 py-12">No hay reconocimientos aprobados en {formatMes(mes)}</p>
           )}
           {data?.ranking.map((item, i) => (
             <div key={item.id} className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3 shadow-sm">
-              <span className="text-[15px] font-bold text-gray-300 w-5 text-center leading-none">
-                {i + 1}
-              </span>
+              <span className="text-[14px] font-bold text-gray-300 w-5 text-center">{i + 1}</span>
               <Avatar nombre={item.nombre} foto={item.foto_perfil} size={34} />
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-semibold truncate">{item.nombre}</p>
                 <div className="flex gap-2 mt-0.5">
-                  {item.salvavidas > 0  && <span className="text-[10px] text-blue-500">🛟 {item.salvavidas}</span>}
+                  {item.salvavidas  > 0 && <span className="text-[10px] text-blue-500">🛟 {item.salvavidas}</span>}
                   {item.buena_vibra > 0 && <span className="text-[10px] text-amber-500">☀️ {item.buena_vibra}</span>}
-                  {item.iniciativa > 0  && <span className="text-[10px] text-violet-500">⚡ {item.iniciativa}</span>}
+                  {item.iniciativa  > 0 && <span className="text-[10px] text-violet-500">⚡ {item.iniciativa}</span>}
                 </div>
               </div>
               <span className="text-[17px] font-bold text-[var(--primary)]">{item.total}</span>
@@ -643,12 +723,11 @@ export default function ReconocimientosClient({ session }: { session: SessionUse
     { key: 'mural',     label: 'Mural' },
     { key: 'medallas',  label: 'Mis medallas' },
     { key: 'reconocer', label: 'Reconocer' },
-    ...(isAdmin ? [{ key: 'moderar' as Tab, label: `Moderar` }] : []),
+    ...(isAdmin ? [{ key: 'moderar' as Tab, label: 'Moderar' }] : []),
   ]
 
   return (
     <div className="py-4 fade-in">
-      {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
           <IconTrophy size={18} className="text-white" />
@@ -659,7 +738,6 @@ export default function ReconocimientosClient({ session }: { session: SessionUse
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-5">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
