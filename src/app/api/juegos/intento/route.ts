@@ -4,11 +4,20 @@ import { getSession } from '@/lib/auth'
 
 type Estado = 'correct' | 'present' | 'absent'
 
+function sinTildes(s: string): string {
+  return s
+    .replace(/[ÁÀÂÄ]/g, 'A')
+    .replace(/[ÉÈÊË]/g, 'E')
+    .replace(/[ÍÌÎÏ]/g, 'I')
+    .replace(/[ÓÒÔÖ]/g, 'O')
+    .replace(/[ÚÙÛÜ]/g, 'U')
+}
+
 function calcularResultado(guess: string, target: string): Estado[] {
   const n = target.length
   const result: Estado[] = Array(n).fill('absent')
-  const t = target.split('')
-  const g = guess.split('')
+  const t = sinTildes(target).split('')
+  const g = sinTildes(guess).split('')
   for (let i = 0; i < n; i++) {
     if (g[i] === t[i]) { result[i] = 'correct'; t[i] = '#'; g[i] = '*' }
   }
@@ -29,7 +38,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Palabra inválida' }, { status: 400 })
 
   const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-  const guess = palabra.toUpperCase().trim()
+  const guess = sinTildes(palabra.toUpperCase().trim())
 
   if (!/^[A-ZÑ]+$/.test(guess))
     return NextResponse.json({ error: 'Solo letras A-Z y Ñ' }, { status: 400 })
