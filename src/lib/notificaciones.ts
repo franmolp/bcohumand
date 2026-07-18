@@ -22,6 +22,8 @@ export type TipoNotif =
   | 'reparacion_nueva'
   | 'reparacion_actualizada'
   | 'fichadas'
+  | 'reconocimiento_pendiente'
+  | 'reconocimiento_aprobado'
 
 export async function sendPushToUsers(usuarioIds: string[], titulo: string, mensaje: string) {
   const publicKey  = process.env.VAPID_PUBLIC_KEY
