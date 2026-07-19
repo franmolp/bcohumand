@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { SessionUser } from '@/types'
-import { Spinner, Toast } from '@/components/ui'
+import { Spinner, Toast, Confirm } from '@/components/ui'
 import { IconPlus, IconX, IconCheck, IconAlertCircle, IconHeart, IconHeartFilled, IconMessageCircle, IconWall, IconEdit } from '@/components/ui/Icons'
 import { createPortal } from 'react-dom'
 
@@ -349,6 +349,8 @@ function PostCard({
   const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState(post.contenido ?? '')
   const [savingEdit, setSavingEdit] = useState(false)
+  const [confirmDeletePost, setConfirmDeletePost] = useState(false)
+  const [deletingPost, setDeletingPost] = useState(false)
 
   async function toggleComments() {
     if (!showComments && comentarios.length === 0) {
@@ -388,9 +390,10 @@ function PostCard({
   }
 
   async function deletePost() {
-    if (!confirm('¿Eliminar esta publicación?')) return
+    setDeletingPost(true)
     const res = await fetch(`/api/muro/${post.id}`, { method: 'DELETE' })
-    if (res.ok) { removePost(post.id); setToast('Publicación eliminada') }
+    setDeletingPost(false)
+    if (res.ok) { setConfirmDeletePost(false); removePost(post.id); setToast('Publicación eliminada') }
   }
 
   async function saveEdit() {
@@ -461,7 +464,7 @@ function PostCard({
               </button>
             )}
             {canDelete && (
-              <button onClick={deletePost} className="text-gray-300 hover:text-red-400 cursor-pointer p-1 rounded-lg hover:bg-red-50 transition-colors" title="Eliminar">
+              <button onClick={() => setConfirmDeletePost(true)} className="text-gray-400 hover:text-red-400 cursor-pointer p-1 rounded-lg hover:bg-red-50 transition-colors" title="Eliminar">
                 <IconX size={14} />
               </button>
             )}
@@ -541,6 +544,7 @@ function PostCard({
                     postId={post.id}
                     session={session}
                     isAdmin={isAdmin}
+                    setToast={setToast}
                     onReply={() => { setReplyTo({ id: c.id, nombre: c.autor.nombre }); setTimeout(() => commentInputRef.current?.focus(), 50) }}
                     onDelete={(cid, parentId) => {
                       if (parentId) {
@@ -580,6 +584,16 @@ function PostCard({
       </div>
 
       {likesAnchor && <LikesPopover postId={post.id} anchor={likesAnchor} onClose={() => setLikesAnchor(null)} />}
+      <Confirm
+        open={confirmDeletePost}
+        onClose={() => setConfirmDeletePost(false)}
+        onConfirm={deletePost}
+        title="Eliminar publicación"
+        message="¿Seguro que querés eliminar esta publicación? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        danger
+        loading={deletingPost}
+      />
     </>
   )
 }
@@ -587,7 +601,7 @@ function PostCard({
 // ─── Comment Item ─────────────────────────────────────────────────────────────
 
 function CommentItem({
-  comment, postId, session, isAdmin, onReply, onDelete,
+  comment, postId, session, isAdmin, onReply, onDelete, setToast,
 }: {
   comment: Comentario
   postId: number
@@ -595,26 +609,37 @@ function CommentItem({
   isAdmin: boolean
   onReply: () => void
   onDelete: (cid: number, parentId?: number) => void
+  setToast: (m: string) => void
 }) {
-  async function deleteComment(cid: number, parentId?: number) {
-    const res = await fetch(`/api/muro/${postId}/comentarios/${cid}`, { method: 'DELETE' })
-    if (res.ok) onDelete(cid, parentId)
+  const [confirmDelete, setConfirmDelete] = useState<{ cid: number; parentId?: number } | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  async function doDelete() {
+    if (!confirmDelete) return
+    setDeleting(true)
+    const res = await fetch(`/api/muro/${postId}/comentarios/${confirmDelete.cid}`, { method: 'DELETE' })
+    setDeleting(false)
+    if (res.ok) {
+      setConfirmDelete(null)
+      onDelete(confirmDelete.cid, confirmDelete.parentId)
+      setToast('Comentario eliminado')
+    }
   }
 
-  const canDelete = (cid: number, authorId: string) => isAdmin || authorId === session.id
+  const canDelete = (authorId: string) => isAdmin || authorId === session.id
 
   return (
     <div className="space-y-2">
-      <div className="flex gap-2 items-start group">
+      <div className="flex gap-2 items-start">
         <Avatar nombre={comment.autor.nombre} fotoUrl={comment.autor.foto_perfil} size={26} />
         <div className="flex-1 bg-gray-50 rounded-xl px-3 py-2">
           <div className="flex items-baseline gap-2">
             <span className="text-[12px] font-semibold">{comment.autor.nombre}</span>
             <span className="text-[10px] text-gray-400">{timeAgo(comment.created_at)}</span>
-            {canDelete(comment.id, comment.autor.id) && (
+            {canDelete(comment.autor.id) && (
               <button
-                onClick={() => deleteComment(comment.id)}
-                className="ml-auto opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 cursor-pointer transition-all"
+                onClick={() => setConfirmDelete({ cid: comment.id })}
+                className="ml-auto text-gray-400 hover:text-red-400 cursor-pointer transition-colors"
                 title="Eliminar comentario"
               >
                 <IconX size={12} />
@@ -630,16 +655,16 @@ function CommentItem({
       {comment.respuestas?.length > 0 && (
         <div className="ml-9 space-y-2">
           {comment.respuestas.map(r => (
-            <div key={r.id} className="flex gap-2 items-start group">
+            <div key={r.id} className="flex gap-2 items-start">
               <Avatar nombre={r.autor.nombre} fotoUrl={r.autor.foto_perfil} size={22} />
               <div className="flex-1 bg-gray-50 rounded-xl px-3 py-2">
                 <div className="flex items-baseline gap-2">
                   <span className="text-[12px] font-semibold">{r.autor.nombre}</span>
                   <span className="text-[10px] text-gray-400">{timeAgo(r.created_at)}</span>
-                  {canDelete(r.id, r.autor.id) && (
+                  {canDelete(r.autor.id) && (
                     <button
-                      onClick={() => deleteComment(r.id, comment.id)}
-                      className="ml-auto opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 cursor-pointer transition-all"
+                      onClick={() => setConfirmDelete({ cid: r.id, parentId: comment.id })}
+                      className="ml-auto text-gray-400 hover:text-red-400 cursor-pointer transition-colors"
                       title="Eliminar respuesta"
                     >
                       <IconX size={12} />
@@ -652,6 +677,16 @@ function CommentItem({
           ))}
         </div>
       )}
+      <Confirm
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={doDelete}
+        title="Eliminar comentario"
+        message="¿Seguro que querés eliminar este comentario?"
+        confirmLabel="Eliminar"
+        danger
+        loading={deleting}
+      />
     </div>
   )
 }
