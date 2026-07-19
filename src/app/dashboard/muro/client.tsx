@@ -109,11 +109,31 @@ function MentionTextarea({
   const [selIdx, setSelIdx] = useState(0)
   const fallback = useRef<HTMLTextAreaElement>(null)
   const ref = textareaRef ?? fallback
+  const overlayRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef(0)
 
   const filtered = query !== null
     ? users.filter(u => u.nombre.toLowerCase().includes(query.toLowerCase())).slice(0, 6)
     : []
+
+  // Copia métricas tipográficas del textarea al overlay para alinear el texto exactamente
+  useEffect(() => {
+    const ta = ref.current
+    const ov = overlayRef.current
+    if (!ta || !ov) return
+    const cs = window.getComputedStyle(ta)
+    Object.assign(ov.style, {
+      paddingTop: cs.paddingTop, paddingRight: cs.paddingRight,
+      paddingBottom: cs.paddingBottom, paddingLeft: cs.paddingLeft,
+      fontSize: cs.fontSize, fontFamily: cs.fontFamily,
+      lineHeight: cs.lineHeight, letterSpacing: cs.letterSpacing,
+      borderTopWidth: cs.borderTopWidth, borderRightWidth: cs.borderRightWidth,
+      borderBottomWidth: cs.borderBottomWidth, borderLeftWidth: cs.borderLeftWidth,
+    })
+    const syncScroll = () => { ov.scrollTop = ta.scrollTop }
+    ta.addEventListener('scroll', syncScroll)
+    return () => ta.removeEventListener('scroll', syncScroll)
+  }, [ref])
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const v = e.target.value
@@ -151,6 +171,7 @@ function MentionTextarea({
 
   return (
     <div className="relative">
+      {/* Textarea real — texto transparente para que el overlay se vea encima */}
       <textarea
         ref={ref}
         value={value}
@@ -159,9 +180,33 @@ function MentionTextarea({
         placeholder={placeholder}
         rows={rows}
         className={className}
+        style={value ? { color: 'transparent', caretColor: 'var(--text)' } : {}}
       />
+      {/* Overlay con el texto formateado (menciones en negrita) */}
+      {value && (
+        <div
+          ref={overlayRef}
+          aria-hidden
+          style={{
+            position: 'absolute', inset: 0, zIndex: 1,
+            pointerEvents: 'none',
+            background: 'transparent',
+            borderStyle: 'solid', borderColor: 'transparent',
+            boxSizing: 'border-box',
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            overflow: 'hidden', color: 'var(--text)',
+          }}
+        >
+          {renderMentions(value, users)}
+        </div>
+      )}
+      {/* Dropdown de menciones */}
       {query !== null && filtered.length > 0 && (
-        <div className="absolute top-full left-0 mt-1 z-30 bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden w-full max-w-xs">
+        <div
+          className="absolute top-full left-0 mt-1 z-30 bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-xs"
+          style={{ overflowY: 'auto', maxHeight: 176, overscrollBehavior: 'contain' } as React.CSSProperties}
+          onTouchMove={e => e.stopPropagation()}
+        >
           {filtered.map((u, i) => (
             <button
               key={u.id}
@@ -169,14 +214,13 @@ function MentionTextarea({
               onMouseDown={e => { e.preventDefault(); pick(u) }}
               onTouchStart={e => { touchStartY.current = e.touches[0].clientY }}
               onTouchEnd={e => {
-                if (Math.abs(e.changedTouches[0].clientY - touchStartY.current) < 8) {
-                  e.preventDefault()
-                  pick(u)
+                if (Math.abs(e.changedTouches[0].clientY - touchStartY.current) < 10) {
+                  e.preventDefault(); pick(u)
                 }
               }}
-              className={`w-full flex items-center gap-2 px-3 py-2 text-[13px] text-left cursor-pointer transition-colors ${i === selIdx ? 'bg-[var(--primary-light)] text-[var(--primary)]' : 'hover:bg-gray-50'}`}
+              className={`w-full flex items-center gap-2 px-3 py-2.5 text-[13px] text-left cursor-pointer transition-colors ${i === selIdx ? 'bg-[var(--primary-light)] text-[var(--primary)]' : 'hover:bg-gray-50'}`}
             >
-              <Avatar nombre={u.nombre} fotoUrl={u.foto_perfil} size={22} />
+              <Avatar nombre={u.nombre} fotoUrl={u.foto_perfil} size={24} />
               <span>{u.nombre}</span>
             </button>
           ))}
