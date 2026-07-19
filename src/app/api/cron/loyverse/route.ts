@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { crearNotificaciones, getAdminIds } from '@/lib/notificaciones'
 
 const TOKEN  = process.env.LOYVERSE_TOKEN
 const SECRET = process.env.CRON_SECRET
@@ -158,6 +159,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ message: 'Sin datos para el período', from, to })
     }
     const result = await upsertData(rows, pagoRows, from, to)
+
+    const adminIds = await getAdminIds()
+    if (adminIds.length) {
+      const errTxt = result.errors ? ` · ${result.errors} errores` : ''
+      await crearNotificaciones(adminIds, {
+        titulo: 'Loyverse: importación completada',
+        mensaje: `${result.ok} tickets · ${result.pagosOk} pagos. Período: ${from} → ${to}.${errTxt}`,
+        tipo: 'aviso',
+      }).catch(() => {})
+    }
+
     return NextResponse.json({ ...result, from, to })
   } catch (e: any) {
     console.error('[cron/loyverse]', e.message)

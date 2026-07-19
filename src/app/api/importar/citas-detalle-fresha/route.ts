@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { crearNotificaciones, getAdminIds } from '@/lib/notificaciones'
 
 interface Row {
   nombre: string
@@ -71,6 +72,18 @@ export async function POST(req: NextRequest) {
   for (let i = 0; i < records.length; i += BATCH) {
     const { error } = await supabaseAdmin.from('fresha_citas_detalle').insert(records.slice(i, i + BATCH))
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  const adminIds = await getAdminIds()
+  if (adminIds.length) {
+    const noEnc = noEncontrados.size ? ` · ${noEncontrados.size} sin usuario` : ''
+    const fechas = [...dates].sort()
+    const rango = fechas.length > 1 ? `${fechas[0]} → ${fechas[fechas.length - 1]}` : (fechas[0] ?? '')
+    await crearNotificaciones(adminIds, {
+      titulo: 'Fresha: importación completada',
+      mensaje: `${records.length} citas importadas. Período: ${rango}.${noEnc}`,
+      tipo: 'aviso',
+    }).catch(() => {})
   }
 
   return NextResponse.json({ ok: records.length, noEncontrados: [...noEncontrados], total: rows.length })
