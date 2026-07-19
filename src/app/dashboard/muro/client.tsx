@@ -122,13 +122,24 @@ function MentionTextarea({
       }).slice(0, 6)
     : []
 
-  // Sincroniza el scroll del overlay con el textarea
+  // Posiciona el overlay exactamente sobre el área de texto del textarea
   useEffect(() => {
     const ta = ref.current; const ov = overlayRef.current
     if (!ta || !ov) return
-    const sync = () => { ov.scrollTop = ta.scrollTop }
-    ta.addEventListener('scroll', sync)
-    return () => ta.removeEventListener('scroll', sync)
+    const position = () => {
+      const s = window.getComputedStyle(ta)
+      ov.style.top    = `calc(${s.borderTopWidth}    + ${s.paddingTop})`
+      ov.style.left   = `calc(${s.borderLeftWidth}   + ${s.paddingLeft})`
+      ov.style.right  = `calc(${s.borderRightWidth}  + ${s.paddingRight})`
+      ov.style.bottom = `calc(${s.borderBottomWidth} + ${s.paddingBottom})`
+      ov.style.fontSize   = s.fontSize
+      ov.style.fontFamily = s.fontFamily
+      ov.style.lineHeight = s.lineHeight
+    }
+    position()
+    const syncScroll = () => { ov.scrollTop = ta.scrollTop }
+    ta.addEventListener('scroll', syncScroll)
+    return () => ta.removeEventListener('scroll', syncScroll)
   }, [ref])
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
@@ -192,21 +203,21 @@ function MentionTextarea({
         placeholder={placeholder}
         rows={rows}
         className={className}
-        style={value ? { color: 'transparent', caretColor: 'var(--text)', WebkitTextFillColor: 'transparent' } as React.CSSProperties : {}}
+        style={{
+          ...(value ? { color: 'transparent', caretColor: 'var(--text)', WebkitTextFillColor: 'transparent' } : {}),
+          WebkitAppearance: 'none', appearance: 'none',
+        } as React.CSSProperties}
       />
-      {/* Overlay con el mismo className que el textarea: alineación exacta sin getComputedStyle */}
+      {/* Overlay posicionado exactamente sobre el área de texto via getComputedStyle */}
       {value && (
         <div
           ref={overlayRef}
           aria-hidden
-          className={className}
           style={{
-            position: 'absolute', inset: 0, zIndex: 1,
+            position: 'absolute', zIndex: 1,
             pointerEvents: 'none', background: 'transparent',
-            borderColor: 'transparent', outline: 'none',
             color: 'var(--text)', whiteSpace: 'pre-wrap',
             wordBreak: 'break-word', overflow: 'hidden',
-            resize: 'none',
           }}
         >
           {renderMentions(value, users)}
