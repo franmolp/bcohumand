@@ -96,7 +96,7 @@ function renderMentions(text: string, users: MuroUser[]): React.ReactNode {
 }
 
 function MentionTextarea({
-  value, onChange, users, placeholder, rows, className, onKeyDown, textareaRef,
+  value, onChange, users, placeholder, rows, className, onKeyDown, textareaRef, onMentionPicked,
 }: {
   value: string
   onChange: (v: string) => void
@@ -106,6 +106,7 @@ function MentionTextarea({
   className?: string
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>
+  onMentionPicked?: (userId: string) => void
 }) {
   const [query, setQuery] = useState<string | null>(null)
   const [mentionAt, setMentionAt] = useState(-1)
@@ -137,6 +138,7 @@ function MentionTextarea({
     const after = value.slice(cur)
     const next = `${before}${user.nombre} ${after}`
     onChange(next)
+    onMentionPicked?.(user.id)
     setQuery(null); setMentionAt(-1)
     setTimeout(() => {
       const pos = before.length + user.nombre.length + 1
@@ -389,6 +391,15 @@ function PostComposer({
   const [opciones, setOpciones] = useState(['', ''])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [mentionedIds, setMentionedIds] = useState<string[]>([])
+
+  function handleTextoChange(v: string) {
+    setTexto(v)
+    setMentionedIds(prev => prev.filter(id => {
+      const u = muralUsers.find(u => u.id === id)
+      return u ? v.includes(u.nombre) : false
+    }))
+  }
 
   async function submit() {
     setError('')
@@ -399,11 +410,11 @@ function PostComposer({
     const res = await fetch('/api/muro', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tipo, contenido: texto, opciones: tipo === 'encuesta' ? opciones : undefined }),
+      body: JSON.stringify({ tipo, contenido: texto, opciones: tipo === 'encuesta' ? opciones : undefined, mentioned_ids: mentionedIds }),
     })
     setSaving(false)
     if (res.ok) {
-      setTexto(''); setOpciones(['', '']); setTipo('post'); setError('')
+      setTexto(''); setOpciones(['', '']); setTipo('post'); setError(''); setMentionedIds([])
       onCreated()
       setToast('Publicado')
     } else {
@@ -429,7 +440,8 @@ function PostComposer({
         <div className="flex-1 min-w-0">
           <MentionTextarea
             value={texto}
-            onChange={setTexto}
+            onChange={handleTextoChange}
+            onMentionPicked={id => setMentionedIds(prev => [...prev.filter(x => x !== id), id])}
             users={muralUsers}
             placeholder={tipo === 'post' ? '¿Qué querés compartir?' : tipo === 'encuesta' ? 'Pregunta de la encuesta...' : 'Pregunta abierta...'}
             rows={tipo === 'post' ? 2 : 3}
@@ -490,6 +502,7 @@ function PostCard({
   const [comentarios, setComentarios] = useState<Comentario[]>([])
   const [loadingComments, setLoadingComments] = useState(false)
   const [commentText, setCommentText] = useState('')
+  const [commentMentionedIds, setCommentMentionedIds] = useState<string[]>([])
   const [replyTo, setReplyTo] = useState<{ id: number; nombre: string } | null>(null)
   const [submittingComment, setSubmittingComment] = useState(false)
   const [likesAnchor, setLikesAnchor] = useState<HTMLElement | null>(null)
@@ -517,13 +530,21 @@ function PostCard({
     await fetch(`/api/muro/${post.id}/like`, { method: 'POST' })
   }
 
+  function handleCommentTextChange(v: string) {
+    setCommentText(v)
+    setCommentMentionedIds(prev => prev.filter(id => {
+      const u = muralUsers.find(u => u.id === id)
+      return u ? v.includes(u.nombre) : false
+    }))
+  }
+
   async function submitComment() {
     if (!commentText.trim()) return
     setSubmittingComment(true)
     const res = await fetch(`/api/muro/${post.id}/comentarios`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contenido: commentText, parent_id: replyTo?.id ?? null }),
+      body: JSON.stringify({ contenido: commentText, parent_id: replyTo?.id ?? null, mentioned_ids: commentMentionedIds }),
     })
     setSubmittingComment(false)
     if (res.ok) {
@@ -534,7 +555,7 @@ function PostCard({
         setComentarios(prev => [...prev, { ...nuevo, respuestas: [] }])
       }
       updatePost(post.id, { comentarios_count: post.comentarios_count + 1 })
-      setCommentText(''); setReplyTo(null)
+      setCommentText(''); setCommentMentionedIds([]); setReplyTo(null)
     }
   }
 
@@ -718,7 +739,8 @@ function PostCard({
                     <div className="flex gap-2">
                       <MentionTextarea
                         value={commentText}
-                        onChange={setCommentText}
+                        onChange={handleCommentTextChange}
+                        onMentionPicked={id => setCommentMentionedIds(prev => [...prev.filter(x => x !== id), id])}
                         users={muralUsers}
                         textareaRef={commentInputRef}
                         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment() } }}
