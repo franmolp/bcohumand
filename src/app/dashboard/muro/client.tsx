@@ -160,12 +160,12 @@ function MentionTextarea({
         className={className}
       />
       {query !== null && filtered.length > 0 && (
-        <div className="absolute bottom-full left-0 mb-1 z-30 bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden w-full max-w-xs">
+        <div className="absolute top-full left-0 mt-1 z-30 bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden w-full max-w-xs">
           {filtered.map((u, i) => (
             <button
               key={u.id}
               type="button"
-              onMouseDown={e => { e.preventDefault(); pick(u) }}
+              onPointerDown={e => { e.preventDefault(); pick(u) }}
               className={`w-full flex items-center gap-2 px-3 py-2 text-[13px] text-left cursor-pointer transition-colors ${i === selIdx ? 'bg-[var(--primary-light)] text-[var(--primary)]' : 'hover:bg-gray-50'}`}
             >
               <Avatar nombre={u.nombre} fotoUrl={u.foto_perfil} size={22} />
