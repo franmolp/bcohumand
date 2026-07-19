@@ -80,12 +80,15 @@ function renderMentions(text: string, users: MuroUser[]): React.ReactNode {
   if (!users.length) return text
   const sorted = [...users].sort((a, b) => b.nombre.length - a.nombre.length)
   const escaped = sorted.map(u => u.nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  const pattern = new RegExp(`@(${escaped.join('|')})`, 'g')
+  const pattern = new RegExp(`(${escaped.join('|')})`, 'g')
   const parts: React.ReactNode[] = []
   let last = 0, key = 0, m: RegExpExecArray | null
   while ((m = pattern.exec(text)) !== null) {
+    const charBefore = m.index > 0 ? text[m.index - 1] : ' '
+    const charAfter = text[m.index + m[0].length]
+    if (/[a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]/.test(charBefore) || (charAfter !== undefined && /[a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]/.test(charAfter))) continue
     if (m.index > last) parts.push(text.slice(last, m.index))
-    parts.push(<strong key={key++} className="font-semibold text-[var(--primary)]">@{m[1]}</strong>)
+    parts.push(<strong key={key++} className="font-semibold text-[var(--primary)]">{m[1]}</strong>)
     last = m.index + m[0].length
   }
   if (last < text.length) parts.push(text.slice(last))
@@ -109,31 +112,14 @@ function MentionTextarea({
   const [selIdx, setSelIdx] = useState(0)
   const fallback = useRef<HTMLTextAreaElement>(null)
   const ref = textareaRef ?? fallback
-  const overlayRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef(0)
 
   const filtered = query !== null
-    ? users.filter(u => u.nombre.toLowerCase().includes(query.toLowerCase())).slice(0, 6)
+    ? users.filter(u => {
+        const q = query.toLowerCase()
+        return u.nombre.toLowerCase().split(' ').some(w => w.startsWith(q))
+      }).slice(0, 6)
     : []
-
-  // Copia métricas tipográficas del textarea al overlay para alinear el texto exactamente
-  useEffect(() => {
-    const ta = ref.current
-    const ov = overlayRef.current
-    if (!ta || !ov) return
-    const cs = window.getComputedStyle(ta)
-    Object.assign(ov.style, {
-      paddingTop: cs.paddingTop, paddingRight: cs.paddingRight,
-      paddingBottom: cs.paddingBottom, paddingLeft: cs.paddingLeft,
-      fontSize: cs.fontSize, fontFamily: cs.fontFamily,
-      lineHeight: cs.lineHeight, letterSpacing: cs.letterSpacing,
-      borderTopWidth: cs.borderTopWidth, borderRightWidth: cs.borderRightWidth,
-      borderBottomWidth: cs.borderBottomWidth, borderLeftWidth: cs.borderLeftWidth,
-    })
-    const syncScroll = () => { ov.scrollTop = ta.scrollTop }
-    ta.addEventListener('scroll', syncScroll)
-    return () => ta.removeEventListener('scroll', syncScroll)
-  }, [ref])
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const v = e.target.value
@@ -149,11 +135,11 @@ function MentionTextarea({
     const cur = ref.current?.selectionStart ?? value.length
     const before = value.slice(0, mentionAt)
     const after = value.slice(cur)
-    const next = `${before}@${user.nombre} ${after}`
+    const next = `${before}${user.nombre} ${after}`
     onChange(next)
     setQuery(null); setMentionAt(-1)
     setTimeout(() => {
-      const pos = before.length + user.nombre.length + 2
+      const pos = before.length + user.nombre.length + 1
       ref.current?.focus()
       ref.current?.setSelectionRange(pos, pos)
     }, 0)
@@ -171,7 +157,6 @@ function MentionTextarea({
 
   return (
     <div className="relative">
-      {/* Textarea real — texto transparente para que el overlay se vea encima */}
       <textarea
         ref={ref}
         value={value}
@@ -180,27 +165,7 @@ function MentionTextarea({
         placeholder={placeholder}
         rows={rows}
         className={className}
-        style={value ? { color: 'transparent', caretColor: 'var(--text)' } : {}}
       />
-      {/* Overlay con el texto formateado (menciones en negrita) */}
-      {value && (
-        <div
-          ref={overlayRef}
-          aria-hidden
-          style={{
-            position: 'absolute', inset: 0, zIndex: 1,
-            pointerEvents: 'none',
-            background: 'transparent',
-            borderStyle: 'solid', borderColor: 'transparent',
-            boxSizing: 'border-box',
-            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-            overflow: 'hidden', color: 'var(--text)',
-          }}
-        >
-          {renderMentions(value, users)}
-        </div>
-      )}
-      {/* Dropdown de menciones */}
       {query !== null && filtered.length > 0 && (
         <div
           className="absolute top-full left-0 mt-1 z-30 bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-xs"

@@ -164,11 +164,12 @@ export async function POST(request: NextRequest) {
   const mentionedIds: string[] = []
   for (const u of allUsers ?? []) {
     if (u.id === session.id) continue
-    const search = `@${normStr(u.nombre)}`
+    const search = normStr(u.nombre)
     const idx = normContent.indexOf(search)
     if (idx !== -1) {
+      const before = idx > 0 ? normContent[idx - 1] : ' '
       const after = normContent[idx + search.length]
-      if (after === undefined || !/[a-záéíóúüñ]/.test(after)) mentionedIds.push(u.id)
+      if (!/[a-záéíóúüñ]/.test(before) && (after === undefined || !/[a-záéíóúüñ]/.test(after))) mentionedIds.push(u.id)
     }
   }
   if (mentionedIds.length) {

@@ -81,11 +81,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const mentionedIds: string[] = []
   for (const u of allUsers ?? []) {
     if (u.id === session.id) continue
-    const search = `@${normStr(u.nombre)}`
+    const search = normStr(u.nombre)
     const matchIdx = normContent.indexOf(search)
     if (matchIdx !== -1) {
+      const before = matchIdx > 0 ? normContent[matchIdx - 1] : ' '
       const after = normContent[matchIdx + search.length]
-      if (after === undefined || !/[a-záéíóúüñ]/.test(after)) mentionedIds.push(u.id)
+      if (!/[a-záéíóúüñ]/.test(before) && (after === undefined || !/[a-záéíóúüñ]/.test(after))) mentionedIds.push(u.id)
     }
   }
   if (mentionedIds.length) {
