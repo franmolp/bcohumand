@@ -109,6 +109,7 @@ function MentionTextarea({
   const [selIdx, setSelIdx] = useState(0)
   const fallback = useRef<HTMLTextAreaElement>(null)
   const ref = textareaRef ?? fallback
+  const touchStartY = useRef(0)
 
   const filtered = query !== null
     ? users.filter(u => u.nombre.toLowerCase().includes(query.toLowerCase())).slice(0, 6)
@@ -165,7 +166,14 @@ function MentionTextarea({
             <button
               key={u.id}
               type="button"
-              onPointerDown={e => { e.preventDefault(); pick(u) }}
+              onMouseDown={e => { e.preventDefault(); pick(u) }}
+              onTouchStart={e => { touchStartY.current = e.touches[0].clientY }}
+              onTouchEnd={e => {
+                if (Math.abs(e.changedTouches[0].clientY - touchStartY.current) < 8) {
+                  e.preventDefault()
+                  pick(u)
+                }
+              }}
               className={`w-full flex items-center gap-2 px-3 py-2 text-[13px] text-left cursor-pointer transition-colors ${i === selIdx ? 'bg-[var(--primary-light)] text-[var(--primary)]' : 'hover:bg-gray-50'}`}
             >
               <Avatar nombre={u.nombre} fotoUrl={u.foto_perfil} size={22} />
