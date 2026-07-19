@@ -157,5 +157,28 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Notificar a usuarios mencionados con @Nombre
+  const { data: allUsers } = await supabase.from('usuarios').select('id, nombre').eq('estado_cuenta', 'activo')
+  const normStr = (s: string) => s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const normContent = normStr(contenido)
+  const mentionedIds: string[] = []
+  for (const u of allUsers ?? []) {
+    if (u.id === session.id) continue
+    const search = `@${normStr(u.nombre)}`
+    const idx = normContent.indexOf(search)
+    if (idx !== -1) {
+      const after = normContent[idx + search.length]
+      if (after === undefined || !/[a-záéíóúüñ]/.test(after)) mentionedIds.push(u.id)
+    }
+  }
+  if (mentionedIds.length) {
+    const preview = contenido.trim().length > 80 ? contenido.trim().slice(0, 80) + '…' : contenido.trim()
+    await crearNotificaciones(mentionedIds, {
+      titulo: `${session.nombre} te mencionó en el Muro Social`,
+      mensaje: preview,
+      tipo: 'mural_mencion',
+    }).catch(() => {})
+  }
+
   return NextResponse.json({ ok: true, id: post.id }, { status: 201 })
 }

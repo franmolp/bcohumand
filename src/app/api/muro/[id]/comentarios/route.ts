@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/auth'
-import { crearNotificacion } from '@/lib/notificaciones'
+import { crearNotificacion, crearNotificaciones } from '@/lib/notificaciones'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
@@ -72,6 +72,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       mensaje: `"${preview}"`,
       tipo: 'mural_respuesta',
     })
+  }
+
+  // Notificar a usuarios mencionados con @Nombre
+  const { data: allUsers } = await supabase.from('usuarios').select('id, nombre').eq('estado_cuenta', 'activo')
+  const normStr = (s: string) => s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const normContent = normStr(contenido.trim())
+  const mentionedIds: string[] = []
+  for (const u of allUsers ?? []) {
+    if (u.id === session.id) continue
+    const search = `@${normStr(u.nombre)}`
+    const matchIdx = normContent.indexOf(search)
+    if (matchIdx !== -1) {
+      const after = normContent[matchIdx + search.length]
+      if (after === undefined || !/[a-záéíóúüñ]/.test(after)) mentionedIds.push(u.id)
+    }
+  }
+  if (mentionedIds.length) {
+    const preview = contenido.trim().length > 80 ? contenido.trim().slice(0, 80) + '…' : contenido.trim()
+    await crearNotificaciones(mentionedIds, {
+      titulo: `${session.nombre} te mencionó en un comentario`,
+      mensaje: preview,
+      tipo: 'mural_mencion',
+    }).catch(() => {})
   }
 
   const { data: me } = await supabase.from('usuarios').select('foto_perfil').eq('id', session.id).single()

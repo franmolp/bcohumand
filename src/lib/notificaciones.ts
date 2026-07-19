@@ -25,6 +25,7 @@ export type TipoNotif =
   | 'reconocimiento_pendiente'
   | 'reconocimiento_aprobado'
   | 'reconocimiento_recordatorio'
+  | 'mural_mencion'
 
 export async function sendPushToUsers(usuarioIds: string[], titulo: string, mensaje: string) {
   const publicKey  = process.env.VAPID_PUBLIC_KEY

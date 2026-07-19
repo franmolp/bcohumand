@@ -84,6 +84,7 @@ export async function GET(request: NextRequest) {
       monotributo: '/dashboard/monotributo',
       mural_post: '/dashboard/muro',
       mural_respuesta: '/dashboard/muro',
+      mural_mencion: '/dashboard/muro',
       recibo: '/dashboard/liquidador',
       adelanto_solicitado:        '/dashboard/adelantos',
       adelanto_aprobado:          '/dashboard/adelantos',

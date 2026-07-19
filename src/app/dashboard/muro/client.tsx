@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import type { SessionUser } from '@/types'
 import { Spinner, Toast, Confirm } from '@/components/ui'
 import { IconPlus, IconX, IconCheck, IconAlertCircle, IconHeart, IconHeartFilled, IconMessageCircle, IconWall, IconEdit } from '@/components/ui/Icons'
@@ -39,6 +39,8 @@ interface Comentario {
 
 interface LikeUser { nombre: string; foto_perfil?: string | null }
 
+interface MuroUser { id: string; nombre: string; foto_perfil?: string | null }
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function timeAgo(dateStr: string): string {
@@ -68,6 +70,110 @@ function Avatar({ nombre, fotoUrl, size = 36 }: { nombre: string; fotoUrl?: stri
       style={{ width: size, height: size }}
     >
       <span style={{ fontSize: size * 0.28 }} className="font-bold text-white">{initials(nombre)}</span>
+    </div>
+  )
+}
+
+// ─── Mention helpers ──────────────────────────────────────────────────────────
+
+function renderMentions(text: string, users: MuroUser[]): React.ReactNode {
+  if (!users.length) return text
+  const sorted = [...users].sort((a, b) => b.nombre.length - a.nombre.length)
+  const escaped = sorted.map(u => u.nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const pattern = new RegExp(`@(${escaped.join('|')})`, 'g')
+  const parts: React.ReactNode[] = []
+  let last = 0, key = 0, m: RegExpExecArray | null
+  while ((m = pattern.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index))
+    parts.push(<strong key={key++} className="font-semibold text-[var(--primary)]">@{m[1]}</strong>)
+    last = m.index + m[0].length
+  }
+  if (last < text.length) parts.push(text.slice(last))
+  return parts.length ? <>{parts}</> : text
+}
+
+function MentionTextarea({
+  value, onChange, users, placeholder, rows, className, onKeyDown, textareaRef,
+}: {
+  value: string
+  onChange: (v: string) => void
+  users: MuroUser[]
+  placeholder?: string
+  rows?: number
+  className?: string
+  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
+  textareaRef?: React.RefObject<HTMLTextAreaElement | null>
+}) {
+  const [query, setQuery] = useState<string | null>(null)
+  const [mentionAt, setMentionAt] = useState(-1)
+  const [selIdx, setSelIdx] = useState(0)
+  const fallback = useRef<HTMLTextAreaElement>(null)
+  const ref = textareaRef ?? fallback
+
+  const filtered = query !== null
+    ? users.filter(u => u.nombre.toLowerCase().includes(query.toLowerCase())).slice(0, 6)
+    : []
+
+  function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const v = e.target.value
+    onChange(v)
+    const cur = e.target.selectionStart ?? v.length
+    const before = v.slice(0, cur)
+    const m = before.match(/@(\S*)$/)
+    if (m) { setQuery(m[1]); setMentionAt(cur - m[0].length); setSelIdx(0) }
+    else { setQuery(null); setMentionAt(-1) }
+  }
+
+  function pick(user: MuroUser) {
+    const cur = ref.current?.selectionStart ?? value.length
+    const before = value.slice(0, mentionAt)
+    const after = value.slice(cur)
+    const next = `${before}@${user.nombre} ${after}`
+    onChange(next)
+    setQuery(null); setMentionAt(-1)
+    setTimeout(() => {
+      const pos = before.length + user.nombre.length + 2
+      ref.current?.focus()
+      ref.current?.setSelectionRange(pos, pos)
+    }, 0)
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (query !== null && filtered.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSelIdx(i => Math.min(i + 1, filtered.length - 1)); return }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setSelIdx(i => Math.max(i - 1, 0)); return }
+      if (e.key === 'Enter')     { e.preventDefault(); pick(filtered[selIdx]); return }
+      if (e.key === 'Escape')    { setQuery(null); return }
+    }
+    onKeyDown?.(e)
+  }
+
+  return (
+    <div className="relative">
+      <textarea
+        ref={ref}
+        value={value}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+        rows={rows}
+        className={className}
+      />
+      {query !== null && filtered.length > 0 && (
+        <div className="absolute bottom-full left-0 mb-1 z-30 bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden w-full max-w-xs">
+          {filtered.map((u, i) => (
+            <button
+              key={u.id}
+              type="button"
+              onMouseDown={e => { e.preventDefault(); pick(u) }}
+              className={`w-full flex items-center gap-2 px-3 py-2 text-[13px] text-left cursor-pointer transition-colors ${i === selIdx ? 'bg-[var(--primary-light)] text-[var(--primary)]' : 'hover:bg-gray-50'}`}
+            >
+              <Avatar nombre={u.nombre} fotoUrl={u.foto_perfil} size={22} />
+              <span>{u.nombre}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -138,6 +244,7 @@ export default function MuroClient({ session }: { session: SessionUser }) {
   const [offset, setOffset] = useState(0)
   const [toast, setToast] = useState('')
   const [myFoto, setMyFoto] = useState<string | null>(null)
+  const [muralUsers, setMuralUsers] = useState<MuroUser[]>([])
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
   const LIMIT = 5
 
@@ -161,6 +268,9 @@ export default function MuroClient({ session }: { session: SessionUser }) {
   }, [])
 
   useEffect(() => { fetchPosts(0) }, [fetchPosts])
+  useEffect(() => {
+    fetch('/api/muro/usuarios').then(r => r.json()).then(d => { if (Array.isArray(d)) setMuralUsers(d) }).catch(() => {})
+  }, [])
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(''), 3000); return () => clearTimeout(t) } }, [toast])
 
   function updatePost(id: number, patch: Partial<MuroPost>) {
@@ -185,6 +295,7 @@ export default function MuroClient({ session }: { session: SessionUser }) {
           session={session}
           myFoto={myFoto}
           isAdmin={isAdmin}
+          muralUsers={muralUsers}
           onCreated={() => fetchPosts(0)}
           setToast={setToast}
         />
@@ -202,6 +313,7 @@ export default function MuroClient({ session }: { session: SessionUser }) {
                 session={session}
                 myFoto={myFoto}
                 isAdmin={isAdmin}
+                muralUsers={muralUsers}
                 updatePost={updatePost}
                 removePost={removePost}
                 setToast={setToast}
@@ -229,11 +341,12 @@ export default function MuroClient({ session }: { session: SessionUser }) {
 // ─── Post Composer ────────────────────────────────────────────────────────────
 
 function PostComposer({
-  session, myFoto, isAdmin, onCreated, setToast,
+  session, myFoto, isAdmin, muralUsers, onCreated, setToast,
 }: {
   session: SessionUser
   myFoto: string | null
   isAdmin: boolean
+  muralUsers: MuroUser[]
   onCreated: () => void
   setToast: (m: string) => void
 }) {
@@ -280,9 +393,10 @@ function PostComposer({
       <div className="flex gap-3">
         <Avatar nombre={session.nombre} fotoUrl={myFoto} size={34} />
         <div className="flex-1 min-w-0">
-          <textarea
+          <MentionTextarea
             value={texto}
-            onChange={e => setTexto(e.target.value)}
+            onChange={setTexto}
+            users={muralUsers}
             placeholder={tipo === 'post' ? '¿Qué querés compartir?' : tipo === 'encuesta' ? 'Pregunta de la encuesta...' : 'Pregunta abierta...'}
             rows={tipo === 'post' ? 2 : 3}
             className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-[14px] outline-none focus:border-[var(--primary)] resize-none"
@@ -327,12 +441,13 @@ function PostComposer({
 // ─── Post Card ────────────────────────────────────────────────────────────────
 
 function PostCard({
-  post, session, myFoto, isAdmin, updatePost, removePost, setToast,
+  post, session, myFoto, isAdmin, muralUsers, updatePost, removePost, setToast,
 }: {
   post: MuroPost
   session: SessionUser
   myFoto: string | null
   isAdmin: boolean
+  muralUsers: MuroUser[]
   updatePost: (id: number, patch: Partial<MuroPost>) => void
   removePost: (id: number) => void
   setToast: (m: string) => void
@@ -491,7 +606,7 @@ function PostCard({
               </div>
             </div>
           ) : (
-            <p className="text-[14px] text-[var(--text)] leading-relaxed whitespace-pre-wrap">{post.contenido}</p>
+            <p className="text-[14px] text-[var(--text)] leading-relaxed whitespace-pre-wrap">{renderMentions(post.contenido, muralUsers)}</p>
           )}
         </div>
 
@@ -544,6 +659,7 @@ function PostCard({
                     postId={post.id}
                     session={session}
                     isAdmin={isAdmin}
+                    muralUsers={muralUsers}
                     setToast={setToast}
                     onReply={() => { setReplyTo({ id: c.id, nombre: c.autor.nombre }); setTimeout(() => commentInputRef.current?.focus(), 50) }}
                     onDelete={(cid, parentId) => {
@@ -566,10 +682,15 @@ function PostCard({
                       </div>
                     )}
                     <div className="flex gap-2">
-                      <textarea ref={commentInputRef} value={commentText} onChange={e => setCommentText(e.target.value)}
+                      <MentionTextarea
+                        value={commentText}
+                        onChange={setCommentText}
+                        users={muralUsers}
+                        textareaRef={commentInputRef}
                         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment() } }}
                         placeholder="Escribí un comentario..." rows={1}
-                        className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-[13px] outline-none focus:border-[var(--primary)] resize-none" />
+                        className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-[13px] outline-none focus:border-[var(--primary)] resize-none"
+                      />
                       <button onClick={submitComment} disabled={submittingComment || !commentText.trim()}
                         className="w-8 h-8 mt-0.5 bg-[var(--primary)] text-white rounded-xl flex items-center justify-center disabled:opacity-40 cursor-pointer hover:opacity-90 shrink-0">
                         <IconCheck size={14} />
@@ -601,12 +722,13 @@ function PostCard({
 // ─── Comment Item ─────────────────────────────────────────────────────────────
 
 function CommentItem({
-  comment, postId, session, isAdmin, onReply, onDelete, setToast,
+  comment, postId, session, isAdmin, muralUsers, onReply, onDelete, setToast,
 }: {
   comment: Comentario
   postId: number
   session: SessionUser
   isAdmin: boolean
+  muralUsers: MuroUser[]
   onReply: () => void
   onDelete: (cid: number, parentId?: number) => void
   setToast: (m: string) => void
@@ -646,7 +768,7 @@ function CommentItem({
               </button>
             )}
           </div>
-          <p className="text-[13px] text-[var(--text)] mt-0.5 whitespace-pre-wrap">{comment.contenido}</p>
+          <p className="text-[13px] text-[var(--text)] mt-0.5 whitespace-pre-wrap">{renderMentions(comment.contenido, muralUsers)}</p>
         </div>
       </div>
       <div className="ml-9">
@@ -671,7 +793,7 @@ function CommentItem({
                     </button>
                   )}
                 </div>
-                <p className="text-[13px] text-[var(--text)] mt-0.5 whitespace-pre-wrap">{r.contenido}</p>
+                <p className="text-[13px] text-[var(--text)] mt-0.5 whitespace-pre-wrap">{renderMentions(r.contenido, muralUsers)}</p>
               </div>
             </div>
           ))}
