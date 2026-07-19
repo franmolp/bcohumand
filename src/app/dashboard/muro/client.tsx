@@ -112,6 +112,7 @@ function MentionTextarea({
   const [selIdx, setSelIdx] = useState(0)
   const fallback = useRef<HTMLTextAreaElement>(null)
   const ref = textareaRef ?? fallback
+  const overlayRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef(0)
 
   const filtered = query !== null
@@ -120,6 +121,15 @@ function MentionTextarea({
         return u.nombre.toLowerCase().split(' ').some(w => w.startsWith(q))
       }).slice(0, 6)
     : []
+
+  // Sincroniza el scroll del overlay con el textarea
+  useEffect(() => {
+    const ta = ref.current; const ov = overlayRef.current
+    if (!ta || !ov) return
+    const sync = () => { ov.scrollTop = ta.scrollTop }
+    ta.addEventListener('scroll', sync)
+    return () => ta.removeEventListener('scroll', sync)
+  }, [ref])
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const v = e.target.value
@@ -152,6 +162,23 @@ function MentionTextarea({
       if (e.key === 'Enter')     { e.preventDefault(); pick(filtered[selIdx]); return }
       if (e.key === 'Escape')    { setQuery(null); return }
     }
+    // Borrado de mención como bloque: backspace justo después del nombre elimina todo el nombre
+    if (e.key === 'Backspace') {
+      const ta = ref.current
+      if (ta && ta.selectionStart === ta.selectionEnd) {
+        const cur = ta.selectionStart ?? 0
+        const textBefore = value.slice(0, cur)
+        for (const u of users) {
+          if (textBefore.endsWith(u.nombre)) {
+            e.preventDefault()
+            const start = cur - u.nombre.length
+            onChange(value.slice(0, start) + value.slice(cur))
+            setTimeout(() => ta.setSelectionRange(start, start), 0)
+            return
+          }
+        }
+      }
+    }
     onKeyDown?.(e)
   }
 
@@ -165,7 +192,26 @@ function MentionTextarea({
         placeholder={placeholder}
         rows={rows}
         className={className}
+        style={value ? { color: 'transparent', caretColor: 'var(--text)', WebkitTextFillColor: 'transparent' } as React.CSSProperties : {}}
       />
+      {/* Overlay con el mismo className que el textarea: alineación exacta sin getComputedStyle */}
+      {value && (
+        <div
+          ref={overlayRef}
+          aria-hidden
+          className={className}
+          style={{
+            position: 'absolute', inset: 0, zIndex: 1,
+            pointerEvents: 'none', background: 'transparent',
+            borderColor: 'transparent', outline: 'none',
+            color: 'var(--text)', whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word', overflow: 'hidden',
+            resize: 'none',
+          }}
+        >
+          {renderMentions(value, users)}
+        </div>
+      )}
       {query !== null && filtered.length > 0 && (
         <div
           className="absolute top-full left-0 mt-1 z-30 bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-xs"
