@@ -112,7 +112,6 @@ function MentionTextarea({
   const [selIdx, setSelIdx] = useState(0)
   const fallback = useRef<HTMLTextAreaElement>(null)
   const ref = textareaRef ?? fallback
-  const overlayRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef(0)
 
   const filtered = query !== null
@@ -121,26 +120,6 @@ function MentionTextarea({
         return u.nombre.toLowerCase().split(' ').some(w => w.startsWith(q))
       }).slice(0, 6)
     : []
-
-  // Posiciona el overlay exactamente sobre el área de texto del textarea
-  useEffect(() => {
-    const ta = ref.current; const ov = overlayRef.current
-    if (!ta || !ov) return
-    const position = () => {
-      const s = window.getComputedStyle(ta)
-      ov.style.top    = `calc(${s.borderTopWidth}    + ${s.paddingTop})`
-      ov.style.left   = `calc(${s.borderLeftWidth}   + ${s.paddingLeft})`
-      ov.style.right  = `calc(${s.borderRightWidth}  + ${s.paddingRight})`
-      ov.style.bottom = `calc(${s.borderBottomWidth} + ${s.paddingBottom})`
-      ov.style.fontSize   = s.fontSize
-      ov.style.fontFamily = s.fontFamily
-      ov.style.lineHeight = s.lineHeight
-    }
-    position()
-    const syncScroll = () => { ov.scrollTop = ta.scrollTop }
-    ta.addEventListener('scroll', syncScroll)
-    return () => ta.removeEventListener('scroll', syncScroll)
-  }, [ref])
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const v = e.target.value
@@ -203,26 +182,7 @@ function MentionTextarea({
         placeholder={placeholder}
         rows={rows}
         className={className}
-        style={{
-          ...(value ? { color: 'transparent', caretColor: 'var(--text)', WebkitTextFillColor: 'transparent' } : {}),
-          WebkitAppearance: 'none', appearance: 'none',
-        } as React.CSSProperties}
       />
-      {/* Overlay posicionado exactamente sobre el área de texto via getComputedStyle */}
-      {value && (
-        <div
-          ref={overlayRef}
-          aria-hidden
-          style={{
-            position: 'absolute', zIndex: 1,
-            pointerEvents: 'none', background: 'transparent',
-            color: 'var(--text)', whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word', overflow: 'hidden',
-          }}
-        >
-          {renderMentions(value, users)}
-        </div>
-      )}
       {query !== null && filtered.length > 0 && (
         <div
           className="absolute top-full left-0 mt-1 z-30 bg-white rounded-xl border border-gray-200 shadow-lg w-full max-w-xs"
