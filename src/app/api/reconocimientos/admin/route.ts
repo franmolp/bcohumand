@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const mes = searchParams.get('mes') || getMesCiclo()
 
-  const [pendientesRes, rankingRes] = await Promise.all([
+  const [pendientesRes, rankingRes, todosRes] = await Promise.all([
     supabaseAdmin
       .from('reconocimientos')
       .select('id, id_emisor, id_receptor, categoria_pilar, mensaje, anonimo, fecha_creacion, mes_ciclo')
@@ -29,18 +29,26 @@ export async function GET(request: NextRequest) {
       .select('id_receptor, categoria_pilar')
       .eq('mes_ciclo', mes)
       .eq('estado', 'aprobado'),
+    supabaseAdmin
+      .from('reconocimientos')
+      .select('id, id_emisor, id_receptor, categoria_pilar, mensaje, anonimo, fecha_creacion, mes_ciclo, estado')
+      .eq('mes_ciclo', mes)
+      .order('fecha_creacion', { ascending: false }),
   ])
 
   if (pendientesRes.error) return NextResponse.json({ error: pendientesRes.error.message }, { status: 500 })
 
   const pendientes = pendientesRes.data ?? []
   const ranking = rankingRes.data ?? []
+  const todos = todosRes.data ?? []
 
   // Collect all user IDs
   const allUserIds = [...new Set([
     ...pendientes.map(r => r.id_emisor),
     ...pendientes.map(r => r.id_receptor),
     ...ranking.map(r => r.id_receptor),
+    ...todos.map(r => r.id_emisor),
+    ...todos.map(r => r.id_receptor),
   ])]
 
   const { data: usuarios } = await supabase
@@ -85,5 +93,16 @@ export async function GET(request: NextRequest) {
       mes_ciclo: r.mes_ciclo,
     })),
     ranking: rankingOrdenado,
+    todos: todos.map(r => ({
+      id: r.id,
+      emisor: userMap[r.id_emisor] ?? { nombre: 'Usuario', foto_perfil: null },
+      receptor: userMap[r.id_receptor] ?? { nombre: 'Usuario', foto_perfil: null },
+      categoria_pilar: r.categoria_pilar,
+      mensaje: r.mensaje,
+      anonimo: r.anonimo,
+      estado: r.estado,
+      fecha_creacion: r.fecha_creacion,
+      mes_ciclo: r.mes_ciclo,
+    })),
   })
 }
