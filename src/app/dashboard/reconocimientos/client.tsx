@@ -853,10 +853,14 @@ function TabModerar({ onModerado }: { onModerado: () => void }) {
               />
               <p className="text-[11px] text-gray-400 mt-1">{editMensaje.length} caracteres</p>
             </div>
-            <div className="flex gap-2 pt-1">
-              <button onClick={() => setEditTarget(null)}
-                className="flex-1 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-[13px] font-medium cursor-pointer hover:bg-gray-50 transition-colors">
-                Cancelar
+            <div className="flex gap-2 pt-1 border-t border-gray-100">
+              <button onClick={() => { moderar(editTarget.id, 'oculto'); setEditTarget(null) }} disabled={guardando}
+                className="flex items-center justify-center gap-1.5 px-3 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-[13px] font-medium cursor-pointer disabled:opacity-40 hover:bg-gray-50 transition-colors">
+                <IconEyeOff size={14} /> Ocultar
+              </button>
+              <button onClick={() => { moderar(editTarget.id, 'aprobado'); setEditTarget(null) }} disabled={guardando}
+                className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-green-600 text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-40 hover:bg-green-700 transition-colors">
+                <IconCheck size={14} /> Aprobar
               </button>
               <button onClick={guardarEdicion} disabled={guardando || editMensaje.trim().length < 10}
                 className="flex-1 py-2.5 bg-[image:var(--gradient)] text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
