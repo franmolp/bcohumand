@@ -628,6 +628,7 @@ function TabModerar({ onModerado }: { onModerado: () => void }) {
   const [editTarget, setEditTarget] = useState<RecAdminAll | null>(null)
   const [editPilar, setEditPilar] = useState<Pilar>('salvavidas')
   const [editMensaje, setEditMensaje] = useState('')
+  const [editEstado, setEditEstado] = useState<'pendiente' | 'aprobado' | 'oculto'>('pendiente')
   const [guardando, setGuardando] = useState(false)
 
   async function enviarRecordatorio() {
@@ -667,18 +668,29 @@ function TabModerar({ onModerado }: { onModerado: () => void }) {
     setEditTarget(r)
     setEditPilar(r.categoria_pilar)
     setEditMensaje(r.mensaje)
+    setEditEstado(r.estado)
   }
 
   async function guardarEdicion() {
     if (!editTarget) return
     setGuardando(true)
-    const res = await fetch(`/api/reconocimientos/${editTarget.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ categoria_pilar: editPilar, mensaje: editMensaje }),
-    })
+    const [editRes] = await Promise.all([
+      fetch(`/api/reconocimientos/${editTarget.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categoria_pilar: editPilar, mensaje: editMensaje }),
+      }),
+      editEstado !== editTarget.estado
+        ? fetch(`/api/reconocimientos/${editTarget.id}/moderar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accion: editEstado }),
+          })
+        : Promise.resolve(),
+    ])
     setGuardando(false)
-    if (res.ok) {
+    if (editRes.ok) {
+      if (editEstado !== editTarget.estado) onModerado()
       setEditTarget(null)
       cargar(mes)
     }
@@ -853,18 +865,25 @@ function TabModerar({ onModerado }: { onModerado: () => void }) {
               />
               <p className="text-[11px] text-gray-400 mt-1">{editMensaje.length} caracteres</p>
             </div>
-            <div className="flex gap-2 pt-1 border-t border-gray-100">
-              <button onClick={() => { moderar(editTarget.id, 'oculto'); setEditTarget(null) }} disabled={guardando}
-                className="flex items-center justify-center gap-1.5 px-3 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-[13px] font-medium cursor-pointer disabled:opacity-40 hover:bg-gray-50 transition-colors">
-                <IconEyeOff size={14} /> Ocultar
-              </button>
-              <button onClick={() => { moderar(editTarget.id, 'aprobado'); setEditTarget(null) }} disabled={guardando}
-                className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-green-600 text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-40 hover:bg-green-700 transition-colors">
-                <IconCheck size={14} /> Aprobar
+            <div>
+              <p className="text-[12px] font-medium text-gray-500 mb-2">Estado</p>
+              <div className="flex gap-2">
+                {([['pendiente', 'Pendiente', 'bg-amber-50 text-amber-600 border-amber-300'], ['aprobado', 'Aprobar', 'bg-green-50 text-green-700 border-green-300'], ['oculto', 'Ocultar', 'bg-gray-100 text-gray-500 border-gray-300']] as const).map(([key, label, activeClass]) => (
+                  <button key={key} onClick={() => setEditEstado(key)}
+                    className={`flex-1 py-2 rounded-xl text-[12px] font-semibold border cursor-pointer transition-all ${editEstado === key ? activeClass : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setEditTarget(null)}
+                className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-[13px] font-medium cursor-pointer hover:bg-gray-50 transition-colors">
+                Cancelar
               </button>
               <button onClick={guardarEdicion} disabled={guardando || editMensaje.trim().length < 10}
                 className="flex-1 py-2.5 bg-[image:var(--gradient)] text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                {guardando ? 'Guardando…' : 'Guardar'}
+                {guardando ? 'Guardando…' : 'Guardar cambios'}
               </button>
             </div>
           </div>
