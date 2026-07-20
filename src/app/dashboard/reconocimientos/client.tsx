@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import type { SessionUser } from '@/types'
 import {
-  IconTrophy, IconCheck, IconX, IconEyeOff, IconChevronLeft, IconChevronRight,
+  IconTrophy, IconCheck, IconX, IconEyeOff, IconChevronLeft, IconChevronRight, IconEdit,
 } from '@/components/ui/Icons'
 
 type Pilar = 'salvavidas' | 'buena_vibra' | 'iniciativa'
@@ -67,6 +67,18 @@ interface RankingItem {
   salvavidas: number
   buena_vibra: number
   iniciativa: number
+}
+
+interface RecAdminAll {
+  id: string
+  emisor: { nombre: string; foto_perfil: string | null }
+  receptor: { nombre: string; foto_perfil: string | null }
+  categoria_pilar: Pilar
+  mensaje: string
+  anonimo: boolean
+  estado: 'pendiente' | 'aprobado' | 'oculto'
+  fecha_creacion: string
+  mes_ciclo: string
 }
 
 interface GrupoEmpleado {
@@ -606,13 +618,17 @@ function TabReconocer({ onEnviado }: { onEnviado: () => void }) {
 
 // ─── Tab: Moderar (solo admin) ────────────────────────────────────────────────
 function TabModerar({ onModerado }: { onModerado: () => void }) {
-  const [data, setData] = useState<{ pendientes: RecAdmin[]; ranking: RankingItem[] } | null>(null)
+  const [data, setData] = useState<{ pendientes: RecAdmin[]; ranking: RankingItem[]; todos: RecAdminAll[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [moderando, setModerando] = useState<string | null>(null)
-  const [subtab, setSubtab] = useState<'pendientes' | 'ranking'>('pendientes')
+  const [subtab, setSubtab] = useState<'pendientes' | 'todos' | 'ranking'>('pendientes')
   const [mes, setMes] = useState(getMesCiclo())
   const [enviandoNoti, setEnviandoNoti] = useState(false)
   const [notiEnviada, setNotiEnviada] = useState<number | null>(null)
+  const [editTarget, setEditTarget] = useState<RecAdminAll | null>(null)
+  const [editPilar, setEditPilar] = useState<Pilar>('salvavidas')
+  const [editMensaje, setEditMensaje] = useState('')
+  const [guardando, setGuardando] = useState(false)
 
   async function enviarRecordatorio() {
     setEnviandoNoti(true)
@@ -647,6 +663,27 @@ function TabModerar({ onModerado }: { onModerado: () => void }) {
     cargar(mes)
   }
 
+  function abrirEdicion(r: RecAdminAll) {
+    setEditTarget(r)
+    setEditPilar(r.categoria_pilar)
+    setEditMensaje(r.mensaje)
+  }
+
+  async function guardarEdicion() {
+    if (!editTarget) return
+    setGuardando(true)
+    const res = await fetch(`/api/reconocimientos/${editTarget.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categoria_pilar: editPilar, mensaje: editMensaje }),
+    })
+    setGuardando(false)
+    if (res.ok) {
+      setEditTarget(null)
+      cargar(mes)
+    }
+  }
+
   const pendientesCount = data?.pendientes.length ?? 0
 
   return (
@@ -673,7 +710,7 @@ function TabModerar({ onModerado }: { onModerado: () => void }) {
       </div>
 
       <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-4">
-        {([['pendientes', `Pendientes (${pendientesCount})`], ['ranking', 'Ranking']] as const).map(([key, label]) => (
+        {([['pendientes', `Pendientes (${pendientesCount})`], ['todos', 'Todos'], ['ranking', 'Ranking']] as const).map(([key, label]) => (
           <button key={key} onClick={() => setSubtab(key)}
             className={`flex-1 py-2 text-[13px] font-medium rounded-[10px] cursor-pointer transition-all ${subtab === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
             {label}
@@ -681,7 +718,7 @@ function TabModerar({ onModerado }: { onModerado: () => void }) {
         ))}
       </div>
 
-      {subtab === 'ranking' && <NavMes mes={mes} onChange={m => { setMes(m); setData(null) }} />}
+      {(subtab === 'todos' || subtab === 'ranking') && <NavMes mes={mes} onChange={m => { setMes(m); setData(null) }} />}
 
       {loading && <Spinner />}
 
@@ -727,6 +764,38 @@ function TabModerar({ onModerado }: { onModerado: () => void }) {
         </div>
       )}
 
+      {!loading && subtab === 'todos' && (
+        <div className="space-y-3">
+          {!data?.todos?.length && (
+            <p className="text-center text-[13px] text-gray-400 py-12">No hay reconocimientos en {formatMes(mes)}</p>
+          )}
+          {data?.todos?.map(r => (
+            <div key={r.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[12px] font-semibold text-[var(--text)]">{r.emisor.nombre}</span>
+                    <span className="text-[11px] text-gray-300">→</span>
+                    <span className="text-[12px] font-semibold text-[var(--text)]">{r.receptor.nombre}</span>
+                    {r.anonimo && <span className="text-[10px] bg-gray-100 text-gray-400 border border-gray-200 px-1.5 py-0.5 rounded-full">Anónimo</span>}
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{timeAgo(r.fecha_creacion)}</p>
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <PilarBadge pilar={r.categoria_pilar} />
+                  <EstadoBadge estado={r.estado} />
+                  <button onClick={() => abrirEdicion(r)}
+                    className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer">
+                    <IconEdit size={14} />
+                  </button>
+                </div>
+              </div>
+              <p className="text-[13px] text-[var(--text-sub)] leading-relaxed">{r.mensaje}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       {!loading && subtab === 'ranking' && (
         <div className="space-y-2">
           {!data?.ranking.length && (
@@ -748,6 +817,55 @@ function TabModerar({ onModerado }: { onModerado: () => void }) {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Modal edición */}
+      {editTarget && createPortal(
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 p-4" onClick={() => setEditTarget(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <p className="text-[15px] font-bold text-[var(--text)]">Editar reconocimiento</p>
+              <button onClick={() => setEditTarget(null)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors">
+                <IconX size={18} />
+              </button>
+            </div>
+            <p className="text-[12px] text-gray-400">
+              <span className="font-semibold text-[var(--text)]">{editTarget.emisor.nombre}</span> → <span className="font-semibold text-[var(--text)]">{editTarget.receptor.nombre}</span>
+            </p>
+            <div>
+              <p className="text-[12px] font-medium text-gray-500 mb-2">Pilar</p>
+              <div className="flex gap-2">
+                {PILARES.map(p => (
+                  <button key={p.key} onClick={() => setEditPilar(p.key)}
+                    className={`flex-1 py-2 rounded-xl text-[12px] font-semibold border cursor-pointer transition-all ${editPilar === p.key ? `${p.bg} ${p.color} border-current` : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}>
+                    {p.emoji} {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-[12px] font-medium text-gray-500 mb-2">Mensaje</p>
+              <textarea
+                value={editMensaje}
+                onChange={e => setEditMensaje(e.target.value)}
+                rows={4}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] text-[var(--text)] resize-none focus:outline-none focus:border-[var(--primary)]"
+              />
+              <p className="text-[11px] text-gray-400 mt-1">{editMensaje.length} caracteres</p>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setEditTarget(null)}
+                className="flex-1 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-[13px] font-medium cursor-pointer hover:bg-gray-50 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={guardarEdicion} disabled={guardando || editMensaje.trim().length < 10}
+                className="flex-1 py-2.5 bg-[image:var(--gradient)] text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                {guardando ? 'Guardando…' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   )
