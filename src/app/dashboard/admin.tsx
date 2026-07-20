@@ -107,7 +107,7 @@ export default async function AdminDashboard({ session }: { session: SessionUser
   const today = new Date(yr, mo - 1, dy)
   const hace7 = new Date(today); hace7.setDate(today.getDate() - 7)
   const hace7Str = hace7.toISOString()
-  const [empData, ausentesData, pendData, actData, usersData, repData, recoData] = await Promise.all([
+  const [empData, ausentesData, pendData, actData, usersData, repData, recoData, adelantosData] = await Promise.all([
     // Empleados activos
     supabase.from('usuarios').select('id').eq('estado_cuenta', 'activo'),
 
@@ -144,11 +144,15 @@ export default async function AdminDashboard({ session }: { session: SessionUser
 
     // Reconocimientos pendientes de moderación
     supabaseAdmin.from('reconocimientos').select('id').eq('estado', 'pendiente'),
+
+    // Adelantos pendientes
+    supabaseAdmin.from('adelantos').select('id').eq('estado', 'pending'),
   ])
 
-  const totalEmpleados = empData.data?.length ?? 0
-  const repPendientes  = repData.data?.length ?? 0
-  const recoPendientes = recoData.data?.length ?? 0
+  const totalEmpleados     = empData.data?.length ?? 0
+  const repPendientes      = repData.data?.length ?? 0
+  const recoPendientes     = recoData.data?.length ?? 0
+  const adelantosPendientes = adelantosData.data?.length ?? 0
   const TIPOS_AUSENCIA = ['Ausencia por Salud', 'Ausencia Injustificada', 'Vacaciones', 'Solicitud de Días', 'Cambio de horario/día']
   const ausentesHoyList = (ausentesData.data ?? []).filter(r => {
     if (!TIPOS_AUSENCIA.includes(r.tipo)) return false
@@ -316,6 +320,22 @@ export default async function AdminDashboard({ session }: { session: SessionUser
             </div>
             <p className="text-[32px] font-bold leading-none mb-1">{recoPendientes}</p>
             <p className="text-[11px] text-white/70">Reconoc. pend.</p>
+          </Link>
+        )}
+
+        {/* Adelantos pendientes — solo admin */}
+        {isAdminRole && (
+          <Link href="/dashboard/adelantos"
+            className="lg:col-span-1 rounded-2xl p-4 text-white shadow-sm hover:opacity-90 transition-opacity cursor-pointer"
+            style={{ background: 'linear-gradient(135deg, #6d8b58, #476638)' }}>
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-8 h-8 bg-white/15 rounded-xl flex items-center justify-center">
+                <IconDollar size={16} className="text-white" />
+              </div>
+              <IconChevronRight size={14} className="text-white/50 mt-1" />
+            </div>
+            <p className="text-[32px] font-bold leading-none mb-1">{adelantosPendientes}</p>
+            <p className="text-[11px] text-white/70">Adelantos pend.</p>
           </Link>
         )}
 
