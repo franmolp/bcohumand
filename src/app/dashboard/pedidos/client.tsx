@@ -5,24 +5,22 @@ import type { SessionUser } from '@/types'
 import { Button, Spinner, Modal, Toast, Confirm, Select } from '@/components/ui'
 import {
   IconShoppingBag, IconX, IconCheck, IconEdit, IconPlus, IconChevronRight,
-  IconHome, IconRefresh, IconFingerprint, IconHeart, IconEye,
-  IconScissors, IconFlame, IconSparkles,
 } from '@/components/ui/Icons'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
 type CatKey = 'cocina' | 'limpieza' | 'manicuria' | 'masajes' | 'cejas_pestanas' | 'depilacion' | 'peluqueria'
 
-interface CatDef { key: CatKey; label: string; icon: (size?: number) => React.ReactNode }
+interface CatDef { key: CatKey; label: string }
 
 const CATEGORIAS: CatDef[] = [
-  { key: 'cocina',         label: 'Cocina',          icon: (s=14) => <IconHome size={s} /> },
-  { key: 'limpieza',       label: 'Limpieza',         icon: (s=14) => <IconRefresh size={s} /> },
-  { key: 'manicuria',      label: 'Manicuría',        icon: (s=14) => <IconFingerprint size={s} /> },
-  { key: 'masajes',        label: 'Masajes',          icon: (s=14) => <IconHeart size={s} /> },
-  { key: 'cejas_pestanas', label: 'Cejas y Pestañas', icon: (s=14) => <IconEye size={s} /> },
-  { key: 'depilacion',     label: 'Depilación',       icon: (s=14) => <IconFlame size={s} /> },
-  { key: 'peluqueria',     label: 'Peluquería',       icon: (s=14) => <IconScissors size={s} /> },
+  { key: 'cocina',         label: 'Cocina' },
+  { key: 'limpieza',       label: 'Limpieza' },
+  { key: 'manicuria',      label: 'Manicuría' },
+  { key: 'masajes',        label: 'Masajes' },
+  { key: 'cejas_pestanas', label: 'Cejas y Pestañas' },
+  { key: 'depilacion',     label: 'Depilación' },
+  { key: 'peluqueria',     label: 'Peluquería' },
 ]
 
 const UNIDADES = ['unidad', 'kg', 'litro', 'caja', 'pack', 'rollo', 'frasco', 'tubo']
@@ -30,7 +28,6 @@ const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', '
 
 function catDef(key: string): CatDef | undefined { return CATEGORIAS.find(c => c.key === key) }
 function catLabel(key: string) { return catDef(key)?.label ?? key }
-function catIcon(key: string, size = 14) { return catDef(key)?.icon(size) ?? <IconSparkles size={size} /> }
 
 function fmtCantidad(cantidad: number, unidad: string): string {
   const abbr: Record<string, string> = { unidad: 'u', litro: 'L', kg: 'kg', frasco: 'fr', tubo: 'tu' }
@@ -316,7 +313,6 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
                 {cats.map(({ cat, items: catItems }) => (
                   <div key={cat}>
                     <div className="flex items-center gap-1.5 mb-1 text-[var(--text-muted)]">
-                      {catIcon(cat, 12)}
                       <p className="text-[10px] font-bold uppercase tracking-wider">{catLabel(cat)}</p>
                     </div>
                     <div>
@@ -385,7 +381,6 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
                 {prodsFiltrados.map(p => (
                   <button key={p.id} onClick={() => selectProducto(p)}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left hover:bg-gray-50 cursor-pointer transition-colors">
-                    <div className="text-[var(--text-muted)] flex-shrink-0">{catIcon(p.categoria, 16)}</div>
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-medium truncate">{p.nombre}</p>
                       <p className="text-[11px] text-[var(--text-muted)]">{catLabel(p.categoria)} · {p.proveedor?.nombre ?? <span className="text-amber-500">Sin proveedor</span>}</p>
@@ -417,8 +412,8 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
               <div className="flex flex-wrap gap-1.5">
                 {CATEGORIAS.map(c => (
                   <button key={c.key} onClick={() => setNewCategoria(c.key)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-medium border cursor-pointer transition-all ${newCategoria === c.key ? 'bg-[image:var(--gradient)] text-white border-transparent' : 'border-[var(--border)] text-[var(--text-sub)] hover:bg-gray-50'}`}>
-                    {c.icon(12)} {c.label}
+                    className={`px-2.5 py-1.5 rounded-full text-[12px] font-medium border cursor-pointer transition-all ${newCategoria === c.key ? 'bg-[image:var(--gradient)] text-white border-transparent' : 'border-[var(--border)] text-[var(--text-sub)] hover:bg-gray-50'}`}>
+                    {c.label}
                   </button>
                 ))}
               </div>
@@ -451,7 +446,6 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
         {addStep === 'config' && productoSel && (
           <>
             <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-[var(--border)]">
-              <div className="text-[var(--primary)]">{catIcon(productoSel.categoria, 18)}</div>
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-semibold truncate">{productoSel.nombre}</p>
                 <p className="text-[11px] text-[var(--text-muted)]">{catLabel(productoSel.categoria)}</p>
@@ -749,8 +743,8 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
         </button>
         {CATEGORIAS.map(c => (
           <button key={c.key} onClick={() => setCatFiltro(c.key)}
-            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium cursor-pointer transition-colors ${catFiltro === c.key ? 'bg-[image:var(--gradient)] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-            {c.icon(12)} {c.label}
+            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium cursor-pointer transition-colors ${catFiltro === c.key ? 'bg-[image:var(--gradient)] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+            {c.label}
           </button>
         ))}
       </div>
@@ -758,7 +752,6 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
       <div className="space-y-2">
         {prodsFiltrados.map(p => (
           <div key={p.id} className={`bg-white border rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm border-[var(--border)] ${!p.activo ? 'opacity-50' : ''}`}>
-            <div className="text-[var(--primary)]">{catIcon(p.categoria, 18)}</div>
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-semibold truncate">{p.nombre}</p>
               <p className="text-[11px] text-[var(--text-muted)]">{catLabel(p.categoria)} · {p.unidad} · {p.proveedor?.nombre ?? <span className="text-amber-500">Sin proveedor</span>}</p>
@@ -798,8 +791,8 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
           <div className="flex flex-wrap gap-1.5">
             {CATEGORIAS.map(c => (
               <button key={c.key} onClick={() => setCategoria(c.key)}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[12px] font-medium border cursor-pointer transition-all ${categoria === c.key ? 'bg-[image:var(--gradient)] text-white border-transparent' : 'border-[var(--border)] text-[var(--text-sub)] hover:bg-gray-50'}`}>
-                {c.icon(12)} {c.label}
+                className={`px-2.5 py-1.5 rounded-full text-[12px] font-medium border cursor-pointer transition-all ${categoria === c.key ? 'bg-[image:var(--gradient)] text-white border-transparent' : 'border-[var(--border)] text-[var(--text-sub)] hover:bg-gray-50'}`}>
+                {c.label}
               </button>
             ))}
           </div>
@@ -908,7 +901,6 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
               <div key={cat.key} className="bg-white border border-[var(--border)] rounded-2xl shadow-sm overflow-hidden">
                 <button onClick={() => setCatAbierta(abierta ? null : cat.key)}
                   className="w-full flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors">
-                  <div className="text-[var(--primary)]">{cat.icon(18)}</div>
                   <div className="flex-1 min-w-0 text-left">
                     <p className="text-[13px] font-semibold text-[var(--text)]">{cat.label}</p>
                     <p className="text-[11px] text-[var(--text-muted)]">
