@@ -18,6 +18,7 @@ const allNav = [
   { href: '/dashboard/mi-asistencia', label: 'Mi Asistencia', icon: IconClipboard, notAdmin: true, mobile: true },
   { href: '/dashboard/espacio-trabajo', label: 'Espacio de trabajo', icon: IconLayoutGrid, roles: ['Admin', 'admin', 'HR', 'Encargada', 'Compras'] },
   { href: '/dashboard/compras',      label: 'Compras',        icon: IconShoppingBag, roles: ['Admin', 'admin', 'Compras', 'Encargada'] },
+  { href: '/dashboard/pedidos',      label: 'Pedidos',        icon: IconShoppingBag, admin: true },
   { href: '/dashboard/monotributo',  label: 'Monotributo',    icon: IconReceipt },
   { href: '/dashboard/calendario',   label: 'Calendario',     icon: IconCalendar,    mobile: true },
   { href: '/dashboard/muro',            label: 'Muro Social',      icon: IconWall },
