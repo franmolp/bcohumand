@@ -23,8 +23,12 @@ const CATEGORIAS: CatDef[] = [
   { key: 'peluqueria',     label: 'Peluquería' },
 ]
 
-const UNIDADES = ['unidad', 'kg', 'litro', 'caja', 'pack', 'rollo', 'frasco', 'tubo']
+const UNIDADES = ['unidad', 'kg', 'litro', 'caja', 'pack', 'rollo', 'frasco', 'tubo', 'bidón']
 const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+
+function normalizar(s: string) {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+}
 
 function catDef(key: string): CatDef | undefined { return CATEGORIAS.find(c => c.key === key) }
 function catLabel(key: string) { return catDef(key)?.label ?? key }
@@ -58,6 +62,7 @@ interface Item {
     proveedor_id: number | null; proveedor: { id: number; nombre: string } | null
   } | null
   created_at: string
+  archivado: boolean; archivado_por: string | null; archivado_en: string | null
 }
 
 interface ExportGroup {
@@ -114,6 +119,8 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
   onRefreshProductos: () => void
 }) {
   const [items, setItems] = useState<Item[]>([])
+  const [archivados, setArchivados] = useState<Item[]>([])
+  const [showArchivados, setShowArchivados] = useState(false)
   const [loading, setLoading] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [editItem, setEditItem] = useState<Item | null>(null)
@@ -147,8 +154,11 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
     setLoading(true)
     fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items`)
       .then(r => r.json())
-      .then(d => setItems(Array.isArray(d.items) ? d.items : []))
-      .catch(() => setItems([]))
+      .then(d => {
+        setItems(Array.isArray(d.items) ? d.items : [])
+        setArchivados(Array.isArray(d.archivados) ? d.archivados : [])
+      })
+      .catch(() => { setItems([]); setArchivados([]) })
       .finally(() => setLoading(false))
   }, [cicloActivo])
 
@@ -177,7 +187,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
   }
 
   const prodsFiltrados = productos
-    .filter(p => p.activo && (busqueda.length < 2 || p.nombre.toLowerCase().includes(busqueda.toLowerCase())))
+    .filter(p => p.activo && (busqueda.length < 2 || normalizar(p.nombre).includes(normalizar(busqueda))))
     .slice(0, 10)
 
   const duplicado = productoSel ? items.find(i => i.producto_id === productoSel.id) : null
@@ -235,7 +245,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
     setEditGuardando(false); setEditItem(null); cargar()
   }
 
-  async function eliminarItem(id: string) {
+  async function archivarItem(id: string) {
     if (!cicloActivo) return
     await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items/${id}`, { method: 'DELETE' })
     cargar()
@@ -328,7 +338,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
                             setEditNotas(item.notas ?? '')
                             setEditUrgente(item.urgente)
                           }}
-                          onDelete={() => eliminarItem(item.id)}
+                          onArchive={() => archivarItem(item.id)}
                         />
                       ))}
                     </div>
@@ -337,6 +347,36 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {archivados.length > 0 && (
+        <div className="mt-6">
+          <button onClick={() => setShowArchivados(v => !v)}
+            className="flex items-center gap-2 py-1.5 text-[12px] text-[var(--text-muted)] font-medium hover:text-[var(--text)] cursor-pointer transition-colors">
+            <IconChevronRight size={12} className={`transition-transform duration-200 ${showArchivados ? 'rotate-90' : ''}`} />
+            Archivados ({archivados.length})
+          </button>
+          {showArchivados && (
+            <div className="mt-2 space-y-0.5 pl-4 border-l-2 border-gray-100">
+              {archivados.map(item => (
+                <div key={item.id} className="px-2 py-2 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-gray-200 flex-shrink-0" />
+                    <span className="text-[12px] text-[var(--text-muted)] line-through">
+                      {item.producto?.nombre ?? item.nombre_libre ?? 'Ítem'}
+                    </span>
+                    <span className="text-[11px] text-[var(--text-muted)]">{fmtCantidad(item.cantidad, item.unidad)}</span>
+                  </div>
+                  <p className="pl-3.5 mt-0.5 text-[10px] text-[var(--text-muted)]">
+                    Cargado por <span className="font-medium">{item.usuario.nombre}</span>
+                    {item.archivado_por && <> · Archivado por <span className="font-medium">{item.archivado_por}</span></>}
+                    {item.archivado_en && <> el {formatCerradoEn(item.archivado_en)}</>}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -541,8 +581,8 @@ function UrgenteToggle({ value, onChange }: { value: boolean; onChange: (v: bool
   )
 }
 
-function ItemRow({ item, cicloAbierto, onEdit, onDelete }: {
-  item: Item; cicloAbierto: boolean; onEdit: () => void; onDelete: () => void
+function ItemRow({ item, cicloAbierto, onEdit, onArchive }: {
+  item: Item; cicloAbierto: boolean; onEdit: () => void; onArchive: () => void
 }) {
   return (
     <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg group ${item.urgente ? 'bg-red-50' : 'hover:bg-gray-50'} transition-colors`}>
@@ -561,7 +601,7 @@ function ItemRow({ item, cicloAbierto, onEdit, onDelete }: {
         {cicloAbierto && (
           <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5">
             <button onClick={onEdit} className="p-1 rounded text-gray-400 hover:text-gray-700 cursor-pointer transition-colors"><IconEdit size={12} /></button>
-            <button onClick={onDelete} className="p-1 rounded text-gray-400 hover:text-red-500 cursor-pointer transition-colors"><IconX size={12} /></button>
+            <button onClick={onArchive} title="Archivar" className="p-1 rounded text-gray-400 hover:text-amber-500 cursor-pointer transition-colors"><IconX size={12} /></button>
           </div>
         )}
       </div>

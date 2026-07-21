@@ -91,6 +91,7 @@ export interface Proveedor {
   nombre: string
   contacto?: string | null
   activo: boolean
+  solo_admin?: boolean
   created_at: string
 }
 

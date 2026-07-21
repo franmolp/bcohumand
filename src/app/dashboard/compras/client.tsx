@@ -299,11 +299,48 @@ function CompraModal({ open, editTarget, proveedores, onClose, onSaved, onProvee
   )
 }
 
+// ─── Tab: Proveedores ─────────────────────────────────────────────────────────
+
+function ProveedoresTab({ proveedores, onToggle }: {
+  proveedores: Proveedor[]
+  onToggle: (id: number, val: boolean) => void
+}) {
+  return (
+    <div>
+      <p className="text-[13px] text-[var(--text-muted)] mb-4">
+        Los proveedores marcados como <span className="font-semibold text-amber-600">Solo admin</span> no serán visibles para el resto del equipo. Usalo para proveedores de gastos privados.
+      </p>
+      <div className="space-y-2">
+        {proveedores.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map(p => (
+          <div key={p.id} className="bg-white border border-[var(--border)] rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm">
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold text-[var(--text)]">{p.nombre}</p>
+              {p.contacto && <p className="text-[11px] text-[var(--text-muted)]">{p.contacto}</p>}
+            </div>
+            <button
+              onClick={() => onToggle(p.id, !p.solo_admin)}
+              className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[12px] font-semibold cursor-pointer transition-all ${
+                p.solo_admin
+                  ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
+                  : 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'
+              }`}
+            >
+              {p.solo_admin ? 'Solo admin' : 'Todos'}
+            </button>
+          </div>
+        ))}
+        {!proveedores.length && <p className="text-center text-[13px] text-[var(--text-muted)] py-10">Sin proveedores</p>}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function ComprasClient({ user }: { user: SessionUser }) {
   const isAdmin = user.rol === 'Admin' || user.rol === 'admin' || user.rol === 'HR'
   const now = new Date()
+  const [tab, setTab] = useState<'historial' | 'proveedores'>('historial')
   const [mes, setMes] = useState(now.getMonth())
   const [anio, setAnio] = useState(now.getFullYear())
   const [compras, setCompras] = useState<Compra[]>([])
@@ -386,6 +423,15 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
 
   const anios = Array.from({ length: 3 }, (_, i) => now.getFullYear() - i)
 
+  async function toggleSoloAdmin(id: number, val: boolean) {
+    setProveedores(prev => prev.map(p => p.id === id ? { ...p, solo_admin: val } : p))
+    await fetch(`/api/proveedores/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ solo_admin: val }),
+    })
+  }
+
   return (
     <div className="py-4 fade-in">
       {/* Header */}
@@ -396,10 +442,29 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
           </div>
           <h1 className="text-[17px] font-bold text-[var(--text)]">Compras</h1>
         </div>
-        <Button onClick={openNew} size="sm">
-          <IconPlus size={15} className="mr-1" /> Nueva Compra
-        </Button>
+        {tab === 'historial' && (
+          <Button onClick={openNew} size="sm">
+            <IconPlus size={15} className="mr-1" /> Nueva Compra
+          </Button>
+        )}
       </div>
+
+      {isAdmin && (
+        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-4">
+          {(['historial', 'proveedores'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`flex-1 py-2 text-[13px] font-medium rounded-[10px] cursor-pointer transition-all capitalize ${tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+              {t === 'historial' ? 'Historial' : 'Proveedores'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab === 'proveedores' && isAdmin && (
+        <ProveedoresTab proveedores={proveedores} onToggle={toggleSoloAdmin} />
+      )}
+
+      {tab === 'historial' && (<>
 
       {/* Búsqueda + Filtros */}
       <div className="bg-white rounded-2xl border border-[var(--border)] shadow-sm p-4 mb-4 space-y-3">
@@ -527,6 +592,8 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
           </>
         )}
       </div>
+
+      </>)}
 
       {/* Modal compra */}
       <CompraModal

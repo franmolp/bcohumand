@@ -77,7 +77,11 @@ export async function DELETE(
     return NextResponse.json({ error: 'El pedido ya está cerrado' }, { status: 400 })
   }
 
-  const { error } = await supabaseAdmin.from('pedidos_items').delete().eq('id', iid)
+  const { error } = await supabaseAdmin
+    .from('pedidos_items')
+    .update({ archivado: true, archivado_por: session.nombre, archivado_en: new Date().toISOString() })
+    .eq('id', iid)
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

@@ -43,7 +43,8 @@ export async function GET(
   }))
 
   return NextResponse.json({
-    items: itemsConUsuario,
+    items: itemsConUsuario.filter(i => !i.archivado),
+    archivados: itemsConUsuario.filter(i => i.archivado),
     permisos: permsRes.data ?? [],
   })
 }
