@@ -1,11 +1,10 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { createPortal } from 'react-dom'
 import type { SessionUser } from '@/types'
+import { Button, Spinner, Modal, Toast, Confirm, Select } from '@/components/ui'
 import {
-  IconShoppingBag, IconX, IconCheck, IconEdit,
-  IconPlus, IconSettings, IconBarChart, IconChevronRight, IconChevronLeft,
+  IconShoppingBag, IconX, IconCheck, IconEdit, IconPlus, IconChevronRight,
 } from '@/components/ui/Icons'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -13,17 +12,17 @@ import {
 type CatKey = 'cocina' | 'limpieza' | 'manicuria' | 'masajes' | 'cejas_pestanas' | 'depilacion' | 'peluqueria'
 
 const CATEGORIAS: { key: CatKey; label: string; emoji: string }[] = [
-  { key: 'cocina',         label: 'Cocina',           emoji: '🍽️' },
-  { key: 'limpieza',       label: 'Limpieza',          emoji: '🧹' },
-  { key: 'manicuria',      label: 'Manicuría',         emoji: '💅' },
-  { key: 'masajes',        label: 'Masajes',           emoji: '💆' },
-  { key: 'cejas_pestanas', label: 'Cejas y Pestañas',  emoji: '✨' },
-  { key: 'depilacion',     label: 'Depilación',        emoji: '🪒' },
-  { key: 'peluqueria',     label: 'Peluquería',        emoji: '✂️' },
+  { key: 'cocina',         label: 'Cocina',          emoji: '🍽️' },
+  { key: 'limpieza',       label: 'Limpieza',         emoji: '🧹' },
+  { key: 'manicuria',      label: 'Manicuría',        emoji: '💅' },
+  { key: 'masajes',        label: 'Masajes',          emoji: '💆' },
+  { key: 'cejas_pestanas', label: 'Cejas y Pestañas', emoji: '✨' },
+  { key: 'depilacion',     label: 'Depilación',       emoji: '🪒' },
+  { key: 'peluqueria',     label: 'Peluquería',       emoji: '✂️' },
 ]
 
 const UNIDADES = ['unidad', 'kg', 'litro', 'caja', 'pack', 'rollo', 'frasco', 'tubo']
-const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 
 function catLabel(key: string) { return CATEGORIAS.find(c => c.key === key)?.label ?? key }
 function catEmoji(key: string) { return CATEGORIAS.find(c => c.key === key)?.emoji ?? '📦' }
@@ -46,6 +45,8 @@ interface Ciclo {
   fecha_apertura: string
   fecha_cierre: string
   estado: 'abierto' | 'cerrado' | 'enviado'
+  cerrado_por: string | null
+  cerrado_en: string | null
   created_at: string
 }
 
@@ -93,14 +94,6 @@ interface Permiso { usuario_id: string; categoria: string }
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
-function Spinner() {
-  return (
-    <div className="flex justify-center py-12">
-      <div className="w-5 h-5 border-2 border-gray-200 border-t-[var(--primary)] rounded-full animate-spin" />
-    </div>
-  )
-}
-
 function Avatar({ nombre, foto, size = 24 }: { nombre: string; foto: string | null; size?: number }) {
   const initials = nombre.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
   if (foto) return <img src={foto} alt={nombre} className="rounded-full object-cover flex-shrink-0" style={{ width: size, height: size }} />
@@ -116,14 +109,21 @@ function formatFecha(iso: string) {
   return `${parseInt(d)}/${parseInt(m)}/${y}`
 }
 
+function formatCerradoEn(iso: string) {
+  const d = new Date(iso)
+  const dia = d.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: 'numeric', month: 'numeric' })
+  const hora = d.toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit' })
+  return `${dia} a las ${hora}`
+}
+
 function EstadoBadge({ estado }: { estado: string }) {
   const map: Record<string, string> = {
-    abierto:   'bg-green-50 text-green-700 border-green-200',
-    cerrado:   'bg-amber-50 text-amber-600 border-amber-200',
-    enviado:   'bg-blue-50 text-blue-600 border-blue-200',
-    pendiente: 'bg-gray-100 text-gray-500 border-gray-200',
-    ordenado:  'bg-amber-50 text-amber-600 border-amber-200',
-    recibido:  'bg-green-50 text-green-700 border-green-200',
+    abierto:  'bg-green-50 text-green-700 border-green-200',
+    cerrado:  'bg-amber-50 text-amber-600 border-amber-200',
+    enviado:  'bg-blue-50 text-blue-600 border-blue-200',
+    pendiente:'bg-gray-100 text-gray-500 border-gray-200',
+    ordenado: 'bg-amber-50 text-amber-600 border-amber-200',
+    recibido: 'bg-green-50 text-green-700 border-green-200',
   }
   const label: Record<string, string> = {
     abierto: 'Abierto', cerrado: 'Cerrado', enviado: 'Enviado',
@@ -144,7 +144,6 @@ function TabLista({ cicloActivo, productos, onCiclosChange }: {
   const [showAdd, setShowAdd] = useState(false)
   const [editItem, setEditItem] = useState<Item | null>(null)
 
-  // Form agregar
   const [busqueda, setBusqueda] = useState('')
   const [productoSel, setProductoSel] = useState<Producto | null>(null)
   const [nombreLibre, setNombreLibre] = useState('')
@@ -159,7 +158,8 @@ function TabLista({ cicloActivo, productos, onCiclosChange }: {
     setLoading(true)
     fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items`)
       .then(r => r.json())
-      .then(d => setItems(d.items ?? []))
+      .then(d => setItems(Array.isArray(d.items) ? d.items : []))
+      .catch(() => setItems([]))
       .finally(() => setLoading(false))
   }, [cicloActivo])
 
@@ -215,14 +215,11 @@ function TabLista({ cicloActivo, productos, onCiclosChange }: {
   // Agrupar por proveedor
   const porProveedor: { nombre: string; items: Item[] }[] = []
   const mapaProveedor: Record<string, Item[]> = {}
-
   for (const item of items) {
     const prov = item.producto?.proveedor?.nombre ?? 'Sin proveedor'
     if (!mapaProveedor[prov]) mapaProveedor[prov] = []
     mapaProveedor[prov].push(item)
   }
-
-  // Ordenar proveedores: "Sin proveedor" al final
   const proveedoresOrdenados = Object.keys(mapaProveedor).sort((a, b) => {
     if (a === 'Sin proveedor') return 1
     if (b === 'Sin proveedor') return -1
@@ -232,19 +229,32 @@ function TabLista({ cicloActivo, productos, onCiclosChange }: {
     porProveedor.push({ nombre: prov, items: mapaProveedor[prov] })
   }
 
-  if (!cicloActivo) return <Spinner />
+  if (!cicloActivo) return (
+    <p className="text-center text-[13px] text-gray-400 py-12">No hay lista activa</p>
+  )
 
   return (
     <div>
       {cicloActivo.estado !== 'abierto' && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 mb-4 flex items-center justify-between gap-2">
-          <p className="text-[12px] text-amber-700 font-medium">Esta lista está cerrada</p>
-          <button onClick={async () => {
-            await fetch(`/api/pedidos/ciclos/${cicloActivo.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estado: 'abierto' }) })
-            onCiclosChange()
-          }} className="text-[12px] font-semibold text-amber-700 border border-amber-300 px-3 py-1 rounded-lg cursor-pointer hover:bg-amber-100 transition-colors">
-            Reabrir
-          </button>
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 mb-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[12px] text-amber-700 font-semibold">Esta lista está cerrada</p>
+            <Button size="sm" variant="secondary" onClick={async () => {
+              await fetch(`/api/pedidos/ciclos/${cicloActivo.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ estado: 'abierto' }),
+              })
+              onCiclosChange()
+            }}>
+              Reabrir
+            </Button>
+          </div>
+          {cicloActivo.cerrado_por && cicloActivo.cerrado_en && (
+            <p className="text-[11px] text-amber-600 mt-1">
+              Cerrado por <span className="font-medium">{cicloActivo.cerrado_por}</span> el {formatCerradoEn(cicloActivo.cerrado_en)}
+            </p>
+          )}
         </div>
       )}
 
@@ -261,7 +271,7 @@ function TabLista({ cicloActivo, productos, onCiclosChange }: {
         <p className="text-center text-[13px] text-gray-400 py-10">La lista está vacía</p>
       )}
 
-      {!loading && (
+      {!loading && porProveedor.length > 0 && (
         <div className="space-y-4">
           {porProveedor.map(({ nombre: prov, items: provItems }) => (
             <div key={prov}>
@@ -281,173 +291,153 @@ function TabLista({ cicloActivo, productos, onCiclosChange }: {
       )}
 
       {/* Modal agregar */}
-      {showAdd && createPortal(
-        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 p-4" onClick={() => setShowAdd(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-[15px] font-bold text-[var(--text)]">Agregar producto</p>
-                <button onClick={() => setShowAdd(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors">
-                  <IconX size={18} />
-                </button>
-              </div>
-
-              {!productoSel && (
-                <div>
-                  <p className="text-[12px] font-medium text-gray-500 mb-2">Buscar en catálogo</p>
-                  <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
-                    placeholder="Ej: algodón, lavandina..."
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)]" />
-                  {busqueda.length >= 2 && (
-                    <div className="mt-2 space-y-1 max-h-44 overflow-y-auto">
-                      {prodsFiltrados.map(p => (
-                        <button key={p.id} onClick={() => { setProductoSel(p); setUnidad(p.unidad) }}
-                          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left hover:bg-gray-50 cursor-pointer transition-colors">
-                          <span className="text-[14px]">{catEmoji(p.categoria)}</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[13px] font-medium truncate">{p.nombre}</p>
-                            <p className="text-[11px] text-gray-400">{catLabel(p.categoria)} · {p.proveedor?.nombre ?? 'Sin proveedor'}</p>
-                          </div>
-                        </button>
-                      ))}
-                      {!prodsFiltrados.length && (
-                        <button onClick={() => { setNombreLibre(busqueda); setBusqueda('') }}
-                          className="w-full px-3 py-2 rounded-xl text-[13px] text-[var(--primary)] font-medium hover:bg-[var(--primary)]/5 cursor-pointer transition-colors text-left">
-                          + Agregar "{busqueda}" como ítem libre
-                        </button>
-                      )}
+      <Modal
+        open={showAdd}
+        onClose={() => setShowAdd(false)}
+        title="Agregar producto"
+        footer={
+          <>
+            <Button variant="secondary" className="flex-1" onClick={() => setShowAdd(false)}>Cancelar</Button>
+            <Button className="flex-1" onClick={agregarItem} loading={guardando}
+              disabled={(!productoSel && !nombreLibre.trim()) || !cantidad || Number(cantidad) <= 0}>
+              Agregar a la lista
+            </Button>
+          </>
+        }
+      >
+        {!productoSel && (
+          <div>
+            <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Buscar en catálogo</p>
+            <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
+              placeholder="Ej: algodón, lavandina..."
+              className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+            {busqueda.length >= 2 && (
+              <div className="mt-2 space-y-1 max-h-44 overflow-y-auto">
+                {prodsFiltrados.map(p => (
+                  <button key={p.id} onClick={() => { setProductoSel(p); setUnidad(p.unidad) }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left hover:bg-gray-50 cursor-pointer transition-colors">
+                    <span className="text-[14px]">{catEmoji(p.categoria)}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-medium truncate">{p.nombre}</p>
+                      <p className="text-[11px] text-[var(--text-muted)]">{catLabel(p.categoria)} · {p.proveedor?.nombre ?? 'Sin proveedor'}</p>
                     </div>
-                  )}
-                </div>
-              )}
-
-              {productoSel && (
-                <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-xl border border-gray-200">
-                  <span className="text-[18px]">{catEmoji(productoSel.categoria)}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-semibold truncate">{productoSel.nombre}</p>
-                    <p className="text-[11px] text-gray-400">{catLabel(productoSel.categoria)} · {productoSel.proveedor?.nombre ?? 'Sin proveedor'}</p>
-                  </div>
-                  <button onClick={() => setProductoSel(null)} className="p-1 text-gray-400 hover:text-gray-700 cursor-pointer rounded-lg transition-colors">
-                    <IconX size={14} />
                   </button>
-                </div>
-              )}
-
-              {!productoSel && nombreLibre && (
-                <div>
-                  <p className="text-[12px] font-medium text-gray-500 mb-2">Ítem libre <span className="text-amber-500">(no está en catálogo)</span></p>
-                  <div className="flex gap-2">
-                    <input value={nombreLibre} onChange={e => setNombreLibre(e.target.value)}
-                      className="flex-1 border border-amber-200 bg-amber-50 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-amber-400" />
-                    <button onClick={() => setNombreLibre('')} className="p-2.5 text-gray-400 hover:text-gray-700 cursor-pointer rounded-xl border border-gray-200 transition-colors">
-                      <IconX size={14} />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {duplicado && (
-                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                  <span className="text-[14px]">⚠️</span>
-                  <p className="text-[12px] text-amber-700">
-                    Ya fue pedido por <span className="font-semibold">{duplicado.usuario.nombre}</span>. Podés editar la cantidad del ítem existente o agregar uno adicional.
-                  </p>
-                </div>
-              )}
-
-              {(productoSel || nombreLibre) && (
-                <>
-                  <div className="flex gap-3">
-                    <div className="flex-1">
-                      <p className="text-[12px] font-medium text-gray-500 mb-2">Cantidad</p>
-                      <input type="number" min="0.1" step="0.5" value={cantidad} onChange={e => setCantidad(e.target.value)}
-                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] text-center font-semibold focus:outline-none focus:border-[var(--primary)]" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-[12px] font-medium text-gray-500 mb-2">Unidad</p>
-                      {productoSel
-                        ? <div className="border border-gray-100 bg-gray-50 rounded-xl px-3 py-2.5 text-[13px] text-gray-500">{productoSel.unidad}</div>
-                        : <select value={unidad} onChange={e => setUnidad(e.target.value)}
-                            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)]">
-                            {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
-                          </select>
-                      }
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-[12px] font-medium text-gray-500 mb-2">Notas (opcional)</p>
-                    <input value={notas} onChange={e => setNotas(e.target.value)}
-                      placeholder="Ej: si no hay marca X, pedir marca Y"
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)]" />
-                  </div>
-
-                  <button onClick={() => setUrgente(u => !u)}
-                    className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold border cursor-pointer transition-all ${urgente ? 'bg-red-50 border-red-300 text-red-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-                    🔴 {urgente ? 'Urgente activado' : 'Marcar como urgente'}
+                ))}
+                {!prodsFiltrados.length && (
+                  <button onClick={() => { setNombreLibre(busqueda); setBusqueda('') }}
+                    className="w-full px-3 py-2 rounded-xl text-[13px] text-[var(--primary)] font-medium hover:bg-[var(--primary)]/5 cursor-pointer transition-colors text-left">
+                    + Agregar &quot;{busqueda}&quot; como ítem libre
                   </button>
-                </>
-              )}
-
-              <div className="flex gap-2 pt-1">
-                <button onClick={() => setShowAdd(false)}
-                  className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-[13px] font-medium cursor-pointer hover:bg-gray-50 transition-colors">
-                  Cancelar
-                </button>
-                <button onClick={agregarItem}
-                  disabled={guardando || (!productoSel && !nombreLibre.trim()) || !cantidad || Number(cantidad) <= 0}
-                  className="flex-1 py-2.5 bg-[image:var(--gradient)] text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                  {guardando ? 'Agregando…' : 'Agregar a la lista'}
-                </button>
+                )}
               </div>
-            </div>
+            )}
           </div>
-        </div>,
-        document.body
-      )}
+        )}
 
-      {/* Modal editar */}
-      {editItem && createPortal(
-        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 p-4" onClick={() => setEditItem(null)}>
-          <div className="bg-white rounded-2xl w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <p className="text-[15px] font-bold text-[var(--text)]">Editar ítem</p>
-              <button onClick={() => setEditItem(null)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors"><IconX size={18} /></button>
+        {productoSel && (
+          <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-xl border border-[var(--border)]">
+            <span className="text-[18px]">{catEmoji(productoSel.categoria)}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold truncate">{productoSel.nombre}</p>
+              <p className="text-[11px] text-[var(--text-muted)]">{catLabel(productoSel.categoria)} · {productoSel.proveedor?.nombre ?? 'Sin proveedor'}</p>
             </div>
-            <p className="text-[13px] font-medium text-[var(--text)]">{editItem.producto?.nombre ?? editItem.nombre_libre}</p>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <p className="text-[12px] font-medium text-gray-500 mb-2">Cantidad</p>
-                <input type="number" min="0.1" step="0.5" value={cantidad} onChange={e => setCantidad(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] text-center font-semibold focus:outline-none focus:border-[var(--primary)]" />
-              </div>
-              <div className="flex-1">
-                <p className="text-[12px] font-medium text-gray-500 mb-2">Unidad</p>
-                <div className="border border-gray-100 bg-gray-50 rounded-xl px-3 py-2.5 text-[13px] text-gray-500">{editItem.unidad}</div>
-              </div>
-            </div>
-            <div>
-              <p className="text-[12px] font-medium text-gray-500 mb-2">Notas</p>
-              <input value={notas} onChange={e => setNotas(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)]" />
-            </div>
-            <button onClick={() => setUrgente(u => !u)}
-              className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold border cursor-pointer transition-all ${urgente ? 'bg-red-50 border-red-300 text-red-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-              🔴 {urgente ? 'Urgente activado' : 'Marcar como urgente'}
+            <button onClick={() => setProductoSel(null)} className="p-1 text-gray-400 hover:text-gray-700 cursor-pointer rounded-lg transition-colors">
+              <IconX size={14} />
             </button>
-            <div className="flex gap-2 pt-1">
-              <button onClick={() => setEditItem(null)}
-                className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-[13px] font-medium cursor-pointer hover:bg-gray-50 transition-colors">Cancelar</button>
-              <button onClick={guardarEdicion} disabled={guardando}
-                className="flex-1 py-2.5 bg-[image:var(--gradient)] text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-40 transition-colors">
-                {guardando ? 'Guardando…' : 'Guardar'}
+          </div>
+        )}
+
+        {!productoSel && nombreLibre && (
+          <div>
+            <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Ítem libre <span className="text-amber-500">(no está en catálogo)</span></p>
+            <div className="flex gap-2">
+              <input value={nombreLibre} onChange={e => setNombreLibre(e.target.value)}
+                className="flex-1 border border-amber-200 bg-amber-50 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-amber-400" />
+              <button onClick={() => setNombreLibre('')} className="p-2.5 text-gray-400 hover:text-gray-700 cursor-pointer rounded-xl border border-[var(--border)] transition-colors">
+                <IconX size={14} />
               </button>
             </div>
           </div>
-        </div>,
-        document.body
-      )}
+        )}
+
+        {duplicado && (
+          <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+            <span className="text-[14px]">⚠️</span>
+            <p className="text-[12px] text-amber-700">
+              Ya fue pedido por <span className="font-semibold">{duplicado.usuario.nombre}</span>. Podés editar la cantidad del ítem existente o agregar uno adicional.
+            </p>
+          </div>
+        )}
+
+        {(productoSel || nombreLibre) && (
+          <>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Cantidad</p>
+                <input type="number" min="0.1" step="0.5" value={cantidad} onChange={e => setCantidad(e.target.value)}
+                  className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] text-center font-semibold focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Unidad</p>
+                {productoSel
+                  ? <div className="border border-[var(--border)] bg-gray-50 rounded-xl px-3 py-2.5 text-[13px] text-[var(--text-muted)] h-11 flex items-center">{productoSel.unidad}</div>
+                  : <select value={unidad} onChange={e => setUnidad(e.target.value)}
+                      className="w-full h-11 border border-[var(--border)] rounded-xl px-3 text-[13px] focus:outline-none focus:border-[var(--primary)]">
+                      {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
+                    </select>
+                }
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Notas (opcional)</p>
+              <input value={notas} onChange={e => setNotas(e.target.value)}
+                placeholder="Ej: si no hay marca X, pedir marca Y"
+                className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+            </div>
+
+            <button onClick={() => setUrgente(u => !u)}
+              className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold border cursor-pointer transition-all ${urgente ? 'bg-red-50 border-red-300 text-red-600' : 'border-[var(--border)] text-[var(--text-sub)] hover:bg-gray-50'}`}>
+              🔴 {urgente ? 'Urgente activado' : 'Marcar como urgente'}
+            </button>
+          </>
+        )}
+      </Modal>
+
+      {/* Modal editar */}
+      <Modal
+        open={!!editItem}
+        onClose={() => setEditItem(null)}
+        title="Editar ítem"
+        footer={
+          <>
+            <Button variant="secondary" className="flex-1" onClick={() => setEditItem(null)}>Cancelar</Button>
+            <Button className="flex-1" onClick={guardarEdicion} loading={guardando}>Guardar</Button>
+          </>
+        }
+      >
+        <p className="text-[14px] font-semibold text-[var(--text)]">{editItem?.producto?.nombre ?? editItem?.nombre_libre}</p>
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Cantidad</p>
+            <input type="number" min="0.1" step="0.5" value={cantidad} onChange={e => setCantidad(e.target.value)}
+              className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] text-center font-semibold focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+          </div>
+          <div className="flex-1">
+            <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Unidad</p>
+            <div className="border border-[var(--border)] bg-gray-50 rounded-xl px-3 py-2.5 text-[13px] text-[var(--text-muted)] h-11 flex items-center">{editItem?.unidad}</div>
+          </div>
+        </div>
+        <div>
+          <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Notas</p>
+          <input value={notas} onChange={e => setNotas(e.target.value)}
+            className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+        </div>
+        <button onClick={() => setUrgente(u => !u)}
+          className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold border cursor-pointer transition-all ${urgente ? 'bg-red-50 border-red-300 text-red-600' : 'border-[var(--border)] text-[var(--text-sub)] hover:bg-gray-50'}`}>
+          🔴 {urgente ? 'Urgente activado' : 'Marcar como urgente'}
+        </button>
+      </Modal>
     </div>
   )
 }
@@ -456,7 +446,7 @@ function ItemCard({ item, cicloAbierto, onEdit, onDelete }: {
   item: Item; cicloAbierto: boolean; onEdit: () => void; onDelete: () => void
 }) {
   return (
-    <div className={`bg-white border rounded-xl p-3 shadow-sm ${item.urgente ? 'border-red-200' : 'border-gray-100'}`}>
+    <div className={`bg-white border rounded-2xl p-3 shadow-sm ${item.urgente ? 'border-red-200' : 'border-[var(--border)]'}`}>
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -468,12 +458,12 @@ function ItemCard({ item, cicloAbierto, onEdit, onDelete }: {
           </div>
           <div className="flex items-center gap-2 mt-0.5">
             <span className="text-[12px] font-bold text-[var(--primary)]">{item.cantidad} {item.unidad}</span>
-            {item.producto?.categoria && <span className="text-[11px] text-gray-400">· {catEmoji(item.producto.categoria)} {catLabel(item.producto.categoria)}</span>}
+            {item.producto?.categoria && <span className="text-[11px] text-[var(--text-muted)]">· {catEmoji(item.producto.categoria)} {catLabel(item.producto.categoria)}</span>}
           </div>
-          {item.notas && <p className="text-[11px] text-gray-400 mt-0.5 italic">{item.notas}</p>}
+          {item.notas && <p className="text-[11px] text-[var(--text-muted)] mt-0.5 italic">{item.notas}</p>}
           <div className="flex items-center gap-1.5 mt-1.5">
             <Avatar nombre={item.usuario.nombre} foto={item.usuario.foto_perfil} size={16} />
-            <span className="text-[11px] text-gray-400">{item.usuario.nombre}</span>
+            <span className="text-[11px] text-[var(--text-muted)]">{item.usuario.nombre}</span>
           </div>
         </div>
         {cicloAbierto && (
@@ -497,6 +487,7 @@ function TabExportar({ cicloActivo, onCiclosChange, onTabChange }: {
   const [grupos, setGrupos] = useState<ExportGroup[]>([])
   const [loading, setLoading] = useState(false)
   const [copiado, setCopiado] = useState<string | null>(null)
+  const [confirmCerrar, setConfirmCerrar] = useState(false)
   const [cerrando, setCerrando] = useState(false)
 
   useEffect(() => {
@@ -505,6 +496,7 @@ function TabExportar({ cicloActivo, onCiclosChange, onTabChange }: {
     fetch(`/api/pedidos/ciclos/${cicloActivo.id}/exportar`)
       .then(r => r.json())
       .then(d => setGrupos(Array.isArray(d) ? d : []))
+      .catch(() => setGrupos([]))
       .finally(() => setLoading(false))
   }, [cicloActivo])
 
@@ -522,7 +514,7 @@ function TabExportar({ cicloActivo, onCiclosChange, onTabChange }: {
     setTimeout(() => setCopiado(null), 2000)
   }
 
-  async function cerrarYExportar() {
+  async function cerrarPedido() {
     if (!cicloActivo) return
     setCerrando(true)
     await fetch(`/api/pedidos/ciclos/${cicloActivo.id}`, {
@@ -531,6 +523,7 @@ function TabExportar({ cicloActivo, onCiclosChange, onTabChange }: {
       body: JSON.stringify({ estado: 'enviado' }),
     })
     setCerrando(false)
+    setConfirmCerrar(false)
     onCiclosChange()
     onTabChange('lista')
   }
@@ -539,20 +532,20 @@ function TabExportar({ cicloActivo, onCiclosChange, onTabChange }: {
 
   return (
     <div>
-      <p className="text-[12px] text-gray-400 mb-4">
-        Copiá la lista por proveedor y pegala en WhatsApp. Al cerrar, se archiva esta lista y se abre una nueva vacía.
+      <p className="text-[12px] text-[var(--text-muted)] mb-4">
+        Copiá la lista de cada proveedor y pegala en WhatsApp. Al cerrar el pedido se archiva esta lista y se abre una nueva vacía.
       </p>
 
       {loading && <Spinner />}
 
       {!loading && !grupos.length && (
-        <p className="text-center text-[13px] text-gray-400 py-12">No hay items en la lista</p>
+        <p className="text-center text-[13px] text-gray-400 py-12">No hay ítems en la lista</p>
       )}
 
       <div className="space-y-4 mb-6">
         {grupos.map(g => (
-          <div key={g.nombre_proveedor} className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+          <div key={g.nombre_proveedor} className="bg-white border border-[var(--border)] rounded-2xl shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
               <p className="text-[13px] font-bold text-[var(--text)]">📦 {g.nombre_proveedor}</p>
               <button onClick={() => copiarProveedor(g)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-semibold cursor-pointer transition-all ${copiado === g.nombre_proveedor ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
@@ -565,9 +558,9 @@ function TabExportar({ cicloActivo, onCiclosChange, onTabChange }: {
                   <span className="text-[12px] mt-0.5">{item.urgente ? '🔴' : '•'}</span>
                   <div className="flex-1 min-w-0">
                     <span className="text-[13px] font-medium">{item.nombre}</span>
-                    <span className="text-[12px] text-gray-500 ml-2">x{item.cantidad} {item.unidad}</span>
-                    {item.notas && <span className="text-[11px] text-gray-400 ml-1 italic">({item.notas})</span>}
-                    <span className="text-[11px] text-gray-400 ml-2">— {item.usuario}</span>
+                    <span className="text-[12px] text-[var(--text-muted)] ml-2">x{item.cantidad} {item.unidad}</span>
+                    {item.notas && <span className="text-[11px] text-[var(--text-muted)] ml-1 italic">({item.notas})</span>}
+                    <span className="text-[11px] text-[var(--text-muted)] ml-2">— {item.usuario}</span>
                   </div>
                 </div>
               ))}
@@ -577,11 +570,26 @@ function TabExportar({ cicloActivo, onCiclosChange, onTabChange }: {
       </div>
 
       {cicloActivo.estado === 'abierto' && (
-        <button onClick={cerrarYExportar} disabled={cerrando || !grupos.length}
-          className="w-full py-3 bg-[image:var(--gradient)] text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-          {cerrando ? 'Cerrando…' : '✅ Cerrar pedido y abrir lista nueva'}
-        </button>
+        <Button
+          variant="danger"
+          className="w-full"
+          onClick={() => setConfirmCerrar(true)}
+          disabled={!grupos.length}
+        >
+          Cerrar pedido y archivar lista
+        </Button>
       )}
+
+      <Confirm
+        open={confirmCerrar}
+        onClose={() => setConfirmCerrar(false)}
+        onConfirm={cerrarPedido}
+        title="¿Cerrás el pedido?"
+        message={`Se archivará la lista actual (${grupos.reduce((n, g) => n + g.items.length, 0)} ítems) y se abrirá una nueva vacía.`}
+        confirmLabel="Cerrar pedido"
+        danger
+        loading={cerrando}
+      />
     </div>
   )
 }
@@ -602,6 +610,7 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
   const [proveedorId, setProveedorId] = useState('')
   const [unidad, setUnidad] = useState('unidad')
   const [guardando, setGuardando] = useState(false)
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   const prodsFiltrados = productos.filter(p => {
     if (catFiltro !== 'todas' && p.categoria !== catFiltro) return false
@@ -614,36 +623,42 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
     setShowForm(true)
   }
   function abrirEditar(p: Producto) {
-    setEditando(p); setNombre(p.nombre); setCategoria(p.categoria); setProveedorId(p.proveedor_id?.toString() ?? ''); setUnidad(p.unidad)
+    setEditando(p); setNombre(p.nombre); setCategoria(p.categoria)
+    setProveedorId(p.proveedor_id?.toString() ?? ''); setUnidad(p.unidad)
     setShowForm(true)
   }
 
   async function guardar() {
     setGuardando(true)
     const body = { nombre, categoria, proveedor_id: proveedorId ? Number(proveedorId) : null, unidad }
-    if (editando) {
-      await fetch(`/api/pedidos/productos/${editando.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    } else {
-      await fetch('/api/pedidos/productos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    const res = editando
+      ? await fetch(`/api/pedidos/productos/${editando.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      : await fetch('/api/pedidos/productos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    setGuardando(false)
+    if (res.ok) {
+      setShowForm(false); onRefresh()
+      setToast({ msg: editando ? 'Producto actualizado' : 'Producto creado', type: 'success' })
+      setTimeout(() => setToast(null), 3000)
     }
-    setGuardando(false); setShowForm(false); onRefresh()
   }
 
   async function toggleActivo(p: Producto) {
-    await fetch(`/api/pedidos/productos/${p.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ activo: !p.activo }) })
+    await fetch(`/api/pedidos/productos/${p.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ activo: !p.activo }),
+    })
     onRefresh()
   }
 
   return (
     <div>
+      <Toast message={toast?.msg ?? ''} visible={!!toast} type={toast?.type} />
+
       <div className="flex gap-2 mb-4">
         <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
           placeholder="Buscar producto..."
-          className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)]" />
-        <button onClick={abrirNuevo}
-          className="flex items-center gap-1.5 px-3 py-2.5 bg-[image:var(--gradient)] text-white rounded-xl text-[13px] font-semibold cursor-pointer transition-colors">
-          <IconPlus size={14} /> Nuevo
-        </button>
+          className="flex-1 border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+        <Button size="sm" onClick={abrirNuevo} icon={<IconPlus size={14} />}>Nuevo</Button>
       </div>
 
       <div className="flex gap-1.5 overflow-x-auto pb-1 mb-4">
@@ -661,11 +676,11 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
 
       <div className="space-y-2">
         {prodsFiltrados.map(p => (
-          <div key={p.id} className={`bg-white border rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm ${!p.activo ? 'opacity-50 border-gray-100' : 'border-gray-100'}`}>
+          <div key={p.id} className={`bg-white border rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm ${!p.activo ? 'opacity-50 border-[var(--border)]' : 'border-[var(--border)]'}`}>
             <span className="text-[18px]">{catEmoji(p.categoria)}</span>
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-semibold truncate">{p.nombre}</p>
-              <p className="text-[11px] text-gray-400">{catLabel(p.categoria)} · {p.unidad} · {p.proveedor?.nombre ?? 'Sin proveedor'}</p>
+              <p className="text-[11px] text-[var(--text-muted)]">{catLabel(p.categoria)} · {p.unidad} · {p.proveedor?.nombre ?? 'Sin proveedor'}</p>
             </div>
             <div className="flex items-center gap-1">
               <button onClick={() => toggleActivo(p)}
@@ -681,58 +696,43 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
         {!prodsFiltrados.length && <p className="text-center text-[13px] text-gray-400 py-10">Sin productos</p>}
       </div>
 
-      {showForm && createPortal(
-        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 p-4" onClick={() => setShowForm(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <p className="text-[15px] font-bold text-[var(--text)]">{editando ? 'Editar producto' : 'Nuevo producto'}</p>
-              <button onClick={() => setShowForm(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors"><IconX size={18} /></button>
-            </div>
-            <div>
-              <p className="text-[12px] font-medium text-gray-500 mb-2">Nombre</p>
-              <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Algodón"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)]" />
-            </div>
-            <div>
-              <p className="text-[12px] font-medium text-gray-500 mb-2">Categoría</p>
-              <div className="flex flex-wrap gap-1.5">
-                {CATEGORIAS.map(c => (
-                  <button key={c.key} onClick={() => setCategoria(c.key)}
-                    className={`px-2.5 py-1.5 rounded-full text-[12px] font-medium border cursor-pointer transition-all ${categoria === c.key ? 'bg-[image:var(--gradient)] text-white border-transparent' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-                    {c.emoji} {c.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <p className="text-[12px] font-medium text-gray-500 mb-2">Proveedor</p>
-                <select value={proveedorId} onChange={e => setProveedorId(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)]">
-                  <option value="">Sin proveedor</option>
-                  {proveedores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                </select>
-              </div>
-              <div className="w-28">
-                <p className="text-[12px] font-medium text-gray-500 mb-2">Unidad</p>
-                <select value={unidad} onChange={e => setUnidad(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)]">
-                  {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="flex gap-2 pt-1">
-              <button onClick={() => setShowForm(false)}
-                className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-[13px] font-medium cursor-pointer hover:bg-gray-50 transition-colors">Cancelar</button>
-              <button onClick={guardar} disabled={guardando || !nombre.trim()}
-                className="flex-1 py-2.5 bg-[image:var(--gradient)] text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                {guardando ? 'Guardando…' : 'Guardar'}
+      <Modal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        title={editando ? 'Editar producto' : 'Nuevo producto'}
+        footer={
+          <>
+            <Button variant="secondary" className="flex-1" onClick={() => setShowForm(false)}>Cancelar</Button>
+            <Button className="flex-1" onClick={guardar} loading={guardando} disabled={!nombre.trim()}>Guardar</Button>
+          </>
+        }
+      >
+        <div>
+          <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Nombre</p>
+          <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Algodón"
+            className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+        </div>
+        <div>
+          <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Categoría</p>
+          <div className="flex flex-wrap gap-1.5">
+            {CATEGORIAS.map(c => (
+              <button key={c.key} onClick={() => setCategoria(c.key)}
+                className={`px-2.5 py-1.5 rounded-full text-[12px] font-medium border cursor-pointer transition-all ${categoria === c.key ? 'bg-[image:var(--gradient)] text-white border-transparent' : 'border-[var(--border)] text-[var(--text-sub)] hover:bg-gray-50'}`}>
+                {c.emoji} {c.label}
               </button>
-            </div>
+            ))}
           </div>
-        </div>,
-        document.body
-      )}
+        </div>
+        <div className="flex gap-3">
+          <Select label="Proveedor" value={proveedorId} onChange={setProveedorId} className="flex-1">
+            <option value="">Sin proveedor</option>
+            {proveedores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          </Select>
+          <Select label="Unidad" value={unidad} onChange={setUnidad} className="w-28">
+            {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
+          </Select>
+        </div>
+      </Modal>
     </div>
   )
 }
@@ -744,10 +744,16 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [config, setConfig] = useState<{ dias_aviso: number; hora_aviso: string; dia_cierre: number } | null>(null)
   const [loading, setLoading] = useState(true)
-  const [guardandoPerm, setGuardandoPerm] = useState<string | null>(null) // "userId-catKey"
+  const [guardandoPerm, setGuardandoPerm] = useState<string | null>(null)
   const [guardandoConf, setGuardandoConf] = useState(false)
   const [catAbierta, setCatAbierta] = useState<CatKey | null>(null)
   const [cicloCerrando, setCicloCerrando] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+
+  function showToast(msg: string, type: 'success' | 'error' = 'success') {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3000)
+  }
 
   useEffect(() => {
     Promise.all([
@@ -756,7 +762,7 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
     ]).then(([p, c]) => {
       setPermisos(p.permisos ?? [])
       setUsuarios(p.usuarios ?? [])
-      setConfig(c)
+      setConfig(c.error ? null : c)
     }).finally(() => setLoading(false))
   }, [])
 
@@ -785,13 +791,21 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
   async function guardarConfig() {
     if (!config) return
     setGuardandoConf(true)
-    await fetch('/api/pedidos/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) })
+    const res = await fetch('/api/pedidos/config', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    })
     setGuardandoConf(false)
+    if (res.ok) showToast('Configuración guardada')
+    else showToast('Error al guardar', 'error')
   }
 
   async function reabrirCiclo(id: string) {
     setCicloCerrando(id)
-    await fetch(`/api/pedidos/ciclos/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estado: 'abierto' }) })
+    await fetch(`/api/pedidos/ciclos/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estado: 'abierto' }),
+    })
     setCicloCerrando(null); onRefreshCiclos()
   }
 
@@ -801,24 +815,25 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
 
   return (
     <div className="space-y-6">
+      <Toast message={toast?.msg ?? ''} visible={!!toast} type={toast?.type} />
 
       {/* Permisos por categoría */}
       <div>
         <p className="text-[14px] font-bold text-[var(--text)] mb-1">Permisos por categoría</p>
-        <p className="text-[12px] text-gray-400 mb-3">Elegí quién puede pedir en cada categoría cuando habilites el acceso general.</p>
+        <p className="text-[12px] text-[var(--text-muted)] mb-3">Elegí quién puede pedir en cada categoría cuando habilites el acceso general.</p>
         <div className="space-y-2">
           {CATEGORIAS.map(cat => {
             const abierta = catAbierta === cat.key
             const conAcceso = usuarios.filter(u => tienePerm(u.id, cat.key))
             return (
-              <div key={cat.key} className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+              <div key={cat.key} className="bg-white border border-[var(--border)] rounded-2xl shadow-sm overflow-hidden">
                 <button
                   onClick={() => setCatAbierta(abierta ? null : cat.key)}
                   className="w-full flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors">
                   <span className="text-[18px]">{cat.emoji}</span>
                   <div className="flex-1 min-w-0 text-left">
                     <p className="text-[13px] font-semibold text-[var(--text)]">{cat.label}</p>
-                    <p className="text-[11px] text-gray-400">
+                    <p className="text-[11px] text-[var(--text-muted)]">
                       {conAcceso.length ? conAcceso.map(u => u.nombre.split(' ')[0]).join(', ') : 'Sin accesos'}
                     </p>
                   </div>
@@ -828,7 +843,7 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
                 </button>
 
                 {abierta && (
-                  <div className="border-t border-gray-100 px-4 py-3 space-y-2">
+                  <div className="border-t border-[var(--border)] px-4 py-3 space-y-2">
                     {usuarios.map(u => {
                       const tiene = tienePerm(u.id, cat.key)
                       const cargando = guardandoPerm === `${u.id}-${cat.key}`
@@ -858,27 +873,27 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
       {config && (
         <div>
           <p className="text-[14px] font-bold text-[var(--text)] mb-3">Recordatorio automático</p>
-          <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm space-y-3">
-            <div className="flex items-center gap-3">
+          <div className="bg-white border border-[var(--border)] rounded-2xl p-4 shadow-sm space-y-3">
+            <div className="flex gap-3">
               <div className="flex-1">
-                <p className="text-[12px] font-medium text-gray-500 mb-1">Días antes del cierre</p>
+                <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Días antes del cierre</p>
                 <input type="number" min="0" max="7" value={config.dias_aviso}
                   onChange={e => setConfig(c => c ? { ...c, dias_aviso: Number(e.target.value) } : c)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[var(--primary)]" />
+                  className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
               </div>
               <div className="flex-1">
-                <p className="text-[12px] font-medium text-gray-500 mb-1">Día de cierre habitual</p>
-                <select value={config.dia_cierre}
-                  onChange={e => setConfig(c => c ? { ...c, dia_cierre: Number(e.target.value) } : c)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[var(--primary)]">
+                <Select
+                  label="Día de cierre habitual"
+                  value={String(config.dia_cierre)}
+                  onChange={v => setConfig(c => c ? { ...c, dia_cierre: Number(v) } : c)}
+                >
                   {DIAS.map((d, i) => <option key={i} value={i}>{d}</option>)}
-                </select>
+                </Select>
               </div>
             </div>
-            <button onClick={guardarConfig} disabled={guardandoConf}
-              className="w-full py-2.5 bg-[image:var(--gradient)] text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-40 transition-colors">
-              {guardandoConf ? 'Guardando…' : 'Guardar configuración'}
-            </button>
+            <Button className="w-full" onClick={guardarConfig} loading={guardandoConf}>
+              Guardar configuración
+            </Button>
           </div>
         </div>
       )}
@@ -889,18 +904,24 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
           <p className="text-[14px] font-bold text-[var(--text)] mb-3">Listas anteriores</p>
           <div className="space-y-2">
             {ciclosCerrados.slice(0, 8).map(c => (
-              <div key={c.id} className="bg-white border border-gray-100 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-semibold truncate">{c.nombre}</p>
-                  <p className="text-[11px] text-gray-400">{formatFecha(c.fecha_apertura)}</p>
+              <div key={c.id} className="bg-white border border-[var(--border)] rounded-2xl px-4 py-3 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold truncate">{c.nombre}</p>
+                    <p className="text-[11px] text-[var(--text-muted)]">{formatFecha(c.fecha_apertura)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <EstadoBadge estado={c.estado} />
+                    <Button size="sm" variant="secondary" onClick={() => reabrirCiclo(c.id)} disabled={cicloCerrando === c.id}>
+                      Reabrir
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <EstadoBadge estado={c.estado} />
-                  <button onClick={() => reabrirCiclo(c.id)} disabled={cicloCerrando === c.id}
-                    className="text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 cursor-pointer transition-colors disabled:opacity-40">
-                    Reabrir
-                  </button>
-                </div>
+                {c.cerrado_por && c.cerrado_en && (
+                  <p className="text-[11px] text-[var(--text-muted)] mt-1">
+                    Cerrado por <span className="font-medium">{c.cerrado_por}</span> el {formatCerradoEn(c.cerrado_en)}
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -923,18 +944,24 @@ export default function PedidosClient({ session }: { session: SessionUser }) {
   const [loadingBase, setLoadingBase] = useState(true)
 
   const cargarCiclos = useCallback(() => {
-    fetch('/api/pedidos/ciclos').then(r => r.json()).then(d => setCiclos(Array.isArray(d) ? d : []))
+    fetch('/api/pedidos/ciclos')
+      .then(r => r.json())
+      .then(d => setCiclos(Array.isArray(d) ? d : []))
+      .catch(() => setCiclos([]))
   }, [])
 
   const cargarProductos = useCallback(() => {
-    fetch('/api/pedidos/productos').then(r => r.json()).then(d => setProductos(Array.isArray(d) ? d : []))
+    fetch('/api/pedidos/productos')
+      .then(r => r.json())
+      .then(d => setProductos(Array.isArray(d) ? d : []))
+      .catch(() => setProductos([]))
   }, [])
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/pedidos/ciclos').then(r => r.json()),
-      fetch('/api/pedidos/productos').then(r => r.json()),
-      fetch('/api/proveedores').then(r => r.json()),
+      fetch('/api/pedidos/ciclos').then(r => r.json()).catch(() => []),
+      fetch('/api/pedidos/productos').then(r => r.json()).catch(() => []),
+      fetch('/api/proveedores').then(r => r.json()).catch(() => []),
     ]).then(([c, p, pr]) => {
       setCiclos(Array.isArray(c) ? c : [])
       setProductos(Array.isArray(p) ? p : [])

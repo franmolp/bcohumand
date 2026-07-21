@@ -44,9 +44,18 @@ export async function PUT(
   const { estado, nombre } = body
 
   const ESTADOS_VALIDOS = ['abierto', 'cerrado', 'enviado']
-  const update: Record<string, string> = {}
+  const update: Record<string, unknown> = {}
   if (estado && ESTADOS_VALIDOS.includes(estado)) update.estado = estado
   if (nombre?.trim()) update.nombre = nombre.trim()
+
+  if (estado === 'cerrado' || estado === 'enviado') {
+    update.cerrado_por = session.nombre
+    update.cerrado_en = new Date().toISOString()
+  }
+  if (estado === 'abierto') {
+    update.cerrado_por = null
+    update.cerrado_en = null
+  }
 
   if (!Object.keys(update).length) {
     return NextResponse.json({ error: 'Nada para actualizar' }, { status: 400 })

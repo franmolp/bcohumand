@@ -28,10 +28,9 @@ export async function GET(
   const items = itemsRes.data ?? []
   const userIds = [...new Set(items.map(i => i.usuario_id))]
 
-  const { data: usuarios } = await supabase
-    .from('usuarios')
-    .select('id, nombre, foto_perfil')
-    .in('id', userIds)
+  const { data: usuarios } = userIds.length
+    ? await supabase.from('usuarios').select('id, nombre, foto_perfil').in('id', userIds)
+    : { data: [] as { id: string; nombre: string; foto_perfil: string | null }[] }
 
   const userMap: Record<string, { nombre: string; foto_perfil: string | null }> = {}
   for (const u of usuarios ?? []) {
