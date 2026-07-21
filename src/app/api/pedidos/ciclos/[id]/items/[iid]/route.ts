@@ -52,7 +52,7 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string; iid: string }> }
 ) {
   const session = await getSession()
@@ -60,6 +60,11 @@ export async function DELETE(
 
   const { iid } = await params
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+  const permanente = new URL(request.url).searchParams.get('permanente') === 'true'
+
+  if (permanente && !isAdmin) {
+    return NextResponse.json({ error: 'Sin permisos para eliminar definitivamente' }, { status: 403 })
+  }
 
   const { data: item } = await supabaseAdmin
     .from('pedidos_items')
@@ -77,11 +82,16 @@ export async function DELETE(
     return NextResponse.json({ error: 'El pedido ya está cerrado' }, { status: 400 })
   }
 
-  const { error } = await supabaseAdmin
-    .from('pedidos_items')
-    .update({ archivado: true, archivado_por: session.nombre, archivado_en: new Date().toISOString() })
-    .eq('id', iid)
+  if (permanente) {
+    const { error } = await supabaseAdmin.from('pedidos_items').delete().eq('id', iid)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  } else {
+    const { error } = await supabaseAdmin
+      .from('pedidos_items')
+      .update({ archivado: true, archivado_por: session.nombre, archivado_en: new Date().toISOString() })
+      .eq('id', iid)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

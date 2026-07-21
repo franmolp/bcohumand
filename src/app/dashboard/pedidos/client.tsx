@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import type { SessionUser } from '@/types'
 import { Button, Spinner, Modal, Toast, Confirm, Select } from '@/components/ui'
 import {
-  IconShoppingBag, IconX, IconCheck, IconEdit, IconPlus, IconChevronRight,
+  IconShoppingBag, IconX, IconCheck, IconEdit, IconPlus, IconChevronRight, IconTrash,
 } from '@/components/ui/Icons'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -111,16 +111,19 @@ function EstadoBadge({ estado }: { estado: string }) {
 
 type AddStep = 'search' | 'new' | 'config'
 
-function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefreshProductos }: {
+function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefreshProductos, isAdmin }: {
   cicloActivo: Ciclo | null
   productos: Producto[]
   proveedores: Proveedor[]
   onCiclosChange: () => void
   onRefreshProductos: () => void
+  isAdmin: boolean
 }) {
   const [items, setItems] = useState<Item[]>([])
   const [archivados, setArchivados] = useState<Item[]>([])
   const [showArchivados, setShowArchivados] = useState(false)
+  const [confirmArchive, setConfirmArchive] = useState<Item | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<Item | null>(null)
   const [loading, setLoading] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [editItem, setEditItem] = useState<Item | null>(null)
@@ -248,6 +251,14 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
   async function archivarItem(id: string) {
     if (!cicloActivo) return
     await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items/${id}`, { method: 'DELETE' })
+    setConfirmArchive(null)
+    cargar()
+  }
+
+  async function eliminarDefinitivo(id: string) {
+    if (!cicloActivo) return
+    await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items/${id}?permanente=true`, { method: 'DELETE' })
+    setConfirmDelete(null)
     cargar()
   }
 
@@ -331,6 +342,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
                           key={item.id}
                           item={item}
                           cicloAbierto={cicloActivo.estado === 'abierto'}
+                          isAdmin={isAdmin}
                           onEdit={() => {
                             setEditItem(item)
                             setEditCantidad(String(item.cantidad))
@@ -338,7 +350,8 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
                             setEditNotas(item.notas ?? '')
                             setEditUrgente(item.urgente)
                           }}
-                          onArchive={() => archivarItem(item.id)}
+                          onArchive={() => setConfirmArchive(item)}
+                          onDelete={() => setConfirmDelete(item)}
                         />
                       ))}
                     </div>
@@ -537,6 +550,24 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
         )}
       </Modal>
 
+      <Confirm
+        open={!!confirmArchive}
+        title="¿Archivás este ítem?"
+        message={`"${confirmArchive?.producto?.nombre ?? confirmArchive?.nombre_libre ?? 'Ítem'}" pasará a la lista de archivados. Quedará registrado quién lo cargó y quién lo archivó.`}
+        confirmLabel="Archivar"
+        onConfirm={() => confirmArchive && archivarItem(confirmArchive.id)}
+        onClose={() => setConfirmArchive(null)}
+      />
+      <Confirm
+        open={!!confirmDelete}
+        title="¿Eliminás definitivamente?"
+        message={`"${confirmDelete?.producto?.nombre ?? confirmDelete?.nombre_libre ?? 'Ítem'}" se borrará para siempre. Esta acción no se puede deshacer.`}
+        confirmLabel="Eliminar"
+        danger
+        onConfirm={() => confirmDelete && eliminarDefinitivo(confirmDelete.id)}
+        onClose={() => setConfirmDelete(null)}
+      />
+
       {/* Modal editar */}
       <Modal
         open={!!editItem}
@@ -581,11 +612,12 @@ function UrgenteToggle({ value, onChange }: { value: boolean; onChange: (v: bool
   )
 }
 
-function ItemRow({ item, cicloAbierto, onEdit, onArchive }: {
-  item: Item; cicloAbierto: boolean; onEdit: () => void; onArchive: () => void
+function ItemRow({ item, cicloAbierto, isAdmin, onEdit, onArchive, onDelete }: {
+  item: Item; cicloAbierto: boolean; isAdmin: boolean
+  onEdit: () => void; onArchive: () => void; onDelete: () => void
 }) {
   return (
-    <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg group ${item.urgente ? 'bg-red-50' : 'hover:bg-gray-50'} transition-colors`}>
+    <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg ${item.urgente ? 'bg-red-50' : 'hover:bg-gray-50'} transition-colors`}>
       <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.urgente ? 'bg-red-500' : 'bg-gray-200'}`} />
       <div className="flex-1 min-w-0">
         <span className={`text-[13px] ${item.urgente ? 'font-semibold text-red-700' : 'text-[var(--text)]'}`}>
@@ -595,13 +627,14 @@ function ItemRow({ item, cicloAbierto, onEdit, onArchive }: {
         {item.urgente && <span className="ml-2 text-[9px] font-bold text-red-500 uppercase tracking-wide">urgente</span>}
         {item.notas && <span className="text-[11px] text-[var(--text-muted)] ml-2 italic">· {item.notas}</span>}
       </div>
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1">
         <Avatar nombre={item.usuario.nombre} foto={item.usuario.foto_perfil} size={16} />
-        <span className="text-[10px] text-[var(--text-muted)] hidden sm:block">{item.usuario.nombre.split(' ')[0]}</span>
+        <span className="text-[10px] text-[var(--text-muted)] hidden sm:block ml-1">{item.usuario.nombre.split(' ')[0]}</span>
         {cicloAbierto && (
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5">
-            <button onClick={onEdit} className="p-1 rounded text-gray-400 hover:text-gray-700 cursor-pointer transition-colors"><IconEdit size={12} /></button>
-            <button onClick={onArchive} title="Archivar" className="p-1 rounded text-gray-400 hover:text-amber-500 cursor-pointer transition-colors"><IconX size={12} /></button>
+          <div className="flex gap-0.5 ml-1">
+            <button onClick={onEdit} title="Editar" className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors"><IconEdit size={12} /></button>
+            <button onClick={onArchive} title="Archivar" className="p-1.5 rounded text-gray-400 hover:text-amber-500 hover:bg-amber-50 cursor-pointer transition-colors"><IconX size={12} /></button>
+            {isAdmin && <button onClick={onDelete} title="Eliminar definitivo" className="p-1.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors"><IconTrash size={12} /></button>}
           </div>
         )}
       </div>
@@ -1099,6 +1132,7 @@ export default function PedidosClient({ session }: { session: SessionUser }) {
               proveedores={proveedores}
               onCiclosChange={cargarCiclos}
               onRefreshProductos={cargarProductos}
+              isAdmin={isAdmin}
             />
           )}
           {tab === 'exportar' && <TabExportar cicloActivo={cicloActivo} onCiclosChange={cargarCiclos} onTabChange={t => setTab(t as Tab)} />}
