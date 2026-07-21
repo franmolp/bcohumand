@@ -23,7 +23,7 @@ export async function PUT(
     return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
   }
 
-  const ciclo = item.ciclo as { estado: string } | null
+  const ciclo = (Array.isArray(item.ciclo) ? item.ciclo[0] : item.ciclo) as { estado: string } | null
   if (!isAdmin && ciclo?.estado !== 'abierto') {
     return NextResponse.json({ error: 'El pedido ya está cerrado' }, { status: 400 })
   }
@@ -72,7 +72,7 @@ export async function DELETE(
     return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
   }
 
-  const ciclo = item.ciclo as { estado: string } | null
+  const ciclo = (Array.isArray(item.ciclo) ? item.ciclo[0] : item.ciclo) as { estado: string } | null
   if (!isAdmin && ciclo?.estado !== 'abierto') {
     return NextResponse.json({ error: 'El pedido ya está cerrado' }, { status: 400 })
   }
