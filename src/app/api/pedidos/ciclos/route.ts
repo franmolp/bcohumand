@@ -1,41 +1,43 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/auth'
+
+function nombreCicloAuto(): string {
+  const hoy = new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: 'numeric', month: 'numeric', year: 'numeric' })
+  return `Pedido desde ${hoy}`
+}
+
+function hoyISO(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+}
 
 export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { data, error } = await supabaseAdmin
+  // Si no hay ciclo abierto, crear uno automáticamente
+  const { data: abiertos } = await supabaseAdmin
     .from('pedidos_ciclos')
-    .select('*')
-    .order('fecha_cierre', { ascending: false })
-    .limit(20)
+    .select('id')
+    .eq('estado', 'abierto')
+    .limit(1)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data ?? [])
-}
-
-export async function POST(request: NextRequest) {
-  const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-
-  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
-  if (!isAdmin) return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
-
-  const body = await request.json().catch(() => ({}))
-  const { nombre, fecha_apertura, fecha_cierre } = body
-
-  if (!nombre?.trim() || !fecha_apertura || !fecha_cierre) {
-    return NextResponse.json({ error: 'Faltan campos requeridos' }, { status: 400 })
+  if (!abiertos?.length) {
+    const hoy = hoyISO()
+    await supabaseAdmin.from('pedidos_ciclos').insert({
+      nombre: nombreCicloAuto(),
+      fecha_apertura: hoy,
+      fecha_cierre: hoy,
+      estado: 'abierto',
+    })
   }
 
   const { data, error } = await supabaseAdmin
     .from('pedidos_ciclos')
-    .insert({ nombre: nombre.trim(), fecha_apertura, fecha_cierre, estado: 'abierto' })
-    .select()
-    .single()
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(20)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(data ?? [])
 }

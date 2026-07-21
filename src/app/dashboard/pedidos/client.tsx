@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import type { SessionUser } from '@/types'
 import {
-  IconShoppingBag, IconX, IconCheck, IconEdit, IconChevronRight,
-  IconPlus, IconSettings, IconBarChart,
+  IconShoppingBag, IconX, IconCheck, IconEdit,
+  IconPlus, IconSettings, IconBarChart, IconChevronRight, IconChevronLeft,
 } from '@/components/ui/Icons'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -116,18 +116,11 @@ function formatFecha(iso: string) {
   return `${parseInt(d)}/${parseInt(m)}/${y}`
 }
 
-function diasHasta(fecha: string): number {
-  const hoy = new Date()
-  hoy.setHours(0, 0, 0, 0)
-  const cierre = new Date(fecha + 'T00:00:00')
-  return Math.round((cierre.getTime() - hoy.getTime()) / 86400000)
-}
-
 function EstadoBadge({ estado }: { estado: string }) {
   const map: Record<string, string> = {
-    abierto:  'bg-green-50 text-green-700 border-green-200',
-    cerrado:  'bg-amber-50 text-amber-600 border-amber-200',
-    enviado:  'bg-blue-50 text-blue-600 border-blue-200',
+    abierto:   'bg-green-50 text-green-700 border-green-200',
+    cerrado:   'bg-amber-50 text-amber-600 border-amber-200',
+    enviado:   'bg-blue-50 text-blue-600 border-blue-200',
     pendiente: 'bg-gray-100 text-gray-500 border-gray-200',
     ordenado:  'bg-amber-50 text-amber-600 border-amber-200',
     recibido:  'bg-green-50 text-green-700 border-green-200',
@@ -141,10 +134,10 @@ function EstadoBadge({ estado }: { estado: string }) {
 
 // ─── Tab: Lista ───────────────────────────────────────────────────────────────
 
-function TabLista({ cicloActivo, productos, onRefresh }: {
+function TabLista({ cicloActivo, productos, onCiclosChange }: {
   cicloActivo: Ciclo | null
   productos: Producto[]
-  onRefresh: () => void
+  onCiclosChange: () => void
 }) {
   const [items, setItems] = useState<Item[]>([])
   const [loading, setLoading] = useState(false)
@@ -181,10 +174,7 @@ function TabLista({ cicloActivo, productos, onRefresh }: {
     .filter(p => p.activo && (busqueda.length < 2 || p.nombre.toLowerCase().includes(busqueda.toLowerCase())))
     .slice(0, 8)
 
-  // Detecta si el producto ya está en la lista
-  const duplicado = productoSel
-    ? items.find(i => i.producto_id === productoSel.id)
-    : null
+  const duplicado = productoSel ? items.find(i => i.producto_id === productoSel.id) : null
 
   async function agregarItem() {
     if (!cicloActivo) return
@@ -202,71 +192,62 @@ function TabLista({ cicloActivo, productos, onRefresh }: {
       }),
     })
     setGuardando(false)
-    if (res.ok) {
-      setShowAdd(false); resetForm(); cargar()
-    }
+    if (res.ok) { setShowAdd(false); resetForm(); cargar() }
   }
 
   async function guardarEdicion() {
-    if (!editItem) return
+    if (!editItem || !cicloActivo) return
     setGuardando(true)
-    await fetch(`/api/pedidos/ciclos/${cicloActivo!.id}/items/${editItem.id}`, {
+    await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items/${editItem.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cantidad: Number(cantidad), notas: notas || null, urgente }),
     })
-    setGuardando(false)
-    setEditItem(null); cargar()
+    setGuardando(false); setEditItem(null); cargar()
   }
 
   async function eliminarItem(id: string) {
-    await fetch(`/api/pedidos/ciclos/${cicloActivo!.id}/items/${id}`, { method: 'DELETE' })
+    if (!cicloActivo) return
+    await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items/${id}`, { method: 'DELETE' })
     cargar()
   }
 
-  // Agrupar por categoría
-  const porCategoria = CATEGORIAS.map(cat => ({
-    cat,
-    items: items.filter(i => i.producto?.categoria === cat.key),
-  })).filter(g => g.items.length)
+  // Agrupar por proveedor
+  const porProveedor: { nombre: string; items: Item[] }[] = []
+  const mapaProveedor: Record<string, Item[]> = {}
 
-  const sinCategoria = items.filter(i => !i.producto)
-
-  const dias = cicloActivo ? diasHasta(cicloActivo.fecha_cierre) : null
-
-  if (!cicloActivo) {
-    return (
-      <div className="text-center py-16">
-        <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-3">
-          <IconShoppingBag size={24} className="text-gray-400" />
-        </div>
-        <p className="text-[14px] font-semibold text-[var(--text)] mb-1">No hay ciclo activo</p>
-        <p className="text-[13px] text-gray-400">Creá un nuevo ciclo desde la pestaña Ajustes</p>
-      </div>
-    )
+  for (const item of items) {
+    const prov = item.producto?.proveedor?.nombre ?? 'Sin proveedor'
+    if (!mapaProveedor[prov]) mapaProveedor[prov] = []
+    mapaProveedor[prov].push(item)
   }
+
+  // Ordenar proveedores: "Sin proveedor" al final
+  const proveedoresOrdenados = Object.keys(mapaProveedor).sort((a, b) => {
+    if (a === 'Sin proveedor') return 1
+    if (b === 'Sin proveedor') return -1
+    return a.localeCompare(b)
+  })
+  for (const prov of proveedoresOrdenados) {
+    porProveedor.push({ nombre: prov, items: mapaProveedor[prov] })
+  }
+
+  if (!cicloActivo) return <Spinner />
 
   return (
     <div>
-      {/* Banner del ciclo */}
-      <div className={`rounded-2xl p-4 mb-4 ${cicloActivo.estado === 'abierto' ? 'bg-green-50 border border-green-200' : 'bg-gray-100 border border-gray-200'}`}>
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-[13px] font-bold text-[var(--text)]">{cicloActivo.nombre}</p>
-            <p className="text-[12px] text-gray-500 mt-0.5">
-              {formatFecha(cicloActivo.fecha_apertura)} → {formatFecha(cicloActivo.fecha_cierre)}
-            </p>
-          </div>
-          <EstadoBadge estado={cicloActivo.estado} />
+      {cicloActivo.estado !== 'abierto' && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 mb-4 flex items-center justify-between gap-2">
+          <p className="text-[12px] text-amber-700 font-medium">Esta lista está cerrada</p>
+          <button onClick={async () => {
+            await fetch(`/api/pedidos/ciclos/${cicloActivo.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estado: 'abierto' }) })
+            onCiclosChange()
+          }} className="text-[12px] font-semibold text-amber-700 border border-amber-300 px-3 py-1 rounded-lg cursor-pointer hover:bg-amber-100 transition-colors">
+            Reabrir
+          </button>
         </div>
-        {cicloActivo.estado === 'abierto' && dias !== null && (
-          <p className={`text-[12px] font-semibold mt-2 ${dias <= 1 ? 'text-red-600' : 'text-green-700'}`}>
-            {dias === 0 ? '⚠️ Cierra hoy' : dias === 1 ? '⚠️ Cierra mañana' : `✅ Cierra en ${dias} días`}
-          </p>
-        )}
-      </div>
+      )}
 
-      {/* Botón agregar */}
       {cicloActivo.estado === 'abierto' && (
         <button onClick={() => { setShowAdd(true); resetForm() }}
           className="w-full flex items-center justify-center gap-2 py-3 mb-4 border-2 border-dashed border-[var(--primary)]/40 text-[var(--primary)] rounded-xl text-[13px] font-semibold cursor-pointer hover:bg-[var(--primary)]/5 transition-colors">
@@ -280,16 +261,15 @@ function TabLista({ cicloActivo, productos, onRefresh }: {
         <p className="text-center text-[13px] text-gray-400 py-10">La lista está vacía</p>
       )}
 
-      {/* Items por categoría */}
       {!loading && (
         <div className="space-y-4">
-          {porCategoria.map(({ cat, items: catItems }) => (
-            <div key={cat.key}>
+          {porProveedor.map(({ nombre: prov, items: provItems }) => (
+            <div key={prov}>
               <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">
-                {cat.emoji} {cat.label}
+                📦 {prov} <span className="text-gray-300 font-normal normal-case">({provItems.length})</span>
               </p>
               <div className="space-y-2">
-                {catItems.map(item => (
+                {provItems.map(item => (
                   <ItemCard key={item.id} item={item} cicloAbierto={cicloActivo.estado === 'abierto'}
                     onEdit={() => { setEditItem(item); setCantidad(String(item.cantidad)); setNotas(item.notas ?? ''); setUrgente(item.urgente) }}
                     onDelete={() => eliminarItem(item.id)} />
@@ -297,18 +277,6 @@ function TabLista({ cicloActivo, productos, onRefresh }: {
               </div>
             </div>
           ))}
-          {sinCategoria.length > 0 && (
-            <div>
-              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">📝 Libres</p>
-              <div className="space-y-2">
-                {sinCategoria.map(item => (
-                  <ItemCard key={item.id} item={item} cicloAbierto={cicloActivo.estado === 'abierto'}
-                    onEdit={() => { setEditItem(item); setCantidad(String(item.cantidad)); setNotas(item.notas ?? ''); setUrgente(item.urgente) }}
-                    onDelete={() => eliminarItem(item.id)} />
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -324,18 +292,14 @@ function TabLista({ cicloActivo, productos, onRefresh }: {
                 </button>
               </div>
 
-              {/* Buscador de catálogo */}
               {!productoSel && (
                 <div>
                   <p className="text-[12px] font-medium text-gray-500 mb-2">Buscar en catálogo</p>
-                  <input
-                    value={busqueda}
-                    onChange={e => setBusqueda(e.target.value)}
+                  <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
                     placeholder="Ej: algodón, lavandina..."
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)]"
-                  />
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)]" />
                   {busqueda.length >= 2 && (
-                    <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
+                    <div className="mt-2 space-y-1 max-h-44 overflow-y-auto">
                       {prodsFiltrados.map(p => (
                         <button key={p.id} onClick={() => { setProductoSel(p); setUnidad(p.unidad) }}
                           className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left hover:bg-gray-50 cursor-pointer transition-colors">
@@ -357,7 +321,6 @@ function TabLista({ cicloActivo, productos, onRefresh }: {
                 </div>
               )}
 
-              {/* Producto seleccionado */}
               {productoSel && (
                 <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-xl border border-gray-200">
                   <span className="text-[18px]">{catEmoji(productoSel.categoria)}</span>
@@ -371,10 +334,9 @@ function TabLista({ cicloActivo, productos, onRefresh }: {
                 </div>
               )}
 
-              {/* Item libre */}
               {!productoSel && nombreLibre && (
                 <div>
-                  <p className="text-[12px] font-medium text-gray-500 mb-2">Ítem libre <span className="text-amber-500">(no está en el catálogo)</span></p>
+                  <p className="text-[12px] font-medium text-gray-500 mb-2">Ítem libre <span className="text-amber-500">(no está en catálogo)</span></p>
                   <div className="flex gap-2">
                     <input value={nombreLibre} onChange={e => setNombreLibre(e.target.value)}
                       className="flex-1 border border-amber-200 bg-amber-50 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-amber-400" />
@@ -385,12 +347,11 @@ function TabLista({ cicloActivo, productos, onRefresh }: {
                 </div>
               )}
 
-              {/* Aviso duplicado */}
               {duplicado && (
                 <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
                   <span className="text-[14px]">⚠️</span>
                   <p className="text-[12px] text-amber-700">
-                    Ya fue pedido por <span className="font-semibold">{duplicado.usuario.nombre}</span>. Podés ajustar la cantidad del ítem existente o agregar uno nuevo si necesitás cantidad adicional.
+                    Ya fue pedido por <span className="font-semibold">{duplicado.usuario.nombre}</span>. Podés editar la cantidad del ítem existente o agregar uno adicional.
                   </p>
                 </div>
               )}
@@ -403,21 +364,16 @@ function TabLista({ cicloActivo, productos, onRefresh }: {
                       <input type="number" min="0.1" step="0.5" value={cantidad} onChange={e => setCantidad(e.target.value)}
                         className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] text-center font-semibold focus:outline-none focus:border-[var(--primary)]" />
                     </div>
-                    {!productoSel && (
-                      <div className="flex-1">
-                        <p className="text-[12px] font-medium text-gray-500 mb-2">Unidad</p>
-                        <select value={unidad} onChange={e => setUnidad(e.target.value)}
-                          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)]">
-                          {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
-                        </select>
-                      </div>
-                    )}
-                    {productoSel && (
-                      <div className="flex-1">
-                        <p className="text-[12px] font-medium text-gray-500 mb-2">Unidad</p>
-                        <div className="border border-gray-100 bg-gray-50 rounded-xl px-3 py-2.5 text-[13px] text-gray-500">{productoSel.unidad}</div>
-                      </div>
-                    )}
+                    <div className="flex-1">
+                      <p className="text-[12px] font-medium text-gray-500 mb-2">Unidad</p>
+                      {productoSel
+                        ? <div className="border border-gray-100 bg-gray-50 rounded-xl px-3 py-2.5 text-[13px] text-gray-500">{productoSel.unidad}</div>
+                        : <select value={unidad} onChange={e => setUnidad(e.target.value)}
+                            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)]">
+                            {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
+                          </select>
+                      }
+                    </div>
                   </div>
 
                   <div>
@@ -451,19 +407,15 @@ function TabLista({ cicloActivo, productos, onRefresh }: {
         document.body
       )}
 
-      {/* Modal editar item */}
+      {/* Modal editar */}
       {editItem && createPortal(
         <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 p-4" onClick={() => setEditItem(null)}>
           <div className="bg-white rounded-2xl w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <p className="text-[15px] font-bold text-[var(--text)]">Editar ítem</p>
-              <button onClick={() => setEditItem(null)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors">
-                <IconX size={18} />
-              </button>
+              <button onClick={() => setEditItem(null)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors"><IconX size={18} /></button>
             </div>
-            <p className="text-[13px] font-medium text-[var(--text)]">
-              {editItem.producto?.nombre ?? editItem.nombre_libre}
-            </p>
+            <p className="text-[13px] font-medium text-[var(--text)]">{editItem.producto?.nombre ?? editItem.nombre_libre}</p>
             <div className="flex gap-3">
               <div className="flex-1">
                 <p className="text-[12px] font-medium text-gray-500 mb-2">Cantidad</p>
@@ -486,9 +438,7 @@ function TabLista({ cicloActivo, productos, onRefresh }: {
             </button>
             <div className="flex gap-2 pt-1">
               <button onClick={() => setEditItem(null)}
-                className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-[13px] font-medium cursor-pointer hover:bg-gray-50 transition-colors">
-                Cancelar
-              </button>
+                className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-[13px] font-medium cursor-pointer hover:bg-gray-50 transition-colors">Cancelar</button>
               <button onClick={guardarEdicion} disabled={guardando}
                 className="flex-1 py-2.5 bg-[image:var(--gradient)] text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-40 transition-colors">
                 {guardando ? 'Guardando…' : 'Guardar'}
@@ -503,10 +453,7 @@ function TabLista({ cicloActivo, productos, onRefresh }: {
 }
 
 function ItemCard({ item, cicloAbierto, onEdit, onDelete }: {
-  item: Item
-  cicloAbierto: boolean
-  onEdit: () => void
-  onDelete: () => void
+  item: Item; cicloAbierto: boolean; onEdit: () => void; onDelete: () => void
 }) {
   return (
     <div className={`bg-white border rounded-xl p-3 shadow-sm ${item.urgente ? 'border-red-200' : 'border-gray-100'}`}>
@@ -517,19 +464,13 @@ function ItemCard({ item, cicloAbierto, onEdit, onDelete }: {
             <span className="text-[13px] font-semibold text-[var(--text)]">
               {item.producto?.nombre ?? item.nombre_libre ?? 'Item'}
             </span>
-            {!item.producto && (
-              <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded-full">Libre</span>
-            )}
+            {!item.producto && <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded-full">Libre</span>}
           </div>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 mt-0.5">
             <span className="text-[12px] font-bold text-[var(--primary)]">{item.cantidad} {item.unidad}</span>
-            {item.producto?.proveedor && (
-              <span className="text-[11px] text-gray-400">· {item.producto.proveedor.nombre}</span>
-            )}
+            {item.producto?.categoria && <span className="text-[11px] text-gray-400">· {catEmoji(item.producto.categoria)} {catLabel(item.producto.categoria)}</span>}
           </div>
-          {item.notas && (
-            <p className="text-[11px] text-gray-400 mt-0.5 italic">{item.notas}</p>
-          )}
+          {item.notas && <p className="text-[11px] text-gray-400 mt-0.5 italic">{item.notas}</p>}
           <div className="flex items-center gap-1.5 mt-1.5">
             <Avatar nombre={item.usuario.nombre} foto={item.usuario.foto_perfil} size={16} />
             <span className="text-[11px] text-gray-400">{item.usuario.nombre}</span>
@@ -537,12 +478,8 @@ function ItemCard({ item, cicloAbierto, onEdit, onDelete }: {
         </div>
         {cicloAbierto && (
           <div className="flex flex-col gap-1">
-            <button onClick={onEdit} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors">
-              <IconEdit size={14} />
-            </button>
-            <button onClick={onDelete} className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors">
-              <IconX size={14} />
-            </button>
+            <button onClick={onEdit} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors"><IconEdit size={14} /></button>
+            <button onClick={onDelete} className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors"><IconX size={14} /></button>
           </div>
         )}
       </div>
@@ -552,10 +489,15 @@ function ItemCard({ item, cicloAbierto, onEdit, onDelete }: {
 
 // ─── Tab: Exportar ────────────────────────────────────────────────────────────
 
-function TabExportar({ cicloActivo }: { cicloActivo: Ciclo | null }) {
+function TabExportar({ cicloActivo, onCiclosChange, onTabChange }: {
+  cicloActivo: Ciclo | null
+  onCiclosChange: () => void
+  onTabChange: (t: string) => void
+}) {
   const [grupos, setGrupos] = useState<ExportGroup[]>([])
   const [loading, setLoading] = useState(false)
   const [copiado, setCopiado] = useState<string | null>(null)
+  const [cerrando, setCerrando] = useState(false)
 
   useEffect(() => {
     if (!cicloActivo) return
@@ -572,26 +514,42 @@ function TabExportar({ cicloActivo }: { cicloActivo: Ciclo | null }) {
     const lineas = [
       `📦 *${g.nombre_proveedor}*`,
       '',
-      ...urgentes.map(i => `🔴 ${i.nombre} x${i.cantidad} ${i.unidad}${i.notas ? ` (${i.notas})` : ''} — pedido por ${i.usuario}`),
-      ...normales.map(i => `• ${i.nombre} x${i.cantidad} ${i.unidad}${i.notas ? ` (${i.notas})` : ''} — pedido por ${i.usuario}`),
+      ...urgentes.map(i => `🔴 ${i.nombre} x${i.cantidad} ${i.unidad}${i.notas ? ` (${i.notas})` : ''} — ${i.usuario}`),
+      ...normales.map(i => `• ${i.nombre} x${i.cantidad} ${i.unidad}${i.notas ? ` (${i.notas})` : ''} — ${i.usuario}`),
     ]
     navigator.clipboard.writeText(lineas.join('\n'))
     setCopiado(g.nombre_proveedor)
     setTimeout(() => setCopiado(null), 2000)
   }
 
-  if (!cicloActivo) return <p className="text-center text-[13px] text-gray-400 py-12">No hay ciclo activo</p>
+  async function cerrarYExportar() {
+    if (!cicloActivo) return
+    setCerrando(true)
+    await fetch(`/api/pedidos/ciclos/${cicloActivo.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estado: 'enviado' }),
+    })
+    setCerrando(false)
+    onCiclosChange()
+    onTabChange('lista')
+  }
+
+  if (!cicloActivo) return <p className="text-center text-[13px] text-gray-400 py-12">No hay lista activa</p>
 
   return (
     <div>
       <p className="text-[12px] text-gray-400 mb-4">
-        Lista agrupada por proveedor, lista para copiar y enviar por WhatsApp.
+        Copiá la lista por proveedor y pegala en WhatsApp. Al cerrar, se archiva esta lista y se abre una nueva vacía.
       </p>
+
       {loading && <Spinner />}
+
       {!loading && !grupos.length && (
-        <p className="text-center text-[13px] text-gray-400 py-12">No hay items en este ciclo</p>
+        <p className="text-center text-[13px] text-gray-400 py-12">No hay items en la lista</p>
       )}
-      <div className="space-y-4">
+
+      <div className="space-y-4 mb-6">
         {grupos.map(g => (
           <div key={g.nombre_proveedor} className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
@@ -611,13 +569,19 @@ function TabExportar({ cicloActivo }: { cicloActivo: Ciclo | null }) {
                     {item.notas && <span className="text-[11px] text-gray-400 ml-1 italic">({item.notas})</span>}
                     <span className="text-[11px] text-gray-400 ml-2">— {item.usuario}</span>
                   </div>
-                  <EstadoBadge estado={item.estado} />
                 </div>
               ))}
             </div>
           </div>
         ))}
       </div>
+
+      {cicloActivo.estado === 'abierto' && (
+        <button onClick={cerrarYExportar} disabled={cerrando || !grupos.length}
+          className="w-full py-3 bg-[image:var(--gradient)] text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+          {cerrando ? 'Cerrando…' : '✅ Cerrar pedido y abrir lista nueva'}
+        </button>
+      )}
     </div>
   )
 }
@@ -635,7 +599,7 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
   const [editando, setEditando] = useState<Producto | null>(null)
   const [nombre, setNombre] = useState('')
   const [categoria, setCategoria] = useState<CatKey>('cocina')
-  const [proveedorId, setProveedorId] = useState<string>('')
+  const [proveedorId, setProveedorId] = useState('')
   const [unidad, setUnidad] = useState('unidad')
   const [guardando, setGuardando] = useState(false)
 
@@ -666,10 +630,7 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
   }
 
   async function toggleActivo(p: Producto) {
-    await fetch(`/api/pedidos/productos/${p.id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ activo: !p.activo }),
-    })
+    await fetch(`/api/pedidos/productos/${p.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ activo: !p.activo }) })
     onRefresh()
   }
 
@@ -685,8 +646,7 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
         </button>
       </div>
 
-      {/* Filtro categorías */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1 mb-4 scrollbar-none">
+      <div className="flex gap-1.5 overflow-x-auto pb-1 mb-4">
         <button onClick={() => setCatFiltro('todas')}
           className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium cursor-pointer transition-colors ${catFiltro === 'todas' ? 'bg-[image:var(--gradient)] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
           Todas
@@ -701,7 +661,7 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
 
       <div className="space-y-2">
         {prodsFiltrados.map(p => (
-          <div key={p.id} className={`bg-white border rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm ${!p.activo ? 'opacity-50' : 'border-gray-100'}`}>
+          <div key={p.id} className={`bg-white border rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm ${!p.activo ? 'opacity-50 border-gray-100' : 'border-gray-100'}`}>
             <span className="text-[18px]">{catEmoji(p.categoria)}</span>
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-semibold truncate">{p.nombre}</p>
@@ -718,9 +678,7 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
             </div>
           </div>
         ))}
-        {!prodsFiltrados.length && (
-          <p className="text-center text-[13px] text-gray-400 py-10">Sin productos{busqueda ? ' con ese nombre' : ''}</p>
-        )}
+        {!prodsFiltrados.length && <p className="text-center text-[13px] text-gray-400 py-10">Sin productos</p>}
       </div>
 
       {showForm && createPortal(
@@ -728,14 +686,11 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
           <div className="bg-white rounded-2xl w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <p className="text-[15px] font-bold text-[var(--text)]">{editando ? 'Editar producto' : 'Nuevo producto'}</p>
-              <button onClick={() => setShowForm(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors">
-                <IconX size={18} />
-              </button>
+              <button onClick={() => setShowForm(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors"><IconX size={18} /></button>
             </div>
             <div>
               <p className="text-[12px] font-medium text-gray-500 mb-2">Nombre</p>
-              <input value={nombre} onChange={e => setNombre(e.target.value)}
-                placeholder="Ej: Algodón"
+              <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Algodón"
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)]" />
             </div>
             <div>
@@ -768,9 +723,7 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
             </div>
             <div className="flex gap-2 pt-1">
               <button onClick={() => setShowForm(false)}
-                className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-[13px] font-medium cursor-pointer hover:bg-gray-50 transition-colors">
-                Cancelar
-              </button>
+                className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-[13px] font-medium cursor-pointer hover:bg-gray-50 transition-colors">Cancelar</button>
               <button onClick={guardar} disabled={guardando || !nombre.trim()}
                 className="flex-1 py-2.5 bg-[image:var(--gradient)] text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                 {guardando ? 'Guardando…' : 'Guardar'}
@@ -791,16 +744,10 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [config, setConfig] = useState<{ dias_aviso: number; hora_aviso: string; dia_cierre: number } | null>(null)
   const [loading, setLoading] = useState(true)
-  const [guardandoPerm, setGuardandoPerm] = useState<string | null>(null)
+  const [guardandoPerm, setGuardandoPerm] = useState<string | null>(null) // "userId-catKey"
   const [guardandoConf, setGuardandoConf] = useState(false)
-  const [showNuevoCiclo, setShowNuevoCiclo] = useState(false)
+  const [catAbierta, setCatAbierta] = useState<CatKey | null>(null)
   const [cicloCerrando, setCicloCerrando] = useState<string | null>(null)
-
-  // Form nuevo ciclo
-  const [cicloNombre, setCicloNombre] = useState('')
-  const [cicloApertura, setCicloApertura] = useState('')
-  const [cicloCierre, setCicloCierre] = useState('')
-  const [guardandoCiclo, setGuardandoCiclo] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -818,7 +765,8 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
   }
 
   async function togglePerm(userId: string, cat: string) {
-    setGuardandoPerm(userId)
+    const key = `${userId}-${cat}`
+    setGuardandoPerm(key)
     const actual = permisos.filter(p => p.usuario_id === userId).map(p => p.categoria)
     const nuevo = actual.includes(cat) ? actual.filter(c => c !== cat) : [...actual, cat]
     const res = await fetch('/api/pedidos/permisos', {
@@ -837,82 +785,76 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
   async function guardarConfig() {
     if (!config) return
     setGuardandoConf(true)
-    await fetch('/api/pedidos/config', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
-    })
+    await fetch('/api/pedidos/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) })
     setGuardandoConf(false)
   }
 
-  async function crearCiclo() {
-    setGuardandoCiclo(true)
-    const res = await fetch('/api/pedidos/ciclos', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre: cicloNombre, fecha_apertura: cicloApertura, fecha_cierre: cicloCierre }),
-    })
-    setGuardandoCiclo(false)
-    if (res.ok) { setShowNuevoCiclo(false); setCicloNombre(''); setCicloApertura(''); setCicloCierre(''); onRefreshCiclos() }
-  }
-
-  async function cambiarEstadoCiclo(id: string, estado: string) {
+  async function reabrirCiclo(id: string) {
     setCicloCerrando(id)
-    await fetch(`/api/pedidos/ciclos/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ estado }),
-    })
+    await fetch(`/api/pedidos/ciclos/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estado: 'abierto' }) })
     setCicloCerrando(null); onRefreshCiclos()
   }
 
   if (loading) return <Spinner />
 
+  const ciclosCerrados = ciclos.filter(c => c.estado !== 'abierto')
+
   return (
     <div className="space-y-6">
-      {/* Ciclos */}
+
+      {/* Permisos por categoría */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-[14px] font-bold text-[var(--text)]">Ciclos de pedido</p>
-          <button onClick={() => setShowNuevoCiclo(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[image:var(--gradient)] text-white rounded-xl text-[12px] font-semibold cursor-pointer transition-colors">
-            <IconPlus size={12} /> Nuevo ciclo
-          </button>
-        </div>
+        <p className="text-[14px] font-bold text-[var(--text)] mb-1">Permisos por categoría</p>
+        <p className="text-[12px] text-gray-400 mb-3">Elegí quién puede pedir en cada categoría cuando habilites el acceso general.</p>
         <div className="space-y-2">
-          {ciclos.slice(0, 6).map(c => (
-            <div key={c.id} className="bg-white border border-gray-100 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
-              <div className="flex-1 min-w-0">
-                <p className="text-[13px] font-semibold truncate">{c.nombre}</p>
-                <p className="text-[11px] text-gray-400">{formatFecha(c.fecha_apertura)} → {formatFecha(c.fecha_cierre)}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <EstadoBadge estado={c.estado} />
-                {c.estado === 'abierto' && (
-                  <button onClick={() => cambiarEstadoCiclo(c.id, 'cerrado')} disabled={cicloCerrando === c.id}
-                    className="text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 cursor-pointer transition-colors disabled:opacity-40">
-                    Cerrar
-                  </button>
-                )}
-                {c.estado === 'cerrado' && (
-                  <div className="flex gap-1">
-                    <button onClick={() => cambiarEstadoCiclo(c.id, 'abierto')} disabled={cicloCerrando === c.id}
-                      className="text-[11px] font-semibold px-2 py-1 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 cursor-pointer transition-colors disabled:opacity-40">
-                      Reabrir
-                    </button>
-                    <button onClick={() => cambiarEstadoCiclo(c.id, 'enviado')} disabled={cicloCerrando === c.id}
-                      className="text-[11px] font-semibold px-2 py-1 rounded-lg border border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100 cursor-pointer transition-colors disabled:opacity-40">
-                      Marcar enviado
-                    </button>
+          {CATEGORIAS.map(cat => {
+            const abierta = catAbierta === cat.key
+            const conAcceso = usuarios.filter(u => tienePerm(u.id, cat.key))
+            return (
+              <div key={cat.key} className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+                <button
+                  onClick={() => setCatAbierta(abierta ? null : cat.key)}
+                  className="w-full flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors">
+                  <span className="text-[18px]">{cat.emoji}</span>
+                  <div className="flex-1 min-w-0 text-left">
+                    <p className="text-[13px] font-semibold text-[var(--text)]">{cat.label}</p>
+                    <p className="text-[11px] text-gray-400">
+                      {conAcceso.length ? conAcceso.map(u => u.nombre.split(' ')[0]).join(', ') : 'Sin accesos'}
+                    </p>
+                  </div>
+                  <div className={`transition-transform duration-200 ${abierta ? 'rotate-90' : ''}`}>
+                    <IconChevronRight size={16} className="text-gray-400" />
+                  </div>
+                </button>
+
+                {abierta && (
+                  <div className="border-t border-gray-100 px-4 py-3 space-y-2">
+                    {usuarios.map(u => {
+                      const tiene = tienePerm(u.id, cat.key)
+                      const cargando = guardandoPerm === `${u.id}-${cat.key}`
+                      return (
+                        <label key={u.id} className="flex items-center gap-3 cursor-pointer select-none">
+                          <div
+                            onClick={() => !cargando && togglePerm(u.id, cat.key)}
+                            className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all cursor-pointer ${tiene ? 'bg-[image:var(--gradient)] border-transparent' : 'border-gray-300 hover:border-[var(--primary)]'} ${cargando ? 'opacity-50' : ''}`}>
+                            {tiene && <IconCheck size={12} className="text-white" />}
+                          </div>
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <Avatar nombre={u.nombre} foto={u.foto_perfil} size={24} />
+                            <span className="text-[13px] text-[var(--text)] truncate">{u.nombre}</span>
+                          </div>
+                        </label>
+                      )
+                    })}
                   </div>
                 )}
               </div>
-            </div>
-          ))}
-          {!ciclos.length && (
-            <p className="text-center text-[13px] text-gray-400 py-6">Todavía no hay ciclos creados</p>
-          )}
+            )
+          })}
         </div>
       </div>
 
-      {/* Notificaciones */}
+      {/* Recordatorio */}
       {config && (
         <div>
           <p className="text-[14px] font-bold text-[var(--text)] mb-3">Recordatorio automático</p>
@@ -941,72 +883,28 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
         </div>
       )}
 
-      {/* Permisos por usuario */}
-      <div>
-        <p className="text-[14px] font-bold text-[var(--text)] mb-1">Permisos por persona</p>
-        <p className="text-[12px] text-gray-400 mb-3">Elegí qué categorías puede pedir cada una cuando habilitás el acceso general.</p>
-        <div className="space-y-3">
-          {usuarios.map(u => (
-            <div key={u.id} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-3">
-                <Avatar nombre={u.nombre} foto={u.foto_perfil} size={28} />
-                <p className="text-[13px] font-semibold text-[var(--text)]">{u.nombre}</p>
-                {guardandoPerm === u.id && <span className="text-[11px] text-gray-400">Guardando…</span>}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {CATEGORIAS.map(c => (
-                  <button key={c.key} onClick={() => togglePerm(u.id, c.key)} disabled={guardandoPerm === u.id}
-                    className={`px-2.5 py-1.5 rounded-full text-[11px] font-medium border cursor-pointer transition-all disabled:opacity-50 ${tienePerm(u.id, c.key) ? 'bg-[image:var(--gradient)] text-white border-transparent' : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}>
-                    {c.emoji} {c.label}
+      {/* Historial de listas */}
+      {ciclosCerrados.length > 0 && (
+        <div>
+          <p className="text-[14px] font-bold text-[var(--text)] mb-3">Listas anteriores</p>
+          <div className="space-y-2">
+            {ciclosCerrados.slice(0, 8).map(c => (
+              <div key={c.id} className="bg-white border border-gray-100 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-semibold truncate">{c.nombre}</p>
+                  <p className="text-[11px] text-gray-400">{formatFecha(c.fecha_apertura)}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <EstadoBadge estado={c.estado} />
+                  <button onClick={() => reabrirCiclo(c.id)} disabled={cicloCerrando === c.id}
+                    className="text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 cursor-pointer transition-colors disabled:opacity-40">
+                    Reabrir
                   </button>
-                ))}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Modal nuevo ciclo */}
-      {showNuevoCiclo && createPortal(
-        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50 p-4" onClick={() => setShowNuevoCiclo(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <p className="text-[15px] font-bold text-[var(--text)]">Nuevo ciclo de pedido</p>
-              <button onClick={() => setShowNuevoCiclo(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors">
-                <IconX size={18} />
-              </button>
-            </div>
-            <div>
-              <p className="text-[12px] font-medium text-gray-500 mb-2">Nombre</p>
-              <input value={cicloNombre} onChange={e => setCicloNombre(e.target.value)}
-                placeholder="Ej: Semana 28/07"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)]" />
-            </div>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <p className="text-[12px] font-medium text-gray-500 mb-2">Apertura</p>
-                <input type="date" value={cicloApertura} onChange={e => setCicloApertura(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)]" />
-              </div>
-              <div className="flex-1">
-                <p className="text-[12px] font-medium text-gray-500 mb-2">Cierre</p>
-                <input type="date" value={cicloCierre} onChange={e => setCicloCierre(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)]" />
-              </div>
-            </div>
-            <div className="flex gap-2 pt-1">
-              <button onClick={() => setShowNuevoCiclo(false)}
-                className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-[13px] font-medium cursor-pointer hover:bg-gray-50 transition-colors">
-                Cancelar
-              </button>
-              <button onClick={crearCiclo} disabled={guardandoCiclo || !cicloNombre.trim() || !cicloApertura || !cicloCierre}
-                className="flex-1 py-2.5 bg-[image:var(--gradient)] text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                {guardandoCiclo ? 'Creando…' : 'Crear ciclo'}
-              </button>
-            </div>
+            ))}
           </div>
-        </div>,
-        document.body
+        </div>
       )}
     </div>
   )
@@ -1044,14 +942,14 @@ export default function PedidosClient({ session }: { session: SessionUser }) {
     }).finally(() => setLoadingBase(false))
   }, [])
 
-  const cicloActivo = ciclos.find(c => c.estado === 'abierto') ?? ciclos[0] ?? null
+  const cicloActivo = ciclos.find(c => c.estado === 'abierto') ?? null
 
-  const tabs: { key: Tab; label: string; icon: React.ElementType }[] = [
-    { key: 'lista',    label: 'Lista',    icon: IconShoppingBag },
-    { key: 'exportar', label: 'Exportar', icon: IconBarChart },
+  const tabs: { key: Tab; label: string }[] = [
+    { key: 'lista',    label: 'Lista' },
+    { key: 'exportar', label: 'Exportar' },
     ...(isAdmin ? [
-      { key: 'catalogo' as Tab, label: 'Catálogo', icon: IconChevronRight },
-      { key: 'ajustes'  as Tab, label: 'Ajustes',  icon: IconSettings },
+      { key: 'catalogo' as Tab, label: 'Catálogo' },
+      { key: 'ajustes'  as Tab, label: 'Ajustes' },
     ] : []),
   ]
 
@@ -1061,10 +959,11 @@ export default function PedidosClient({ session }: { session: SessionUser }) {
         <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
           <IconShoppingBag size={18} className="text-white" />
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <h1 className="text-[17px] font-bold text-[var(--text)]">Pedidos</h1>
-          <p className="text-xs text-[var(--text-sub)]">Lista colaborativa de insumos</p>
+          {cicloActivo && <p className="text-xs text-[var(--text-sub)] truncate">{cicloActivo.nombre}</p>}
         </div>
+        {cicloActivo && <EstadoBadge estado={cicloActivo.estado} />}
       </div>
 
       {loadingBase ? <Spinner /> : (
@@ -1078,8 +977,8 @@ export default function PedidosClient({ session }: { session: SessionUser }) {
             ))}
           </div>
 
-          {tab === 'lista'    && <TabLista cicloActivo={cicloActivo} productos={productos} onRefresh={cargarCiclos} />}
-          {tab === 'exportar' && <TabExportar cicloActivo={cicloActivo} />}
+          {tab === 'lista'    && <TabLista cicloActivo={cicloActivo} productos={productos} onCiclosChange={cargarCiclos} />}
+          {tab === 'exportar' && <TabExportar cicloActivo={cicloActivo} onCiclosChange={cargarCiclos} onTabChange={t => setTab(t as Tab)} />}
           {tab === 'catalogo' && isAdmin && <TabCatalogo productos={productos} proveedores={proveedores} onRefresh={cargarProductos} />}
           {tab === 'ajustes'  && isAdmin && <TabAjustes ciclos={ciclos} onRefreshCiclos={cargarCiclos} />}
         </>
