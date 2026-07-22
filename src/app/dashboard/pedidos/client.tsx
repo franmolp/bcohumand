@@ -1707,7 +1707,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
         footer={
           <>
             <Button variant="secondary" className="flex-1" onClick={() => setShowForm(false)}>Cancelar</Button>
-            <Button className="flex-1" onClick={guardar} loading={guardando} disabled={!nombre.trim()}>Guardar</Button>
+            <Button className="flex-1" onClick={() => guardar()} loading={guardando} disabled={!nombre.trim()}>Guardar</Button>
           </>
         }
       >
