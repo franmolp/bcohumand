@@ -661,42 +661,67 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
   )
 }
 
-function MarcaInput({ value, onChange, productos, label = 'Marca *' }: {
+function MarcaInput({ value, onChange, productos, label = 'Marca' }: {
   value: string; onChange: (v: string) => void; productos: Producto[]; label?: string
 }) {
   const [showSugs, setShowSugs] = useState(false)
+  const [focused, setFocused] = useState(false)
+  const [draft, setDraft] = useState('')
   const marcas = [...new Set(productos.map(p => p.marca).filter(m => m && m !== 'Sin marca'))].sort() as string[]
-  const filtradas = value.length >= 1
-    ? marcas.filter(m => normalizar(m).includes(normalizar(value)))
+  const filtradas = draft.length >= 1
+    ? marcas.filter(m => normalizar(m).includes(normalizar(draft)))
     : marcas
-  const esNueva = value.trim() && value.trim() !== 'Sin marca' && !marcas.map(normalizar).includes(normalizar(value.trim()))
+  const esNueva = draft.trim() && !marcas.map(normalizar).includes(normalizar(draft.trim()))
+  const isSinMarca = !value || value === 'Sin marca'
+
+  function handleFocus() {
+    setFocused(true)
+    setDraft(isSinMarca ? '' : value)
+    setShowSugs(true)
+  }
+
+  function handleBlur() {
+    setTimeout(() => {
+      setFocused(false)
+      setShowSugs(false)
+      if (!draft.trim()) onChange('Sin marca')
+    }, 150)
+  }
+
+  function select(m: string) {
+    onChange(m)
+    setDraft(m === 'Sin marca' ? '' : m)
+    setShowSugs(false)
+  }
+
+  const displayValue = focused ? draft : (isSinMarca ? '' : value)
 
   return (
     <div className="relative">
       <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">{label}</p>
       <input
-        value={value}
-        onChange={e => { onChange(e.target.value); setShowSugs(true) }}
-        onFocus={() => setShowSugs(true)}
-        onBlur={() => setTimeout(() => setShowSugs(false), 150)}
-        placeholder="Ej: Nivea"
-        className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+        value={displayValue}
+        onChange={e => { setDraft(e.target.value); onChange(e.target.value.trim() || 'Sin marca'); setShowSugs(true) }}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        placeholder="Sin marca"
+        className={`w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] ${!focused && isSinMarca ? 'text-[var(--text-muted)] placeholder:not-italic' : ''}`}
       />
       {showSugs && (filtradas.length > 0 || esNueva) && (
         <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-[var(--border)] rounded-xl shadow-lg overflow-hidden max-h-44 overflow-y-auto">
           {filtradas.map(m => (
-            <button key={m} onMouseDown={() => { onChange(m); setShowSugs(false) }}
+            <button key={m} onMouseDown={() => select(m)}
               className="w-full px-3 py-2 text-left text-[13px] hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0">
               {m}
             </button>
           ))}
           {esNueva && (
-            <button onMouseDown={() => { onChange(value.trim()); setShowSugs(false) }}
+            <button onMouseDown={() => select(draft.trim())}
               className="w-full px-3 py-2 text-left text-[13px] text-[var(--primary)] font-medium hover:bg-[var(--primary)]/5 cursor-pointer border-t border-gray-100">
-              Agregar "{value.trim()}"
+              Agregar "{draft.trim()}"
             </button>
           )}
-          <button onMouseDown={() => { onChange('Sin marca'); setShowSugs(false) }}
+          <button onMouseDown={() => select('Sin marca')}
             className="w-full px-3 py-2 text-left text-[12px] text-[var(--text-muted)] italic hover:bg-gray-50 cursor-pointer border-t border-gray-100">
             Sin marca
           </button>
@@ -704,7 +729,7 @@ function MarcaInput({ value, onChange, productos, label = 'Marca *' }: {
       )}
       {showSugs && filtradas.length === 0 && !esNueva && (
         <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-[var(--border)] rounded-xl shadow-lg overflow-hidden">
-          <button onMouseDown={() => { onChange('Sin marca'); setShowSugs(false) }}
+          <button onMouseDown={() => select('Sin marca')}
             className="w-full px-3 py-2 text-left text-[12px] text-[var(--text-muted)] italic hover:bg-gray-50 cursor-pointer">
             Sin marca
           </button>
@@ -1416,9 +1441,7 @@ export default function PedidosClient({ session, myCats, puedeExportar }: {
         </div>
         <div className="flex-1 min-w-0">
           <h1 className="text-[17px] font-bold text-[var(--text)]">Pedidos</h1>
-          {cicloActivo && <p className="text-xs text-[var(--text-sub)] truncate">{cicloActivo.nombre}</p>}
         </div>
-        {cicloActivo && <EstadoBadge estado={cicloActivo.estado} />}
       </div>
 
       {loadingBase ? <Spinner /> : (
