@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { supabase } from '@/lib/supabase'
 import type { SessionUser } from '@/types'
 import { Button, Spinner, Modal, Toast, Confirm, Select } from '@/components/ui'
 import {
@@ -172,6 +173,20 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
   }, [cicloActivo])
 
   useEffect(() => { cargar() }, [cargar])
+
+  useEffect(() => {
+    if (!cicloActivo) return
+    const channel = supabase
+      .channel(`pedidos-items-${cicloActivo.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'pedidos_items',
+        filter: `ciclo_id=eq.${cicloActivo.id}`,
+      }, () => { cargar() })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [cicloActivo, cargar])
 
   function openAdd() {
     setShowAdd(true); setAddStep('search'); setBusqueda(''); setProductoSel(null)
