@@ -1264,6 +1264,8 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
   const [categoria, setCategoria] = useState<CatKey>('cocina')
   const [proveedorId, setProveedorId] = useState('')
   const [unidad, setUnidad] = useState('unidad')
+  const [stockMinProd, setStockMinProd] = useState('')
+  const [stockActualProd, setStockActualProd] = useState('')
   const [guardando, setGuardando] = useState(false)
 
   const [stockDraft, setStockDraft] = useState<Record<string, string>>({})
@@ -1326,17 +1328,27 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
   function abrirNuevo() {
     const def = myCats && myCats.length > 0 ? (myCats[0] as CatKey) : 'cocina'
     setEditando(null); setNombre(''); setMarca(''); setCategoria(def); setProveedorId(''); setUnidad('unidad')
+    setStockMinProd(''); setStockActualProd('')
     setShowForm(true)
   }
   function abrirEditar(p: Producto) {
     setEditando(p); setNombre(p.nombre); setMarca(p.marca ?? ''); setCategoria(p.categoria)
     setProveedorId(p.proveedor_id?.toString() ?? ''); setUnidad(p.unidad)
+    setStockMinProd(p.stock_minimo?.toString() ?? ''); setStockActualProd(p.stock_actual?.toString() ?? '')
     setShowForm(true)
   }
 
   async function guardar() {
     setGuardando(true)
-    const body = { nombre, marca: marca.trim() || 'Sin marca', categoria, proveedor_id: proveedorId ? Number(proveedorId) : null, unidad }
+    const sinVariantes = !editando || editando.variantes_count === 0
+    const body: Record<string, unknown> = {
+      nombre, marca: marca.trim() || 'Sin marca', categoria,
+      proveedor_id: proveedorId ? Number(proveedorId) : null, unidad,
+    }
+    if (sinVariantes) {
+      body.stock_minimo = stockMinProd !== '' ? Number(stockMinProd) : null
+      body.stock_actual = stockActualProd !== '' ? Number(stockActualProd) : null
+    }
     const res = editando
       ? await fetch(`/api/pedidos/productos/${editando.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       : await fetch('/api/pedidos/productos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -1713,6 +1725,26 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
             {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
           </Select>
         </div>
+        {(!editando || editando.variantes_count === 0) && (
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Stock actual</p>
+              <input
+                type="number" min="0" step="1" value={stockActualProd} onChange={e => setStockActualProd(e.target.value)}
+                placeholder="—"
+                className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+              />
+            </div>
+            <div className="flex-1">
+              <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Stock mínimo</p>
+              <input
+                type="number" min="0" step="1" value={stockMinProd} onChange={e => setStockMinProd(e.target.value)}
+                placeholder="—"
+                className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+              />
+            </div>
+          </div>
+        )}
         {editando && (
           <button
             onClick={() => { setShowForm(false); setVarianteForm({ prod: editando }); setVarianteNombre(''); setVarianteMinimo('') }}
