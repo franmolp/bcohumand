@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabaseBrowser } from '@/lib/supabase-browser'
 import type { SessionUser } from '@/types'
 import { Button, Spinner, Modal, Toast, Confirm, Select } from '@/components/ui'
 import {
@@ -176,7 +176,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
 
   useEffect(() => {
     if (!cicloActivo) return
-    const channel = supabase
+    const channel = supabaseBrowser
       .channel(`pedidos-items-${cicloActivo.id}`)
       .on('postgres_changes', {
         event: '*',
@@ -185,7 +185,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
         filter: `ciclo_id=eq.${cicloActivo.id}`,
       }, () => { cargar() })
       .subscribe()
-    return () => { supabase.removeChannel(channel) }
+    return () => { supabaseBrowser.removeChannel(channel) }
   }, [cicloActivo, cargar])
 
   function openAdd() {
