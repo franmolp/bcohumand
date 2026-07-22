@@ -1338,14 +1338,14 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
     setShowForm(true)
   }
 
-  async function guardar() {
+  async function guardar(thenAddVariante = false) {
     setGuardando(true)
     const sinVariantes = !editando || editando.variantes_count === 0
     const body: Record<string, unknown> = {
       nombre, marca: marca.trim() || 'Sin marca', categoria,
       proveedor_id: proveedorId ? Number(proveedorId) : null, unidad,
     }
-    if (sinVariantes) {
+    if (sinVariantes && !thenAddVariante) {
       body.stock_minimo = stockMinProd !== '' ? Number(stockMinProd) : null
       body.stock_actual = stockActualProd !== '' ? Number(stockActualProd) : null
     }
@@ -1353,7 +1353,13 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
       ? await fetch(`/api/pedidos/productos/${editando.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       : await fetch('/api/pedidos/productos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     setGuardando(false)
-    if (res.ok) { setShowForm(false); onRefresh(); showToast(editando ? 'Producto actualizado' : 'Producto creado') }
+    if (res.ok) {
+      setShowForm(false); onRefresh(); showToast(editando ? 'Producto actualizado' : 'Producto creado')
+      if (thenAddVariante) {
+        const prod = editando ?? await res.json()
+        setVarianteForm({ prod }); setVarianteNombre(''); setVarianteMinimo('')
+      }
+    }
   }
 
   async function loadHistorial(id: string, isVariante: boolean) {
@@ -1745,14 +1751,19 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
             </div>
           </div>
         )}
-        {editando && (
-          <button
-            onClick={() => { setShowForm(false); setVarianteForm({ prod: editando }); setVarianteNombre(''); setVarianteMinimo('') }}
-            className="flex items-center gap-1.5 text-[12px] text-[var(--primary)] hover:underline cursor-pointer pt-1">
-            <IconPlus size={12} />
-            Agregar variante a este producto
-          </button>
-        )}
+        <button
+          disabled={!nombre.trim() || guardando}
+          onClick={() => {
+            if (editando) {
+              setShowForm(false); setVarianteForm({ prod: editando }); setVarianteNombre(''); setVarianteMinimo('')
+            } else {
+              guardar(true)
+            }
+          }}
+          className="flex items-center gap-1.5 text-[12px] text-[var(--primary)] hover:underline cursor-pointer pt-1 disabled:opacity-40 disabled:cursor-not-allowed">
+          <IconPlus size={12} />
+          {editando ? 'Agregar variante a este producto' : 'Guardar y agregar variante'}
+        </button>
       </Modal>
 
       {/* Variante: nueva / editar */}
