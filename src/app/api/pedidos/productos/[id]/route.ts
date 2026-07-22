@@ -32,7 +32,7 @@ export async function PUT(
     if (!perm) return NextResponse.json({ error: 'Sin permisos para esta categoría' }, { status: 403 })
   }
   const body = await request.json().catch(() => ({}))
-  const { nombre, marca, categoria, proveedor_id, unidad, activo } = body
+  const { nombre, marca, categoria, proveedor_id, unidad, activo, stock_actual, stock_minimo } = body
 
   const update: Record<string, unknown> = {}
   if (nombre?.trim()) update.nombre = nombre.trim()
@@ -41,6 +41,8 @@ export async function PUT(
   if (proveedor_id !== undefined) update.proveedor_id = proveedor_id ?? null
   if (unidad?.trim()) update.unidad = unidad.trim()
   if (activo !== undefined) update.activo = activo === true
+  if (stock_actual !== undefined) update.stock_actual = stock_actual === null || stock_actual === '' ? null : Number(stock_actual)
+  if (stock_minimo !== undefined) update.stock_minimo = stock_minimo === null || stock_minimo === '' ? null : Number(stock_minimo)
 
   if (!Object.keys(update).length) {
     return NextResponse.json({ error: 'Nada para actualizar' }, { status: 400 })

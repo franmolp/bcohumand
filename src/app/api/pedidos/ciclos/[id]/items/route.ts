@@ -17,7 +17,7 @@ export async function GET(
   const [itemsRes, permsRes] = await Promise.all([
     supabaseAdmin
       .from('pedidos_items')
-      .select('*, producto:pedidos_productos(id, nombre, marca, categoria, unidad, proveedor_id, proveedor:proveedores(id, nombre))')
+      .select('*, producto:pedidos_productos(id, nombre, marca, categoria, unidad, proveedor_id, proveedor:proveedores(id, nombre)), variante:pedidos_variantes(id, nombre)')
       .eq('ciclo_id', id)
       .order('created_at', { ascending: true }),
     supabaseAdmin
@@ -98,7 +98,7 @@ export async function POST(
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
 
   const body = await request.json().catch(() => ({}))
-  const { producto_id, nombre_libre, cantidad, unidad, notas, urgente } = body
+  const { producto_id, variante_id, nombre_libre, cantidad, unidad, notas, urgente } = body
 
   if (!producto_id && !nombre_libre?.trim()) {
     return NextResponse.json({ error: 'Se requiere producto o nombre' }, { status: 400 })
@@ -130,6 +130,7 @@ export async function POST(
     .insert({
       ciclo_id: id,
       producto_id: producto_id ?? null,
+      variante_id: variante_id ?? null,
       nombre_libre: nombre_libre?.trim() ?? null,
       cantidad: Number(cantidad),
       unidad: unidad ?? 'unidad',
@@ -138,10 +139,18 @@ export async function POST(
       usuario_id: session.id,
       estado: 'pendiente',
     })
-    .select('*, producto:pedidos_productos(id, nombre, categoria, unidad, proveedor_id, proveedor:proveedores(id, nombre))')
+    .select('*, producto:pedidos_productos(id, nombre, categoria, unidad, proveedor_id, proveedor:proveedores(id, nombre)), variante:pedidos_variantes(id, nombre)')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Audit log
+  await supabaseAdmin.from('pedidos_items_auditoria').insert({
+    item_id: data.id,
+    usuario_id: session.id,
+    accion: 'creó',
+    detalle: null,
+  })
 
   const { data: u } = await supabase
     .from('usuarios')

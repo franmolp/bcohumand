@@ -6,14 +6,31 @@ export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { data, error } = await supabaseAdmin
-    .from('pedidos_productos')
-    .select('*, proveedor:proveedores(id, nombre)')
-    .order('categoria')
-    .order('nombre')
+  const [prodsRes, variantesRes] = await Promise.all([
+    supabaseAdmin
+      .from('pedidos_productos')
+      .select('*, proveedor:proveedores(id, nombre)')
+      .order('categoria')
+      .order('nombre'),
+    supabaseAdmin
+      .from('pedidos_variantes')
+      .select('producto_id')
+      .eq('activo', true),
+  ])
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data ?? [])
+  if (prodsRes.error) return NextResponse.json({ error: prodsRes.error.message }, { status: 500 })
+
+  const variantCount: Record<string, number> = {}
+  for (const v of (variantesRes.data ?? [])) {
+    variantCount[v.producto_id] = (variantCount[v.producto_id] ?? 0) + 1
+  }
+
+  const data = (prodsRes.data ?? []).map(p => ({
+    ...p,
+    variantes_count: variantCount[p.id] ?? 0,
+  }))
+
+  return NextResponse.json(data)
 }
 
 export async function POST(request: NextRequest) {

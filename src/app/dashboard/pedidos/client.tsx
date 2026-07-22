@@ -44,6 +44,19 @@ interface Proveedor { id: number; nombre: string }
 interface Producto {
   id: string; nombre: string; marca: string; categoria: CatKey; unidad: string
   activo: boolean; proveedor_id: number | null; proveedor: Proveedor | null
+  stock_actual: number | null; stock_minimo: number | null; variantes_count: number
+}
+
+interface Variante {
+  id: string; producto_id: string; nombre: string
+  stock_actual: number | null; stock_minimo: number | null; activo: boolean
+}
+
+interface StockHistorial { fecha: string; stock: number }
+
+interface AuditoriaEntry {
+  id: string; accion: string; detalle: string | null
+  created_at: string; usuario_nombre: string
 }
 
 interface Ciclo {
@@ -53,14 +66,15 @@ interface Ciclo {
 }
 
 interface Item {
-  id: string; ciclo_id: string; producto_id: string | null; nombre_libre: string | null
-  cantidad: number; unidad: string; notas: string | null; urgente: boolean
-  estado: 'pendiente' | 'ordenado' | 'recibido'; usuario_id: string
+  id: string; ciclo_id: string; producto_id: string | null; variante_id: string | null
+  nombre_libre: string | null; cantidad: number; unidad: string; notas: string | null
+  urgente: boolean; estado: 'pendiente' | 'ordenado' | 'recibido'; usuario_id: string
   usuario: { nombre: string; foto_perfil: string | null }
   producto: {
     id: string; nombre: string; marca: string; categoria: CatKey; unidad: string
     proveedor_id: number | null; proveedor: { id: number; nombre: string } | null
   } | null
+  variante: { id: string; nombre: string } | null
   created_at: string
   archivado: boolean; archivado_por: string | null; archivado_en: string | null
 }
@@ -96,6 +110,18 @@ function formatCerradoEn(iso: string) {
   const dia = d.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: 'numeric', month: 'numeric' })
   const hora = d.toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', hour12: false })
   return `${dia} a las ${hora}`
+}
+
+function formatRelativo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime()
+  const min = Math.floor(diff / 60000)
+  if (min < 60) return `hace ${min}m`
+  const h = Math.floor(min / 60)
+  if (h < 24) return `hace ${h}h`
+  const d = Math.floor(h / 24)
+  if (d === 1) return 'ayer'
+  if (d < 7) return `hace ${d} días`
+  return `hace ${Math.floor(d / 7)} sem`
 }
 
 function EstadoBadge({ estado }: { estado: string }) {
@@ -743,6 +769,64 @@ function MarcaInput({ value, onChange, productos, label = 'Marca' }: {
   )
 }
 
+function Sparkline({ data, width = 56, height = 22 }: { data: number[]; width?: number; height?: number }) {
+  if (!data || data.length < 2) return null
+  const min = Math.min(...data)
+  const max = Math.max(...data)
+  const range = max === min ? 1 : max - min
+  const pad = 2
+  const pts = data.map((v, i) => {
+    const x = pad + (i / (data.length - 1)) * (width - pad * 2)
+    const y = pad + (1 - (v - min) / range) * (height - pad * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  })
+  const last = pts[pts.length - 1].split(',')
+  return (
+    <svg width={width} height={height} className="flex-shrink-0">
+      <polyline points={pts.join(' ')} fill="none" stroke="var(--primary)" strokeWidth="1.5"
+        strokeLinejoin="round" strokeLinecap="round" opacity="0.7" />
+      <circle cx={last[0]} cy={last[1]} r="2.5" fill="var(--primary)" />
+    </svg>
+  )
+}
+
+function StockInput({ id, value, onChange, onSave, unidad, minimo, guardando, historial, onLoadHistorial }: {
+  id: string; value: string; onChange: (v: string) => void; onSave: (v: string) => void
+  unidad: string; minimo: number | null | undefined; guardando: boolean
+  historial: StockHistorial[] | undefined; onLoadHistorial: () => void
+}) {
+  const [showChart, setShowChart] = useState(false)
+  const isLow = minimo != null && value !== '' && !isNaN(Number(value)) && Number(value) <= minimo
+
+  function toggleChart() {
+    if (!showChart && !historial) onLoadHistorial()
+    setShowChart(v => !v)
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 flex-shrink-0">
+      {showChart && historial && historial.length >= 2 && (
+        <Sparkline data={historial.map(h => h.stock)} />
+      )}
+      <button onClick={toggleChart}
+        className={`text-[11px] transition-colors cursor-pointer ${showChart ? 'text-[var(--primary)]' : 'text-gray-300 hover:text-gray-500'}`}
+        title="Ver historial de stock">
+        📊
+      </button>
+      {isLow && <span className="text-amber-500 text-[12px]" title={`Mínimo: ${minimo}`}>⚠</span>}
+      <input
+        type="number" min="0" step="1" value={value}
+        onChange={e => onChange(e.target.value)}
+        onBlur={e => { if (e.target.value !== '') onSave(e.target.value) }}
+        onKeyDown={e => { if (e.key === 'Enter') { onSave(value); (e.target as HTMLInputElement).blur() } }}
+        placeholder="—" disabled={guardando}
+        className={`w-14 text-center text-[13px] font-semibold border rounded-lg h-8 focus:outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary-light)] transition-colors disabled:opacity-50 ${isLow ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-[var(--border)] bg-white'}`}
+      />
+      <span className="text-[11px] text-[var(--text-muted)]">{unidad.slice(0, 3)}</span>
+    </div>
+  )
+}
+
 function UrgenteToggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
     <button onClick={() => onChange(!value)}
@@ -758,30 +842,66 @@ function ItemRow({ item, cicloAbierto, isAdmin, myId, onEdit, onArchive, onDelet
   onEdit: () => void; onArchive: () => void; onDelete: () => void
 }) {
   const canEdit = isAdmin || item.usuario_id === myId
+  const [showLog, setShowLog] = useState(false)
+  const [log, setLog] = useState<AuditoriaEntry[] | null>(null)
+
+  async function toggleLog() {
+    if (!log) {
+      const data = await fetch(`/api/pedidos/auditoria?item_id=${item.id}`).then(r => r.json()).catch(() => [])
+      setLog(Array.isArray(data) ? data : [])
+    }
+    setShowLog(v => !v)
+  }
+
+  const nombreProducto = item.producto?.nombre ?? item.nombre_libre ?? 'Ítem'
+  const subNombre = item.variante
+    ? item.variante.nombre
+    : item.producto?.marca && item.producto.marca !== 'Sin marca'
+      ? item.producto.marca
+      : null
+
   return (
-    <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg ${item.urgente ? 'bg-red-50' : 'hover:bg-gray-50'} transition-colors`}>
-      <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.urgente ? 'bg-red-500' : 'bg-gray-200'}`} />
-      <div className="flex-1 min-w-0">
-        <span className={`text-[13px] ${item.urgente ? 'font-semibold text-red-700' : 'text-[var(--text)]'}`}>
-          {item.producto?.nombre ?? item.nombre_libre ?? 'Ítem'}
-          {item.producto?.marca && item.producto.marca !== 'Sin marca' && (
-            <span className={`text-[11px] font-normal ml-1 ${item.urgente ? 'text-red-500/70' : 'text-[var(--text-muted)]'}`}>· {item.producto.marca}</span>
+    <div className={`rounded-lg ${item.urgente ? 'bg-red-50' : 'hover:bg-gray-50'} transition-colors`}>
+      <div className="flex items-center gap-2 px-2 py-1.5">
+        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.urgente ? 'bg-red-500' : 'bg-gray-200'}`} />
+        <div className="flex-1 min-w-0">
+          <span className={`text-[13px] ${item.urgente ? 'font-semibold text-red-700' : 'text-[var(--text)]'}`}>
+            {nombreProducto}
+            {subNombre && (
+              <span className={`text-[11px] font-normal ml-1 ${item.urgente ? 'text-red-500/70' : 'text-[var(--text-muted)]'}`}>· {subNombre}</span>
+            )}
+          </span>
+          <span className="text-[11px] text-[var(--text-muted)] ml-2">{fmtCantidad(item.cantidad, item.unidad)}</span>
+          {item.urgente && <span className="ml-2 text-[9px] font-bold text-red-500 uppercase tracking-wide">urgente</span>}
+          {item.notas && <span className="text-[11px] text-[var(--text-muted)] ml-2 italic">· {item.notas}</span>}
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-[var(--text-muted)]">{item.usuario.nombre.split(' ')[0]}</span>
+          {isAdmin && (
+            <button onClick={toggleLog} title="Ver historial" className={`p-1 rounded cursor-pointer transition-colors text-[10px] font-mono ${showLog ? 'text-[var(--primary)]' : 'text-gray-300 hover:text-gray-500'}`}>···</button>
           )}
-        </span>
-        <span className="text-[11px] text-[var(--text-muted)] ml-2">{fmtCantidad(item.cantidad, item.unidad)}</span>
-        {item.urgente && <span className="ml-2 text-[9px] font-bold text-red-500 uppercase tracking-wide">urgente</span>}
-        {item.notas && <span className="text-[11px] text-[var(--text-muted)] ml-2 italic">· {item.notas}</span>}
+          {cicloAbierto && canEdit && (
+            <div className="flex gap-0.5 ml-0.5">
+              <button onClick={onEdit} title="Editar" className="p-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 cursor-pointer transition-colors"><IconEdit size={12} /></button>
+              <button onClick={onArchive} title="Archivar" className="p-1.5 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 cursor-pointer transition-colors"><IconX size={12} /></button>
+              {isAdmin && <button onClick={onDelete} title="Eliminar definitivo" className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 cursor-pointer transition-colors"><IconTrash size={12} /></button>}
+            </div>
+          )}
+        </div>
       </div>
-      <div className="flex items-center gap-1">
-        <span className="text-[10px] text-[var(--text-muted)]">{item.usuario.nombre.split(' ')[0]}</span>
-        {cicloAbierto && canEdit && (
-          <div className="flex gap-0.5 ml-1">
-            <button onClick={onEdit} title="Editar" className="p-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 cursor-pointer transition-colors"><IconEdit size={12} /></button>
-            <button onClick={onArchive} title="Archivar" className="p-1.5 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 cursor-pointer transition-colors"><IconX size={12} /></button>
-            {isAdmin && <button onClick={onDelete} title="Eliminar definitivo" className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 cursor-pointer transition-colors"><IconTrash size={12} /></button>}
-          </div>
-        )}
-      </div>
+      {showLog && (
+        <div className="px-5 pb-2 space-y-0.5">
+          {!log && <p className="text-[10px] text-[var(--text-muted)]">Cargando…</p>}
+          {log?.map(e => (
+            <p key={e.id} className="text-[10px] text-[var(--text-muted)]">
+              <span className="font-semibold">{e.usuario_nombre}</span> {e.accion}
+              {e.detalle ? <span> · {e.detalle}</span> : null}
+              <span className="opacity-60"> · {formatRelativo(e.created_at)}</span>
+            </p>
+          ))}
+          {log?.length === 0 && <p className="text-[10px] text-[var(--text-muted)] italic">Sin actividad registrada</p>}
+        </div>
+      )}
     </div>
   )
 }
@@ -1158,6 +1278,354 @@ function TabCatalogo({ productos, proveedores, onRefresh, isAdmin, myCats }: {
   )
 }
 
+// ─── Tab: Inventario ─────────────────────────────────────────────────────────
+
+function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, onRefresh }: {
+  productos: Producto[]; proveedores: Proveedor[]; cicloActivo: Ciclo | null
+  isAdmin: boolean; myCats: string[] | null; onRefresh: () => void
+}) {
+  const [busqueda, setBusqueda] = useState('')
+  const [catFiltro, setCatFiltro] = useState<CatKey | 'todas'>('todas')
+  const [showForm, setShowForm] = useState(false)
+  const [editando, setEditando] = useState<Producto | null>(null)
+  const [nombre, setNombre] = useState('')
+  const [marca, setMarca] = useState('')
+  const [categoria, setCategoria] = useState<CatKey>('cocina')
+  const [proveedorId, setProveedorId] = useState('')
+  const [unidad, setUnidad] = useState('unidad')
+  const [guardando, setGuardando] = useState(false)
+
+  const [stockDraft, setStockDraft] = useState<Record<string, string>>({})
+  const [stockGuardando, setStockGuardando] = useState<Set<string>>(new Set())
+
+  const [expandidos, setExpandidos] = useState<Set<string>>(new Set())
+  const [variantesMap, setVariantesMap] = useState<Record<string, Variante[]>>({})
+  const [loadingVars, setLoadingVars] = useState<Set<string>>(new Set())
+
+  const [historialMap, setHistorialMap] = useState<Record<string, StockHistorial[]>>({})
+
+  const [pedirTarget, setPedirTarget] = useState<{ prod: Producto; variante?: Variante } | null>(null)
+  const [pedirCantidad, setPedirCantidad] = useState('1')
+  const [pedirNotas, setPedirNotas] = useState('')
+  const [pedirUrgente, setPedirUrgente] = useState(false)
+  const [pedirGuardando, setPedirGuardando] = useState(false)
+
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  function showToast(msg: string, type: 'success' | 'error' = 'success') {
+    setToast({ msg, type }); setTimeout(() => setToast(null), 3000)
+  }
+
+  const prodsFiltrados = productos.filter(p => {
+    if (myCats && !myCats.includes(p.categoria)) return false
+    if (!p.activo && !isAdmin) return false
+    if (catFiltro !== 'todas' && p.categoria !== catFiltro) return false
+    if (busqueda.length >= 2 && !normalizar(`${p.nombre} ${p.marca}`).includes(normalizar(busqueda))) return false
+    return true
+  })
+
+  const grouped: { cat: CatDef; prods: Producto[] }[] = CATEGORIAS
+    .map(cat => ({ cat, prods: prodsFiltrados.filter(p => p.categoria === cat.key) }))
+    .filter(g => g.prods.length > 0)
+
+  function abrirNuevo() {
+    const def = myCats && myCats.length > 0 ? (myCats[0] as CatKey) : 'cocina'
+    setEditando(null); setNombre(''); setMarca(''); setCategoria(def); setProveedorId(''); setUnidad('unidad')
+    setShowForm(true)
+  }
+  function abrirEditar(p: Producto) {
+    setEditando(p); setNombre(p.nombre); setMarca(p.marca ?? ''); setCategoria(p.categoria)
+    setProveedorId(p.proveedor_id?.toString() ?? ''); setUnidad(p.unidad)
+    setShowForm(true)
+  }
+
+  async function guardar() {
+    setGuardando(true)
+    const body = { nombre, marca: marca.trim() || 'Sin marca', categoria, proveedor_id: proveedorId ? Number(proveedorId) : null, unidad }
+    const res = editando
+      ? await fetch(`/api/pedidos/productos/${editando.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      : await fetch('/api/pedidos/productos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    setGuardando(false)
+    if (res.ok) { setShowForm(false); onRefresh(); showToast(editando ? 'Producto actualizado' : 'Producto creado') }
+  }
+
+  async function toggleActivo(p: Producto) {
+    await fetch(`/api/pedidos/productos/${p.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ activo: !p.activo }),
+    })
+    onRefresh()
+  }
+
+  async function loadHistorial(id: string, isVariante: boolean) {
+    const param = isVariante ? 'variante_id' : 'producto_id'
+    const data = await fetch(`/api/pedidos/stock-historial?${param}=${id}`).then(r => r.json()).catch(() => [])
+    setHistorialMap(m => ({ ...m, [id]: Array.isArray(data) ? data : [] }))
+  }
+
+  async function guardarStock(id: string, isVariante: boolean, val: string) {
+    const n = parseFloat(val)
+    if (isNaN(n) || n < 0) return
+    setStockGuardando(s => new Set([...s, id]))
+
+    if (isVariante) {
+      await fetch(`/api/pedidos/variantes/${id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stock_actual: n }),
+      })
+      setVariantesMap(m => {
+        const next = { ...m }
+        for (const pid in next) next[pid] = next[pid].map(v => v.id === id ? { ...v, stock_actual: n } : v)
+        return next
+      })
+    } else {
+      await fetch(`/api/pedidos/productos/${id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stock_actual: n }),
+      })
+      onRefresh()
+    }
+
+    await fetch('/api/pedidos/stock-historial', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(isVariante ? { variante_id: id, stock: n } : { producto_id: id, stock: n }),
+    })
+
+    // Reset historial to force reload
+    setHistorialMap(m => { const next = { ...m }; delete next[id]; return next })
+
+    setStockGuardando(s => { const n2 = new Set(s); n2.delete(id); return n2 })
+  }
+
+  async function toggleExpand(prod: Producto) {
+    const next = new Set(expandidos)
+    if (next.has(prod.id)) {
+      next.delete(prod.id)
+    } else {
+      next.add(prod.id)
+      if (!variantesMap[prod.id]) {
+        setLoadingVars(s => new Set([...s, prod.id]))
+        const data = await fetch(`/api/pedidos/variantes?producto_id=${prod.id}`).then(r => r.json()).catch(() => [])
+        setVariantesMap(m => ({ ...m, [prod.id]: Array.isArray(data) ? data : [] }))
+        setLoadingVars(s => { const n = new Set(s); n.delete(prod.id); return n })
+      }
+    }
+    setExpandidos(next)
+  }
+
+  async function pedirAhora() {
+    if (!cicloActivo || !pedirTarget) return
+    setPedirGuardando(true)
+    const res = await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        producto_id: pedirTarget.prod.id,
+        variante_id: pedirTarget.variante?.id ?? null,
+        cantidad: Number(pedirCantidad),
+        unidad: pedirTarget.prod.unidad,
+        notas: pedirNotas || null,
+        urgente: pedirUrgente,
+      }),
+    })
+    setPedirGuardando(false)
+    if (res.ok) { setPedirTarget(null); showToast('Agregado a la lista') }
+    else showToast('Error al agregar', 'error')
+  }
+
+  return (
+    <div>
+      <Toast message={toast?.msg ?? ''} visible={!!toast} type={toast?.type} />
+
+      <div className="flex gap-2 mb-4">
+        <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar producto…"
+          className="flex-1 border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+        {isAdmin && <Button size="sm" onClick={abrirNuevo} icon={<IconPlus size={14} />}>Nuevo</Button>}
+      </div>
+
+      <div className="flex gap-1.5 overflow-x-auto pb-1 mb-4">
+        <button onClick={() => setCatFiltro('todas')}
+          className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium cursor-pointer transition-colors ${catFiltro === 'todas' ? 'bg-[image:var(--gradient)] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+          Todas
+        </button>
+        {(myCats ? CATEGORIAS.filter(c => myCats.includes(c.key)) : CATEGORIAS).map(c => (
+          <button key={c.key} onClick={() => setCatFiltro(c.key)}
+            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium cursor-pointer transition-colors ${catFiltro === c.key ? 'bg-[image:var(--gradient)] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+            {c.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-5">
+        {grouped.map(({ cat, prods }) => (
+          <div key={cat.key}>
+            {catFiltro === 'todas' && (
+              <p className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider mb-2 px-1">{cat.label}</p>
+            )}
+            <div className="space-y-2">
+              {prods.map(p => (
+                <div key={p.id} className={`bg-white border rounded-2xl shadow-sm border-[var(--border)] overflow-hidden ${!p.activo ? 'opacity-50' : ''}`}>
+                  <div className="px-3 py-2.5 flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold truncate">
+                        {p.nombre}
+                        {p.marca && p.marca !== 'Sin marca' && <span className="font-normal text-[var(--text-muted)]"> · {p.marca}</span>}
+                      </p>
+                      <p className="text-[11px] text-[var(--text-muted)] truncate">{p.proveedor?.nombre ?? <span className="text-amber-500">Sin proveedor</span>}</p>
+                    </div>
+
+                    {p.variantes_count === 0 && (
+                      <StockInput
+                        id={p.id}
+                        value={stockDraft[p.id] ?? (p.stock_actual?.toString() ?? '')}
+                        onChange={v => setStockDraft(d => ({ ...d, [p.id]: v }))}
+                        onSave={v => guardarStock(p.id, false, v)}
+                        unidad={p.unidad}
+                        minimo={p.stock_minimo}
+                        guardando={stockGuardando.has(p.id)}
+                        historial={historialMap[p.id]}
+                        onLoadHistorial={() => loadHistorial(p.id, false)}
+                      />
+                    )}
+
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {cicloActivo?.estado === 'abierto' && p.variantes_count === 0 && p.activo && (
+                        <button
+                          onClick={() => { setPedirTarget({ prod: p }); setPedirCantidad('1'); setPedirNotas(''); setPedirUrgente(false) }}
+                          className="px-2.5 py-1.5 rounded-xl text-[12px] font-semibold bg-[var(--primary)]/10 text-[var(--primary)] hover:bg-[var(--primary)]/20 cursor-pointer transition-colors">
+                          Pedir
+                        </button>
+                      )}
+                      {p.variantes_count > 0 && (
+                        <button onClick={() => toggleExpand(p)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[12px] font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 cursor-pointer transition-colors">
+                          <IconChevronRight size={12} className={`transition-transform duration-200 ${expandidos.has(p.id) ? 'rotate-90' : ''}`} />
+                          {p.variantes_count}
+                        </button>
+                      )}
+                      {isAdmin && (
+                        <>
+                          <button onClick={() => toggleActivo(p)}
+                            className={`text-[10px] font-bold px-2 py-1 rounded-full border cursor-pointer transition-colors ${p.activo ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : 'bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200'}`}>
+                            {p.activo ? 'Act.' : 'Inact.'}
+                          </button>
+                          <button onClick={() => abrirEditar(p)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors">
+                            <IconEdit size={14} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {expandidos.has(p.id) && (
+                    <div className="border-t border-[var(--border)]">
+                      {loadingVars.has(p.id) && <div className="px-4 py-3"><Spinner /></div>}
+                      {!loadingVars.has(p.id) && (variantesMap[p.id] ?? []).map((v, vi) => (
+                        <div key={v.id} className={`flex items-center gap-2 px-3 py-2 ${vi > 0 ? 'border-t border-gray-50' : ''}`}>
+                          <p className="flex-1 text-[12px] text-[var(--text)] min-w-0 truncate">{v.nombre}</p>
+                          <StockInput
+                            id={v.id}
+                            value={stockDraft[v.id] ?? (v.stock_actual?.toString() ?? '')}
+                            onChange={val => setStockDraft(d => ({ ...d, [v.id]: val }))}
+                            onSave={val => guardarStock(v.id, true, val)}
+                            unidad={p.unidad}
+                            minimo={v.stock_minimo}
+                            guardando={stockGuardando.has(v.id)}
+                            historial={historialMap[v.id]}
+                            onLoadHistorial={() => loadHistorial(v.id, true)}
+                          />
+                          {cicloActivo?.estado === 'abierto' && v.activo && (
+                            <button
+                              onClick={() => { setPedirTarget({ prod: p, variante: v }); setPedirCantidad('1'); setPedirNotas(''); setPedirUrgente(false) }}
+                              className="px-2.5 py-1.5 rounded-xl text-[11px] font-semibold bg-[var(--primary)]/10 text-[var(--primary)] hover:bg-[var(--primary)]/20 cursor-pointer transition-colors flex-shrink-0">
+                              Pedir
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        {!prodsFiltrados.length && <p className="text-center text-[13px] text-gray-400 py-10">Sin productos</p>}
+      </div>
+
+      {/* Formulario producto */}
+      <Modal
+        open={showForm} onClose={() => setShowForm(false)}
+        title={editando ? 'Editar producto' : 'Nuevo producto'}
+        footer={
+          <>
+            <Button variant="secondary" className="flex-1" onClick={() => setShowForm(false)}>Cancelar</Button>
+            <Button className="flex-1" onClick={guardar} loading={guardando} disabled={!nombre.trim()}>Guardar</Button>
+          </>
+        }
+      >
+        <div>
+          <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Nombre *</p>
+          <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Algodón"
+            className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+        </div>
+        <MarcaInput value={marca} onChange={setMarca} productos={productos} label="Marca" />
+        <Select label="Categoría" value={categoria} onChange={v => setCategoria(v as CatKey)}>
+          {(myCats ? CATEGORIAS.filter(c => myCats.includes(c.key)) : CATEGORIAS).map(c => (
+            <option key={c.key} value={c.key}>{c.label}</option>
+          ))}
+        </Select>
+        <div className="flex gap-3">
+          <Select label="Proveedor" value={proveedorId} onChange={setProveedorId} className="flex-1">
+            <option value="">Sin proveedor</option>
+            {proveedores.map(pv => <option key={pv.id} value={pv.id}>{pv.nombre}</option>)}
+          </Select>
+          <Select label="Unidad" value={unidad} onChange={setUnidad} className="w-28">
+            {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
+          </Select>
+        </div>
+      </Modal>
+
+      {/* Quick pedir */}
+      <Modal
+        open={!!pedirTarget} onClose={() => setPedirTarget(null)}
+        title="Agregar a la lista"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPedirTarget(null)}>Cancelar</Button>
+            <Button className="flex-1" onClick={pedirAhora} loading={pedirGuardando}
+              disabled={!pedirCantidad || Number(pedirCantidad) <= 0 || !cicloActivo}>
+              Agregar
+            </Button>
+          </>
+        }
+      >
+        <div className="p-3 bg-gray-50 rounded-xl border border-[var(--border)]">
+          <p className="text-[13px] font-semibold">{pedirTarget?.prod.nombre}</p>
+          {pedirTarget?.variante && <p className="text-[12px] text-[var(--text-muted)] mt-0.5">{pedirTarget.variante.nombre}</p>}
+          <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{pedirTarget?.prod.proveedor?.nombre ?? 'Sin proveedor'}</p>
+        </div>
+        {!cicloActivo && <p className="text-[12px] text-amber-600 bg-amber-50 rounded-xl p-3">No hay lista abierta. Creá una desde Ajustes.</p>}
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Cantidad</p>
+            <input type="number" min="0.1" step="0.5" value={pedirCantidad} onChange={e => setPedirCantidad(e.target.value)}
+              className="w-full border border-[var(--border)] rounded-xl px-3 h-11 text-[13px] text-center font-semibold focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+          </div>
+          <div className="w-24">
+            <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Unidad</p>
+            <p className="h-11 flex items-center text-[13px] text-[var(--text-muted)]">{pedirTarget?.prod.unidad}</p>
+          </div>
+        </div>
+        <div>
+          <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Notas (opcional)</p>
+          <input value={pedirNotas} onChange={e => setPedirNotas(e.target.value)} placeholder="Ej: si no hay, pedir otra marca"
+            className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+        </div>
+        <UrgenteToggle value={pedirUrgente} onChange={setPedirUrgente} />
+      </Modal>
+    </div>
+  )
+}
+
 // ─── Tab: Ajustes ────────────────────────────────────────────────────────────
 
 type CatConfig = { notif: boolean; dia_cierre: number }
@@ -1396,8 +1864,8 @@ export default function PedidosClient({ session, myCats, puedeExportar }: {
 }) {
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
 
-  type Tab = 'lista' | 'enviados' | 'exportar' | 'catalogo' | 'ajustes'
-  const [tab, setTab] = useState<Tab>('lista')
+  type Tab = 'inventario' | 'lista' | 'enviados' | 'exportar' | 'catalogo' | 'ajustes'
+  const [tab, setTab] = useState<Tab>('inventario')
   const [ciclos, setCiclos] = useState<Ciclo[]>([])
   const [productos, setProductos] = useState<Producto[]>([])
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
@@ -1426,11 +1894,11 @@ export default function PedidosClient({ session, myCats, puedeExportar }: {
   const cicloActivo = ciclos.find(c => c.estado === 'abierto') ?? null
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'lista',    label: 'Lista' },
-    { key: 'enviados', label: 'Enviados' },
+    { key: 'inventario', label: 'Inventario' },
+    { key: 'lista',      label: 'Lista' },
+    { key: 'enviados',   label: 'Enviados' },
     ...(puedeExportar ? [{ key: 'exportar' as Tab, label: 'Exportar' }] : []),
-    { key: 'catalogo', label: 'Catálogo' },
-    ...(isAdmin ? [{ key: 'ajustes' as Tab, label: 'Ajustes' }] : []),
+    ...(isAdmin ? [{ key: 'catalogo' as Tab, label: 'Catálogo' }, { key: 'ajustes' as Tab, label: 'Ajustes' }] : []),
   ]
 
   return (
@@ -1455,6 +1923,16 @@ export default function PedidosClient({ session, myCats, puedeExportar }: {
             ))}
           </div>
 
+          {tab === 'inventario' && (
+            <TabInventario
+              productos={productos}
+              proveedores={proveedores}
+              cicloActivo={cicloActivo}
+              isAdmin={isAdmin}
+              myCats={isAdmin ? null : myCats}
+              onRefresh={cargarProductos}
+            />
+          )}
           {tab === 'lista' && (
             <TabLista
               cicloActivo={cicloActivo}

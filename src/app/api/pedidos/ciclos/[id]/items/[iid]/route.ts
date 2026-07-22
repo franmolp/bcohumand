@@ -14,7 +14,7 @@ export async function PUT(
 
   const { data: item } = await supabaseAdmin
     .from('pedidos_items')
-    .select('usuario_id, ciclo_id, archivado, estado, ciclo:pedidos_ciclos(estado)')
+    .select('usuario_id, ciclo_id, archivado, estado, cantidad, urgente, ciclo:pedidos_ciclos(estado)')
     .eq('id', iid)
     .single()
 
@@ -61,6 +61,25 @@ export async function PUT(
     .eq('id', iid)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Audit log
+  if (!esFaltante) {
+    const detalles: string[] = []
+    const itemData = item as { cantidad?: number; urgente?: boolean; estado?: string }
+    if (update.cantidad !== undefined) detalles.push(`cantidad: ${itemData.cantidad} → ${update.cantidad}`)
+    if (update.urgente !== undefined) detalles.push(update.urgente ? 'marcó urgente' : 'quitó urgente')
+    if (update.estado !== undefined) detalles.push(`estado: ${itemData.estado} → ${update.estado}`)
+    if (update.archivado === false) detalles.push('restauró')
+    if (detalles.length) {
+      await supabaseAdmin.from('pedidos_items_auditoria').insert({
+        item_id: iid,
+        usuario_id: session.id,
+        accion: 'editó',
+        detalle: detalles.join('; '),
+      })
+    }
+  }
+
   return NextResponse.json({ ok: true })
 }
 
@@ -98,12 +117,18 @@ export async function DELETE(
   if (permanente) {
     const { error } = await supabaseAdmin.from('pedidos_items').delete().eq('id', iid)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    await supabaseAdmin.from('pedidos_items_auditoria').insert({
+      item_id: iid, usuario_id: session.id, accion: 'eliminó', detalle: null,
+    })
   } else {
     const { error } = await supabaseAdmin
       .from('pedidos_items')
       .update({ archivado: true, archivado_por: session.nombre, archivado_en: new Date().toISOString() })
       .eq('id', iid)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    await supabaseAdmin.from('pedidos_items_auditoria').insert({
+      item_id: iid, usuario_id: session.id, accion: 'archivó', detalle: null,
+    })
   }
 
   return NextResponse.json({ ok: true })
