@@ -1576,14 +1576,6 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
                           {p.variantes_count}
                         </button>
                       )}
-                      {p.variantes_count === 0 && isAdmin && (
-                        <button
-                          onClick={() => { setVarianteForm({ prod: p }); setVarianteNombre(''); setVarianteMinimo('') }}
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[12px] font-medium bg-gray-100 text-gray-500 hover:bg-gray-200 cursor-pointer transition-colors">
-                          <IconPlus size={11} />
-                          Variante
-                        </button>
-                      )}
                       {isAdmin && (
                         <button onClick={() => abrirEditar(p)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors">
                           <IconEdit size={14} />
@@ -1721,6 +1713,14 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
             {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
           </Select>
         </div>
+        {editando && (
+          <button
+            onClick={() => { setShowForm(false); setVarianteForm({ prod: editando }); setVarianteNombre(''); setVarianteMinimo('') }}
+            className="flex items-center gap-1.5 text-[12px] text-[var(--primary)] hover:underline cursor-pointer pt-1">
+            <IconPlus size={12} />
+            Agregar variante a este producto
+          </button>
+        )}
       </Modal>
 
       {/* Variante: nueva / editar */}
