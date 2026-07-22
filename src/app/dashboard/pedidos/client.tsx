@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import type { SessionUser } from '@/types'
 import { Button, Spinner, Modal, Toast, Confirm, Select } from '@/components/ui'
 import {
-  IconShoppingBag, IconX, IconCheck, IconEdit, IconPlus, IconChevronRight, IconTrash, IconAlertCircle,
+  IconShoppingBag, IconX, IconCheck, IconEdit, IconPlus, IconChevronRight, IconTrash, IconAlertCircle, IconClock,
 } from '@/components/ui/Icons'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -53,6 +53,7 @@ interface Variante {
 }
 
 interface StockHistorial { fecha: string; stock: number }
+interface StockAuditEntry { id: string; usuario_nombre: string; stock_anterior: number | null; stock_nuevo: number; created_at: string }
 
 interface AuditoriaEntry {
   id: string; accion: string; detalle: string | null
@@ -1273,6 +1274,8 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
   const [loadingVars, setLoadingVars] = useState<Set<string>>(new Set())
 
   const [historialMap, setHistorialMap] = useState<Record<string, StockHistorial[]>>({})
+  const [stockLogMap, setStockLogMap] = useState<Record<string, StockAuditEntry[]>>({})
+  const [stockLogOpen, setStockLogOpen] = useState<Set<string>>(new Set())
 
   const [pedirItems, setPedirItems] = useState<Item[]>([])
   useEffect(() => {
@@ -1345,6 +1348,12 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
   async function guardarStock(id: string, isVariante: boolean, val: string) {
     const n = parseFloat(val)
     if (isNaN(n) || n < 0) return
+
+    // Capture previous value for audit
+    const stockAnterior = isVariante
+      ? (Object.values(variantesMap).flat().find(v => v.id === id)?.stock_actual ?? null)
+      : (productos.find(p => p.id === id)?.stock_actual ?? null)
+
     setStockGuardando(s => new Set([...s, id]))
 
     if (isVariante) {
@@ -1365,15 +1374,36 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
       onRefresh()
     }
 
-    await fetch('/api/pedidos/stock-historial', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(isVariante ? { variante_id: id, stock: n } : { producto_id: id, stock: n }),
-    })
+    await Promise.all([
+      fetch('/api/pedidos/stock-historial', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(isVariante ? { variante_id: id, stock: n } : { producto_id: id, stock: n }),
+      }),
+      fetch('/api/pedidos/stock-auditoria', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(isVariante
+          ? { variante_id: id, stock_anterior: stockAnterior, stock_nuevo: n }
+          : { producto_id: id, stock_anterior: stockAnterior, stock_nuevo: n }
+        ),
+      }),
+    ])
 
-    // Reset historial to force reload
+    // Reset caches to force reload
     setHistorialMap(m => { const next = { ...m }; delete next[id]; return next })
+    setStockLogMap(m => { const next = { ...m }; delete next[id]; return next })
 
     setStockGuardando(s => { const n2 = new Set(s); n2.delete(id); return n2 })
+  }
+
+  async function toggleStockLog(id: string, isVariante: boolean) {
+    const next = new Set(stockLogOpen)
+    if (next.has(id)) { next.delete(id); setStockLogOpen(next); return }
+    next.add(id); setStockLogOpen(next)
+    if (!(id in stockLogMap)) {
+      const param = isVariante ? 'variante_id' : 'producto_id'
+      const data = await fetch(`/api/pedidos/stock-auditoria?${param}=${id}`).then(r => r.json()).catch(() => [])
+      setStockLogMap(m => ({ ...m, [id]: Array.isArray(data) ? data : [] }))
+    }
   }
 
   async function toggleExpand(prod: Producto) {
@@ -1485,6 +1515,13 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
                     )}
 
                     <div className="flex items-center gap-1 flex-shrink-0">
+                      {isAdmin && p.variantes_count === 0 && (
+                        <button
+                          onClick={() => toggleStockLog(p.id, false)}
+                          className={`p-1.5 rounded-lg cursor-pointer transition-colors ${stockLogOpen.has(p.id) ? 'text-[var(--primary)] bg-[var(--primary)]/10' : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100'}`}>
+                          <IconClock size={13} />
+                        </button>
+                      )}
                       {cicloActivo?.estado === 'abierto' && p.variantes_count === 0 && p.activo && (
                         <button
                           onClick={() => { setPedirTarget({ prod: p }); setPedirCantidad('1'); setPedirUnidad(p.unidad); setPedirNotas(''); setPedirUrgente(false); setPedirMarca(''); setPedirProveedorId('') }}
@@ -1507,29 +1544,71 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
                     </div>
                   </div>
 
+                  {isAdmin && stockLogOpen.has(p.id) && p.variantes_count === 0 && (
+                    <div className="border-t border-[var(--border)] px-4 py-2.5 space-y-1 bg-gray-50">
+                      {!(p.id in stockLogMap) && <p className="text-[11px] text-[var(--text-muted)]">Cargando…</p>}
+                      {stockLogMap[p.id]?.length === 0 && <p className="text-[11px] text-[var(--text-muted)] italic">Sin cambios registrados</p>}
+                      {stockLogMap[p.id]?.map(e => (
+                        <p key={e.id} className="text-[11px] text-[var(--text-muted)]">
+                          <span className="font-semibold text-[var(--text)]">{e.usuario_nombre}</span>
+                          {e.stock_anterior !== null
+                            ? <span> · {e.stock_anterior} → <span className="font-semibold">{e.stock_nuevo}</span> {p.unidad}</span>
+                            : <span> · registró <span className="font-semibold">{e.stock_nuevo}</span> {p.unidad}</span>
+                          }
+                          <span className="opacity-60"> · {formatRelativo(e.created_at)}</span>
+                        </p>
+                      ))}
+                    </div>
+                  )}
+
                   {expandidos.has(p.id) && (
                     <div className="border-t border-[var(--border)]">
                       {loadingVars.has(p.id) && <div className="px-4 py-3"><Spinner /></div>}
                       {!loadingVars.has(p.id) && (variantesMap[p.id] ?? []).map((v, vi) => (
-                        <div key={v.id} className={`flex items-center gap-2 px-3 py-2 ${vi > 0 ? 'border-t border-gray-50' : ''}`}>
-                          <p className="flex-1 text-[12px] text-[var(--text)] min-w-0 truncate">{v.nombre}</p>
-                          <StockInput
-                            id={v.id}
-                            value={stockDraft[v.id] ?? (v.stock_actual?.toString() ?? '')}
-                            onChange={val => setStockDraft(d => ({ ...d, [v.id]: val }))}
-                            onSave={val => guardarStock(v.id, true, val)}
-                            unidad={p.unidad}
-                            minimo={v.stock_minimo}
-                            guardando={stockGuardando.has(v.id)}
-                            historial={historialMap[v.id]}
-                            onLoadHistorial={() => loadHistorial(v.id, true)}
-                          />
-                          {cicloActivo?.estado === 'abierto' && v.activo && (
-                            <button
-                              onClick={() => { setPedirTarget({ prod: p, variante: v }); setPedirCantidad('1'); setPedirUnidad(p.unidad); setPedirNotas(''); setPedirUrgente(false); setPedirMarca(''); setPedirProveedorId('') }}
-                              className="px-2.5 py-1.5 rounded-xl text-[11px] font-semibold bg-[var(--primary)]/10 text-[var(--primary)] hover:bg-[var(--primary)]/20 cursor-pointer transition-colors flex-shrink-0">
-                              Pedir
-                            </button>
+                        <div key={v.id} className={`border-[var(--border)] ${vi > 0 ? 'border-t' : ''}`}>
+                          <div className="flex items-center gap-2 px-3 py-2">
+                            <p className="flex-1 text-[12px] text-[var(--text)] min-w-0 truncate">{v.nombre}</p>
+                            <StockInput
+                              id={v.id}
+                              value={stockDraft[v.id] ?? (v.stock_actual?.toString() ?? '')}
+                              onChange={val => setStockDraft(d => ({ ...d, [v.id]: val }))}
+                              onSave={val => guardarStock(v.id, true, val)}
+                              unidad={p.unidad}
+                              minimo={v.stock_minimo}
+                              guardando={stockGuardando.has(v.id)}
+                              historial={historialMap[v.id]}
+                              onLoadHistorial={() => loadHistorial(v.id, true)}
+                            />
+                            {isAdmin && (
+                              <button
+                                onClick={() => toggleStockLog(v.id, true)}
+                                className={`p-1.5 rounded-lg cursor-pointer transition-colors flex-shrink-0 ${stockLogOpen.has(v.id) ? 'text-[var(--primary)] bg-[var(--primary)]/10' : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100'}`}>
+                                <IconClock size={13} />
+                              </button>
+                            )}
+                            {cicloActivo?.estado === 'abierto' && v.activo && (
+                              <button
+                                onClick={() => { setPedirTarget({ prod: p, variante: v }); setPedirCantidad('1'); setPedirUnidad(p.unidad); setPedirNotas(''); setPedirUrgente(false); setPedirMarca(''); setPedirProveedorId('') }}
+                                className="px-2.5 py-1.5 rounded-xl text-[11px] font-semibold bg-[var(--primary)]/10 text-[var(--primary)] hover:bg-[var(--primary)]/20 cursor-pointer transition-colors flex-shrink-0">
+                                Pedir
+                              </button>
+                            )}
+                          </div>
+                          {isAdmin && stockLogOpen.has(v.id) && (
+                            <div className="px-4 pb-2.5 pt-1 space-y-1 bg-gray-50 border-t border-gray-100">
+                              {!(v.id in stockLogMap) && <p className="text-[11px] text-[var(--text-muted)]">Cargando…</p>}
+                              {stockLogMap[v.id]?.length === 0 && <p className="text-[11px] text-[var(--text-muted)] italic">Sin cambios registrados</p>}
+                              {stockLogMap[v.id]?.map(e => (
+                                <p key={e.id} className="text-[11px] text-[var(--text-muted)]">
+                                  <span className="font-semibold text-[var(--text)]">{e.usuario_nombre}</span>
+                                  {e.stock_anterior !== null
+                                    ? <span> · {e.stock_anterior} → <span className="font-semibold">{e.stock_nuevo}</span> {p.unidad}</span>
+                                    : <span> · registró <span className="font-semibold">{e.stock_nuevo}</span> {p.unidad}</span>
+                                  }
+                                  <span className="opacity-60"> · {formatRelativo(e.created_at)}</span>
+                                </p>
+                              ))}
+                            </div>
                           )}
                         </div>
                       ))}
