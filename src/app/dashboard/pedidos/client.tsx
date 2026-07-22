@@ -790,29 +790,18 @@ function Sparkline({ data, width = 56, height = 22 }: { data: number[]; width?: 
   )
 }
 
-function StockInput({ id, value, onChange, onSave, unidad, minimo, guardando, historial, onLoadHistorial }: {
+function StockInput({ id, value, onChange, onSave, unidad, minimo, guardando, historial }: {
   id: string; value: string; onChange: (v: string) => void; onSave: (v: string) => void
   unidad: string; minimo: number | null | undefined; guardando: boolean
   historial: StockHistorial[] | undefined; onLoadHistorial: () => void
 }) {
-  const [showChart, setShowChart] = useState(false)
   const isLow = minimo != null && value !== '' && !isNaN(Number(value)) && Number(value) <= minimo
-
-  function toggleChart() {
-    if (!showChart && !historial) onLoadHistorial()
-    setShowChart(v => !v)
-  }
 
   return (
     <div className="flex items-center gap-1.5 flex-shrink-0">
-      {showChart && historial && historial.length >= 2 && (
+      {historial && historial.length >= 2 && (
         <Sparkline data={historial.map(h => h.stock)} />
       )}
-      <button onClick={toggleChart}
-        className={`text-[11px] transition-colors cursor-pointer ${showChart ? 'text-[var(--primary)]' : 'text-gray-300 hover:text-gray-500'}`}
-        title="Ver historial de stock">
-        📊
-      </button>
       {isLow && <span className="text-amber-500 text-[12px]" title={`Mínimo: ${minimo}`}>⚠</span>}
       <input
         type="number" min="0" step="1" value={value}
