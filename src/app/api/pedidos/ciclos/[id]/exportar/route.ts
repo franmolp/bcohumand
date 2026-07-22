@@ -11,7 +11,14 @@ export async function GET(
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
-  if (!isAdmin) return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
+  if (!isAdmin) {
+    const { data: exp } = await supabaseAdmin
+      .from('pedidos_exportadores')
+      .select('usuario_id')
+      .eq('usuario_id', session.id)
+      .maybeSingle()
+    if (!exp) return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
+  }
 
   const { id } = await params
 

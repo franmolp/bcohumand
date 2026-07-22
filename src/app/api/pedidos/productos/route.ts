@@ -21,7 +21,6 @@ export async function POST(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
-  if (!isAdmin) return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
 
   const body = await request.json().catch(() => ({}))
   const { nombre, marca, categoria, proveedor_id, unidad } = body
@@ -29,6 +28,17 @@ export async function POST(request: NextRequest) {
   const CATEGORIAS = ['cocina', 'limpieza', 'manicuria', 'masajes', 'cejas_pestanas', 'depilacion', 'peluqueria']
   if (!nombre?.trim()) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 })
   if (!CATEGORIAS.includes(categoria)) return NextResponse.json({ error: 'Categoría inválida' }, { status: 400 })
+
+  // Non-admin: check they have permission for this category
+  if (!isAdmin) {
+    const { data: perm } = await supabaseAdmin
+      .from('pedidos_permisos')
+      .select('categoria')
+      .eq('usuario_id', session.id)
+      .eq('categoria', categoria)
+      .maybeSingle()
+    if (!perm) return NextResponse.json({ error: 'Sin permisos para esta categoría' }, { status: 403 })
+  }
 
   const { data, error } = await supabaseAdmin
     .from('pedidos_productos')

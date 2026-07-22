@@ -112,13 +112,15 @@ function EstadoBadge({ estado }: { estado: string }) {
 
 type AddStep = 'search' | 'new' | 'config'
 
-function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefreshProductos, isAdmin }: {
+function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefreshProductos, isAdmin, myCats, myId }: {
   cicloActivo: Ciclo | null
   productos: Producto[]
   proveedores: Proveedor[]
   onCiclosChange: () => void
   onRefreshProductos: () => void
   isAdmin: boolean
+  myCats: string[]
+  myId: string
 }) {
   const [items, setItems] = useState<Item[]>([])
   const [archivados, setArchivados] = useState<Item[]>([])
@@ -172,7 +174,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
 
   function openAdd() {
     setShowAdd(true); setAddStep('search'); setBusqueda(''); setProductoSel(null)
-    setNewNombre(''); setNewMarca(''); setNewCategoria('cocina'); setNewProveedorId('')
+    setNewNombre(''); setNewMarca(''); setNewCategoria(isAdmin ? 'cocina' : (myCats[0] as CatKey ?? 'cocina')); setNewProveedorId('')
     setProvConfig(''); setCantidad('1'); setUnidad('unidad'); setNotas(''); setUrgente(false)
     setGuardandoError('')
   }
@@ -194,7 +196,9 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
   }
 
   const prodsFiltrados = productos
-    .filter(p => p.activo && (busqueda.length < 2 || normalizar(p.nombre).includes(normalizar(busqueda))))
+    .filter(p => p.activo
+      && (isAdmin || myCats.includes(p.categoria))
+      && (busqueda.length < 2 || normalizar(p.nombre).includes(normalizar(busqueda))))
     .slice(0, 10)
 
   const duplicado = productoSel ? items.find(i => i.producto_id === productoSel.id) : null
@@ -305,13 +309,15 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 mb-4">
           <div className="flex items-center justify-between gap-2">
             <p className="text-[12px] text-amber-700 font-semibold">Lista cerrada</p>
-            <Button size="sm" variant="secondary" onClick={async () => {
-              await fetch(`/api/pedidos/ciclos/${cicloActivo.id}`, {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ estado: 'abierto' }),
-              })
-              onCiclosChange()
-            }}>Reabrir</Button>
+            {isAdmin && (
+              <Button size="sm" variant="secondary" onClick={async () => {
+                await fetch(`/api/pedidos/ciclos/${cicloActivo.id}`, {
+                  method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ estado: 'abierto' }),
+                })
+                onCiclosChange()
+              }}>Reabrir</Button>
+            )}
           </div>
           {cicloActivo.cerrado_por && cicloActivo.cerrado_en && (
             <p className="text-[11px] text-amber-600 mt-1">
@@ -356,6 +362,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
                           item={item}
                           cicloAbierto={cicloActivo.estado === 'abierto'}
                           isAdmin={isAdmin}
+                          myId={myId}
                           onEdit={() => {
                             setEditItem(item)
                             setEditCantidad(String(item.cantidad))
@@ -497,7 +504,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
             <div>
               <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Categoría</p>
               <div className="flex flex-wrap gap-1.5">
-                {CATEGORIAS.map(c => (
+                {(isAdmin ? CATEGORIAS : CATEGORIAS.filter(c => myCats.includes(c.key))).map(c => (
                   <button key={c.key} onClick={() => setNewCategoria(c.key)}
                     className={`px-2.5 py-1.5 rounded-full text-[12px] font-medium border cursor-pointer transition-all ${newCategoria === c.key ? 'bg-[image:var(--gradient)] text-white border-transparent' : 'border-[var(--border)] text-[var(--text-sub)] hover:bg-gray-50'}`}>
                     {c.label}
@@ -654,10 +661,11 @@ function UrgenteToggle({ value, onChange }: { value: boolean; onChange: (v: bool
   )
 }
 
-function ItemRow({ item, cicloAbierto, isAdmin, onEdit, onArchive, onDelete }: {
-  item: Item; cicloAbierto: boolean; isAdmin: boolean
+function ItemRow({ item, cicloAbierto, isAdmin, myId, onEdit, onArchive, onDelete }: {
+  item: Item; cicloAbierto: boolean; isAdmin: boolean; myId: string
   onEdit: () => void; onArchive: () => void; onDelete: () => void
 }) {
+  const canEdit = isAdmin || item.usuario_id === myId
   return (
     <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg ${item.urgente ? 'bg-red-50' : 'hover:bg-gray-50'} transition-colors`}>
       <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.urgente ? 'bg-red-500' : 'bg-gray-200'}`} />
@@ -675,13 +683,130 @@ function ItemRow({ item, cicloAbierto, isAdmin, onEdit, onArchive, onDelete }: {
       <div className="flex items-center gap-1">
         <Avatar nombre={item.usuario.nombre} foto={item.usuario.foto_perfil} size={16} />
         <span className="text-[10px] text-[var(--text-muted)] hidden sm:block ml-1">{item.usuario.nombre.split(' ')[0]}</span>
-        {cicloAbierto && (
+        {cicloAbierto && canEdit && (
           <div className="flex gap-0.5 ml-1">
             <button onClick={onEdit} title="Editar" className="p-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 cursor-pointer transition-colors"><IconEdit size={12} /></button>
             <button onClick={onArchive} title="Archivar" className="p-1.5 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 cursor-pointer transition-colors"><IconX size={12} /></button>
             {isAdmin && <button onClick={onDelete} title="Eliminar definitivo" className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 cursor-pointer transition-colors"><IconTrash size={12} /></button>}
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Tab: Enviados ───────────────────────────────────────────────────────────
+
+type EnvioItem = {
+  id: string; ciclo_id: string; nombre: string; marca: string | null
+  cantidad: number; unidad: string; estado: string; notas: string | null
+  urgente: boolean; usuario: string; producto_id: string | null
+}
+type EnvioGroup = { fecha: string; proveedor_id: number | null; proveedor_nombre: string; items: EnvioItem[] }
+
+function TabEnviados({ cicloActivo, isAdmin }: { cicloActivo: Ciclo | null; isAdmin: boolean }) {
+  const [grupos, setGrupos] = useState<EnvioGroup[]>([])
+  const [loading, setLoading] = useState(true)
+  const [procesando, setProcesando] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+
+  function showToast(msg: string, type: 'success' | 'error' = 'success') {
+    setToast({ msg, type }); setTimeout(() => setToast(null), 3000)
+  }
+
+  const cargar = useCallback(() => {
+    setLoading(true)
+    fetch('/api/pedidos/enviados')
+      .then(r => r.json())
+      .then(d => setGrupos(Array.isArray(d) ? d : []))
+      .catch(() => setGrupos([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  async function marcarFaltante(item: EnvioItem) {
+    setProcesando(item.id)
+    // 1. Mark the sent item as 'faltante'
+    await fetch(`/api/pedidos/ciclos/${item.ciclo_id}/items/${item.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estado: 'faltante' }),
+    })
+    // 2. Re-add to active cycle if one exists
+    if (cicloActivo) {
+      await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          producto_id: item.producto_id ?? undefined,
+          nombre_libre: item.producto_id ? undefined : item.nombre,
+          cantidad: item.cantidad,
+          unidad: item.unidad,
+          notas: item.notas,
+          urgente: item.urgente,
+        }),
+      })
+    }
+    setProcesando(null)
+    showToast('Ítem vuelto a la lista activa')
+    cargar()
+  }
+
+  function formatFechaEnvio(iso: string) {
+    if (iso === 'sin_fecha') return 'Fecha desconocida'
+    const [y, m, d] = iso.split('-')
+    return `${parseInt(d)}/${parseInt(m)}/${y}`
+  }
+
+  if (loading) return <Spinner />
+
+  return (
+    <div>
+      <Toast message={toast?.msg ?? ''} visible={!!toast} type={toast?.type} />
+      {!grupos.length && <p className="text-center text-[13px] text-gray-400 py-12">No hay pedidos enviados</p>}
+      <div className="space-y-5">
+        {grupos.map(g => {
+          const key = `${g.fecha}__${g.proveedor_id ?? 'null'}`
+          return (
+            <div key={key} className="bg-white border border-[var(--border)] rounded-2xl shadow-sm overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--border)]">
+                <IconShoppingBag size={13} className="text-[var(--primary)] flex-shrink-0" />
+                <p className="text-[13px] font-bold text-[var(--text)] flex-1">{g.proveedor_nombre}</p>
+                <span className="text-[11px] text-[var(--text-muted)]">{formatFechaEnvio(g.fecha)}</span>
+              </div>
+              <div className="divide-y divide-gray-50 px-4">
+                {g.items.map(item => (
+                  <div key={item.id} className={`py-2.5 flex items-center gap-2 ${item.estado === 'faltante' ? 'opacity-60' : ''}`}>
+                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.urgente ? 'bg-red-500' : 'bg-gray-300'}`} />
+                    <div className="flex-1 min-w-0">
+                      <span className={`text-[13px] font-medium ${item.estado === 'faltante' ? 'line-through text-orange-600' : ''}`}>
+                        {item.nombre}
+                        {item.marca && item.marca !== 'Sin marca' && (
+                          <span className="text-[11px] font-normal text-[var(--text-muted)] ml-1">· {item.marca}</span>
+                        )}
+                      </span>
+                      <span className="text-[12px] text-[var(--text-muted)] ml-2">{fmtCantidad(item.cantidad, item.unidad)}</span>
+                      {item.estado === 'faltante' && (
+                        <span className="ml-2 text-[10px] font-bold text-orange-500 uppercase">no llegó</span>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-[var(--text-muted)]">{item.usuario}</span>
+                    {item.estado === 'ordenado' && (
+                      <button
+                        onClick={() => marcarFaltante(item)}
+                        disabled={procesando === item.id}
+                        className="flex-shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 cursor-pointer transition-colors disabled:opacity-50">
+                        {procesando === item.id ? '...' : 'No llegó'}
+                      </button>
+                    )}
+                    {item.estado === 'faltante' && isAdmin && (
+                      <span className="flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-600">Faltante</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -800,8 +925,8 @@ function TabExportar({ cicloActivo, onCiclosChange }: {
 
 // ─── Tab: Catálogo ───────────────────────────────────────────────────────────
 
-function TabCatalogo({ productos, proveedores, onRefresh }: {
-  productos: Producto[]; proveedores: Proveedor[]; onRefresh: () => void
+function TabCatalogo({ productos, proveedores, onRefresh, isAdmin, myCats }: {
+  productos: Producto[]; proveedores: Proveedor[]; onRefresh: () => void; isAdmin: boolean; myCats: string[] | null
 }) {
   const [busqueda, setBusqueda] = useState('')
   const [catFiltro, setCatFiltro] = useState<CatKey | 'todas'>('todas')
@@ -816,13 +941,15 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   const prodsFiltrados = productos.filter(p => {
+    if (myCats && !myCats.includes(p.categoria)) return false
     if (catFiltro !== 'todas' && p.categoria !== catFiltro) return false
     if (busqueda.length >= 2 && !p.nombre.toLowerCase().includes(busqueda.toLowerCase())) return false
     return true
   })
 
   function abrirNuevo() {
-    setEditando(null); setNombre(''); setMarca(''); setCategoria('cocina'); setProveedorId(''); setUnidad('unidad')
+    const defaultCat = myCats && myCats.length > 0 ? (myCats[0] as CatKey) : 'cocina'
+    setEditando(null); setNombre(''); setMarca(''); setCategoria(defaultCat); setProveedorId(''); setUnidad('unidad')
     setShowForm(true)
   }
   function abrirEditar(p: Producto) {
@@ -868,7 +995,7 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
           className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium cursor-pointer transition-colors ${catFiltro === 'todas' ? 'bg-[image:var(--gradient)] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
           Todas
         </button>
-        {CATEGORIAS.map(c => (
+        {(myCats ? CATEGORIAS.filter(c => myCats.includes(c.key)) : CATEGORIAS).map(c => (
           <button key={c.key} onClick={() => setCatFiltro(c.key)}
             className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium cursor-pointer transition-colors ${catFiltro === c.key ? 'bg-[image:var(--gradient)] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
             {c.label}
@@ -884,10 +1011,16 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
               <p className="text-[11px] text-[var(--text-muted)]">{catLabel(p.categoria)} · {p.unidad} · {p.proveedor?.nombre ?? <span className="text-amber-500">Sin proveedor</span>}</p>
             </div>
             <div className="flex items-center gap-1">
-              <button onClick={() => toggleActivo(p)}
-                className={`text-[10px] font-bold px-2 py-1 rounded-full border cursor-pointer transition-colors ${p.activo ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : 'bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200'}`}>
-                {p.activo ? 'Activo' : 'Inactivo'}
-              </button>
+              {isAdmin ? (
+                <button onClick={() => toggleActivo(p)}
+                  className={`text-[10px] font-bold px-2 py-1 rounded-full border cursor-pointer transition-colors ${p.activo ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : 'bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200'}`}>
+                  {p.activo ? 'Activo' : 'Inactivo'}
+                </button>
+              ) : (
+                <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${p.activo ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-400 border-gray-200'}`}>
+                  {p.activo ? 'Activo' : 'Inactivo'}
+                </span>
+              )}
               <button onClick={() => abrirEditar(p)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors">
                 <IconEdit size={14} />
               </button>
@@ -923,7 +1056,7 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
         <div>
           <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Categoría</p>
           <div className="flex flex-wrap gap-1.5">
-            {CATEGORIAS.map(c => (
+            {(myCats ? CATEGORIAS.filter(c => myCats.includes(c.key)) : CATEGORIAS).map(c => (
               <button key={c.key} onClick={() => setCategoria(c.key)}
                 className={`px-2.5 py-1.5 rounded-full text-[12px] font-medium border cursor-pointer transition-all ${categoria === c.key ? 'bg-[image:var(--gradient)] text-white border-transparent' : 'border-[var(--border)] text-[var(--text-sub)] hover:bg-gray-50'}`}>
                 {c.label}
@@ -952,9 +1085,11 @@ type CatConfig = { notif: boolean; dia_cierre: number }
 function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCiclos: () => void }) {
   const [permisos, setPermisos] = useState<Permiso[]>([])
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const [exportadores, setExportadores] = useState<string[]>([])
   const [config, setConfig] = useState<{ dias_aviso: number; hora_aviso: string; dia_cierre: number; categorias_config: Partial<Record<CatKey, CatConfig>> } | null>(null)
   const [loading, setLoading] = useState(true)
   const [guardandoPerm, setGuardandoPerm] = useState<string | null>(null)
+  const [guardandoExp, setGuardandoExp] = useState<string | null>(null)
   const [guardandoConf, setGuardandoConf] = useState(false)
   const [catAbierta, setCatAbierta] = useState<CatKey | null>(null)
   const [cicloCerrando, setCicloCerrando] = useState<string | null>(null)
@@ -968,10 +1103,12 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
     Promise.all([
       fetch('/api/pedidos/permisos').then(r => r.json()),
       fetch('/api/pedidos/config').then(r => r.json()),
-    ]).then(([p, c]) => {
+      fetch('/api/pedidos/exportadores').then(r => r.json()),
+    ]).then(([p, c, e]) => {
       setPermisos(p.permisos ?? [])
       setUsuarios(p.usuarios ?? [])
       setConfig(c.error ? null : c)
+      setExportadores(e.exportadores ?? [])
     }).finally(() => setLoading(false))
   }, [])
 
@@ -995,6 +1132,19 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
       ])
     }
     setGuardandoPerm(null)
+  }
+
+  async function toggleExportador(userId: string) {
+    const tiene = exportadores.includes(userId)
+    setGuardandoExp(userId)
+    const res = await fetch('/api/pedidos/exportadores', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario_id: userId, puede: !tiene }),
+    })
+    if (res.ok) {
+      setExportadores(prev => tiene ? prev.filter(id => id !== userId) : [...prev, userId])
+    }
+    setGuardandoExp(null)
   }
 
   function updateCatConfig(key: CatKey, val: CatConfig) {
@@ -1077,6 +1227,28 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
         </div>
       </div>
 
+      <div>
+        <p className="text-[14px] font-bold text-[var(--text)] mb-1">Puede exportar listas</p>
+        <p className="text-[12px] text-[var(--text-muted)] mb-3">Estas personas pueden exportar y enviar pedidos a proveedores.</p>
+        <div className="bg-white border border-[var(--border)] rounded-2xl shadow-sm overflow-hidden">
+          {usuarios.map((u, i) => {
+            const tiene = exportadores.includes(u.id)
+            const cargando = guardandoExp === u.id
+            return (
+              <div key={u.id} className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-[var(--border)]' : ''}`}>
+                <div onClick={() => !cargando && toggleExportador(u.id)}
+                  className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all cursor-pointer ${tiene ? 'bg-[image:var(--gradient)] border-transparent' : 'border-gray-300 hover:border-[var(--primary)]'} ${cargando ? 'opacity-50' : ''}`}>
+                  {tiene && <IconCheck size={12} className="text-white" />}
+                </div>
+                <Avatar nombre={u.nombre} foto={u.foto_perfil} size={24} />
+                <span className="text-[13px] text-[var(--text)] flex-1">{u.nombre}</span>
+                {tiene && <span className="text-[10px] font-bold text-[var(--primary)] uppercase">Exporta</span>}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
       {config && (
         <div>
           <p className="text-[14px] font-bold text-[var(--text)] mb-1">Recordatorio automático</p>
@@ -1136,10 +1308,12 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-export default function PedidosClient({ session }: { session: SessionUser }) {
+export default function PedidosClient({ session, myCats, puedeExportar }: {
+  session: SessionUser; myCats: string[]; puedeExportar: boolean
+}) {
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
 
-  type Tab = 'lista' | 'exportar' | 'catalogo' | 'ajustes'
+  type Tab = 'lista' | 'enviados' | 'exportar' | 'catalogo' | 'ajustes'
   const [tab, setTab] = useState<Tab>('lista')
   const [ciclos, setCiclos] = useState<Ciclo[]>([])
   const [productos, setProductos] = useState<Producto[]>([])
@@ -1170,11 +1344,10 @@ export default function PedidosClient({ session }: { session: SessionUser }) {
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'lista',    label: 'Lista' },
-    { key: 'exportar', label: 'Exportar' },
-    ...(isAdmin ? [
-      { key: 'catalogo' as Tab, label: 'Catálogo' },
-      { key: 'ajustes'  as Tab, label: 'Ajustes' },
-    ] : []),
+    { key: 'enviados', label: 'Enviados' },
+    ...(puedeExportar ? [{ key: 'exportar' as Tab, label: 'Exportar' }] : []),
+    { key: 'catalogo', label: 'Catálogo' },
+    ...(isAdmin ? [{ key: 'ajustes' as Tab, label: 'Ajustes' }] : []),
   ]
 
   return (
@@ -1209,10 +1382,13 @@ export default function PedidosClient({ session }: { session: SessionUser }) {
               onCiclosChange={cargarCiclos}
               onRefreshProductos={cargarProductos}
               isAdmin={isAdmin}
+              myCats={myCats}
+              myId={session.id}
             />
           )}
-          {tab === 'exportar' && <TabExportar cicloActivo={cicloActivo} onCiclosChange={cargarCiclos} />}
-          {tab === 'catalogo' && isAdmin && <TabCatalogo productos={productos} proveedores={proveedores} onRefresh={cargarProductos} />}
+          {tab === 'enviados' && <TabEnviados cicloActivo={cicloActivo} isAdmin={isAdmin} />}
+          {tab === 'exportar' && puedeExportar && <TabExportar cicloActivo={cicloActivo} onCiclosChange={cargarCiclos} />}
+          {tab === 'catalogo' && <TabCatalogo productos={productos} proveedores={proveedores} onRefresh={cargarProductos} isAdmin={isAdmin} myCats={isAdmin ? null : myCats} />}
           {tab === 'ajustes' && isAdmin && <TabAjustes ciclos={ciclos} onRefreshCiclos={cargarCiclos} />}
         </>
       )}

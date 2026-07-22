@@ -12,9 +12,25 @@ export async function PUT(
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
-  if (!isAdmin) return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
 
   const { id } = await params
+
+  // Non-admin can edit products but only in their categories
+  if (!isAdmin) {
+    const { data: prod } = await supabaseAdmin
+      .from('pedidos_productos')
+      .select('categoria')
+      .eq('id', id)
+      .single()
+    if (!prod) return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 })
+    const { data: perm } = await supabaseAdmin
+      .from('pedidos_permisos')
+      .select('categoria')
+      .eq('usuario_id', session.id)
+      .eq('categoria', prod.categoria)
+      .maybeSingle()
+    if (!perm) return NextResponse.json({ error: 'Sin permisos para esta categoría' }, { status: 403 })
+  }
   const body = await request.json().catch(() => ({}))
   const { nombre, marca, categoria, proveedor_id, unidad, activo } = body
 
