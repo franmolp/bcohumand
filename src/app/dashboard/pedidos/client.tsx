@@ -516,17 +516,11 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
                 className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
             </div>
             <MarcaInput value={newMarca} onChange={setNewMarca} productos={productos} />
-            <div>
-              <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Categoría</p>
-              <div className="flex flex-wrap gap-1.5">
-                {(isAdmin ? CATEGORIAS : CATEGORIAS.filter(c => myCats.includes(c.key))).map(c => (
-                  <button key={c.key} onClick={() => setNewCategoria(c.key)}
-                    className={`px-2.5 py-1.5 rounded-full text-[12px] font-medium border cursor-pointer transition-all ${newCategoria === c.key ? 'bg-[image:var(--gradient)] text-white border-transparent' : 'border-[var(--border)] text-[var(--text-sub)] hover:bg-gray-50'}`}>
-                    {c.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <Select label="Categoría" value={newCategoria} onChange={v => setNewCategoria(v as CatKey)}>
+              {(isAdmin ? CATEGORIAS : CATEGORIAS.filter(c => myCats.includes(c.key))).map(c => (
+                <option key={c.key} value={c.key}>{c.label}</option>
+              ))}
+            </Select>
             <Select label="Proveedor *" value={newProveedorId} onChange={setNewProveedorId}>
               <option value="">— Elegí un proveedor —</option>
               {proveedores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
@@ -1151,17 +1145,11 @@ function TabCatalogo({ productos, proveedores, onRefresh, isAdmin, myCats }: {
             className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
         </div>
         <MarcaInput value={marca} onChange={setMarca} productos={productos} label="Marca" />
-        <div>
-          <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Categoría</p>
-          <div className="flex flex-wrap gap-1.5">
-            {(myCats ? CATEGORIAS.filter(c => myCats.includes(c.key)) : CATEGORIAS).map(c => (
-              <button key={c.key} onClick={() => setCategoria(c.key)}
-                className={`px-2.5 py-1.5 rounded-full text-[12px] font-medium border cursor-pointer transition-all ${categoria === c.key ? 'bg-[image:var(--gradient)] text-white border-transparent' : 'border-[var(--border)] text-[var(--text-sub)] hover:bg-gray-50'}`}>
-                {c.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <Select label="Categoría" value={categoria} onChange={v => setCategoria(v as CatKey)}>
+          {(myCats ? CATEGORIAS.filter(c => myCats.includes(c.key)) : CATEGORIAS).map(c => (
+            <option key={c.key} value={c.key}>{c.label}</option>
+          ))}
+        </Select>
         <div className="flex gap-3">
           <Select label="Proveedor" value={proveedorId} onChange={setProveedorId} className="flex-1">
             <option value="">Sin proveedor</option>
