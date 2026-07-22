@@ -1887,8 +1887,8 @@ export default function PedidosClient({ session, myCats, puedeExportar }: {
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'inventario', label: 'Inventario' },
-    { key: 'lista',      label: 'Lista' },
-    { key: 'enviados',   label: 'Enviados' },
+    { key: 'lista',      label: 'A pedir' },
+    { key: 'enviados',   label: 'Ya pedido' },
     ...(puedeExportar ? [{ key: 'exportar' as Tab, label: 'Exportar' }] : []),
     ...(isAdmin ? [{ key: 'ajustes' as Tab, label: 'Ajustes' }] : []),
   ]
