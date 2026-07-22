@@ -1239,8 +1239,11 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ usuario_id: userId, puede: !tiene }),
     })
+    const json = await res.json().catch(() => ({}))
     if (res.ok) {
       setExportadores(prev => tiene ? prev.filter(id => id !== userId) : [...prev, userId])
+    } else {
+      showToast(json.error ?? 'Error al guardar', 'error')
     }
     setGuardandoExp(null)
   }
