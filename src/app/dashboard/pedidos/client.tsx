@@ -93,7 +93,7 @@ function formatFecha(iso: string) {
 function formatCerradoEn(iso: string) {
   const d = new Date(iso)
   const dia = d.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: 'numeric', month: 'numeric' })
-  const hora = d.toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit' })
+  const hora = d.toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', hour12: false })
   return `${dia} a las ${hora}`
 }
 
@@ -262,6 +262,15 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
     cargar()
   }
 
+  async function restaurarItem(id: string) {
+    if (!cicloActivo) return
+    await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archivado: false }),
+    })
+    cargar()
+  }
+
   // Agrupar: proveedor → categoría → items
   const grouped: { prov: string; cats: { cat: string; items: Item[] }[] }[] = []
   const mapProv: Record<string, Record<string, Item[]>> = {}
@@ -373,19 +382,25 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
           {showArchivados && (
             <div className="mt-2 space-y-0.5 pl-4 border-l-2 border-gray-100">
               {archivados.map(item => (
-                <div key={item.id} className="px-2 py-2 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-gray-200 flex-shrink-0" />
-                    <span className="text-[12px] text-[var(--text-muted)] line-through">
-                      {item.producto?.nombre ?? item.nombre_libre ?? 'Ítem'}
-                    </span>
-                    <span className="text-[11px] text-[var(--text-muted)]">{fmtCantidad(item.cantidad, item.unidad)}</span>
+                <div key={item.id} className="px-2 py-2 rounded-lg flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-gray-200 flex-shrink-0 mt-0.5" />
+                      <span className="text-[12px] text-[var(--text-muted)] line-through">
+                        {item.producto?.nombre ?? item.nombre_libre ?? 'Ítem'}
+                      </span>
+                      <span className="text-[11px] text-[var(--text-muted)]">{fmtCantidad(item.cantidad, item.unidad)}</span>
+                    </div>
+                    <p className="pl-3.5 mt-0.5 text-[10px] text-[var(--text-muted)]">
+                      Cargado por <span className="font-medium">{item.usuario.nombre}</span>
+                      {item.archivado_por && <> · Archivado por <span className="font-medium">{item.archivado_por}</span></>}
+                      {item.archivado_en && <> el {formatCerradoEn(item.archivado_en)}</>}
+                    </p>
                   </div>
-                  <p className="pl-3.5 mt-0.5 text-[10px] text-[var(--text-muted)]">
-                    Cargado por <span className="font-medium">{item.usuario.nombre}</span>
-                    {item.archivado_por && <> · Archivado por <span className="font-medium">{item.archivado_por}</span></>}
-                    {item.archivado_en && <> el {formatCerradoEn(item.archivado_en)}</>}
-                  </p>
+                  <button onClick={() => restaurarItem(item.id)}
+                    className="flex-shrink-0 px-2 py-1 rounded-lg bg-gray-100 text-[11px] font-medium text-gray-600 hover:bg-gray-200 cursor-pointer transition-colors">
+                    Restaurar
+                  </button>
                 </div>
               ))}
             </div>
@@ -632,9 +647,9 @@ function ItemRow({ item, cicloAbierto, isAdmin, onEdit, onArchive, onDelete }: {
         <span className="text-[10px] text-[var(--text-muted)] hidden sm:block ml-1">{item.usuario.nombre.split(' ')[0]}</span>
         {cicloAbierto && (
           <div className="flex gap-0.5 ml-1">
-            <button onClick={onEdit} title="Editar" className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors"><IconEdit size={12} /></button>
-            <button onClick={onArchive} title="Archivar" className="p-1.5 rounded text-gray-400 hover:text-amber-500 hover:bg-amber-50 cursor-pointer transition-colors"><IconX size={12} /></button>
-            {isAdmin && <button onClick={onDelete} title="Eliminar definitivo" className="p-1.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors"><IconTrash size={12} /></button>}
+            <button onClick={onEdit} title="Editar" className="p-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 cursor-pointer transition-colors"><IconEdit size={12} /></button>
+            <button onClick={onArchive} title="Archivar" className="p-1.5 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 cursor-pointer transition-colors"><IconX size={12} /></button>
+            {isAdmin && <button onClick={onDelete} title="Eliminar definitivo" className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 cursor-pointer transition-colors"><IconTrash size={12} /></button>}
           </div>
         )}
       </div>

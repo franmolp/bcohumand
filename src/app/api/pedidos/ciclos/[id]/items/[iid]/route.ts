@@ -29,7 +29,7 @@ export async function PUT(
   }
 
   const body = await request.json().catch(() => ({}))
-  const { cantidad, unidad, notas, urgente, estado } = body
+  const { cantidad, unidad, notas, urgente, estado, archivado } = body
 
   const update: Record<string, unknown> = {}
   if (cantidad !== undefined && !isNaN(Number(cantidad)) && Number(cantidad) > 0) update.cantidad = Number(cantidad)
@@ -37,6 +37,10 @@ export async function PUT(
   if (notas !== undefined) update.notas = notas?.trim() ?? null
   if (urgente !== undefined) update.urgente = urgente === true
   if (isAdmin && estado && ['pendiente', 'ordenado', 'recibido'].includes(estado)) update.estado = estado
+  if (isAdmin && typeof archivado === 'boolean') {
+    update.archivado = archivado
+    if (!archivado) { update.archivado_por = null; update.archivado_en = null }
+  }
 
   if (!Object.keys(update).length) {
     return NextResponse.json({ error: 'Nada para actualizar' }, { status: 400 })
