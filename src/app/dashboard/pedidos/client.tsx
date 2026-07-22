@@ -42,7 +42,7 @@ function fmtCantidad(cantidad: number, unidad: string): string {
 interface Proveedor { id: number; nombre: string }
 
 interface Producto {
-  id: string; nombre: string; categoria: CatKey; unidad: string
+  id: string; nombre: string; marca: string; categoria: CatKey; unidad: string
   activo: boolean; proveedor_id: number | null; proveedor: Proveedor | null
 }
 
@@ -58,7 +58,7 @@ interface Item {
   estado: 'pendiente' | 'ordenado' | 'recibido'; usuario_id: string
   usuario: { nombre: string; foto_perfil: string | null }
   producto: {
-    id: string; nombre: string; categoria: CatKey; unidad: string
+    id: string; nombre: string; marca: string; categoria: CatKey; unidad: string
     proveedor_id: number | null; proveedor: { id: number; nombre: string } | null
   } | null
   created_at: string
@@ -66,8 +66,9 @@ interface Item {
 }
 
 interface ExportGroup {
+  proveedor_id: number | null
   nombre_proveedor: string
-  items: { id: string; nombre: string; cantidad: number; unidad: string; notas: string | null; urgente: boolean; estado: string; usuario: string; nombre_libre: string | null; categoria: string | null }[]
+  items: { id: string; nombre: string; marca: string | null; cantidad: number; unidad: string; notas: string | null; urgente: boolean; estado: string; usuario: string; nombre_libre: string | null; categoria: string | null }[]
 }
 
 interface Usuario { id: string; nombre: string; foto_perfil: string | null }
@@ -135,6 +136,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
   const [productoSel, setProductoSel] = useState<Producto | null>(null)
   // New product form
   const [newNombre, setNewNombre] = useState('')
+  const [newMarca, setNewMarca] = useState('')
   const [newCategoria, setNewCategoria] = useState<CatKey>('cocina')
   const [newProveedorId, setNewProveedorId] = useState('')
   // Config (new + existing)
@@ -170,7 +172,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
 
   function openAdd() {
     setShowAdd(true); setAddStep('search'); setBusqueda(''); setProductoSel(null)
-    setNewNombre(''); setNewCategoria('cocina'); setNewProveedorId('')
+    setNewNombre(''); setNewMarca(''); setNewCategoria('cocina'); setNewProveedorId('')
     setProvConfig(''); setCantidad('1'); setUnidad('unidad'); setNotas(''); setUrgente(false)
     setGuardandoError('')
   }
@@ -184,6 +186,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
 
   function goToNew() {
     setNewNombre(busqueda.trim())
+    setNewMarca('')
     setNewCategoria('cocina')
     setNewProveedorId('')
     setCantidad('1'); setUnidad('unidad'); setNotas(''); setUrgente(false)
@@ -225,7 +228,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
 
     const prodRes = await fetch('/api/pedidos/productos', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre: newNombre.trim(), categoria: newCategoria, proveedor_id: Number(newProveedorId), unidad }),
+      body: JSON.stringify({ nombre: newNombre.trim(), marca: newMarca.trim() || 'Sin marca', categoria: newCategoria, proveedor_id: Number(newProveedorId), unidad }),
     })
     if (!prodRes.ok) { setGuardando(false); setGuardandoError('Error al crear el producto.'); return }
     const newProd = await prodRes.json()
@@ -400,8 +403,8 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button onClick={() => setConfirmRestore(item)}
-                      className="px-2 py-1 rounded-lg bg-gray-100 text-[11px] font-medium text-gray-600 hover:bg-gray-200 cursor-pointer transition-colors">
-                      Restaurar
+                      className={`px-2 py-1 rounded-lg text-[11px] font-medium cursor-pointer transition-colors ${item.estado === 'ordenado' ? 'bg-orange-50 text-orange-700 hover:bg-orange-100' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                      {item.estado === 'ordenado' ? 'No llegó' : 'Restaurar'}
                     </button>
                     {isAdmin && (
                       <button onClick={() => setConfirmDelete(item)} title="Eliminar definitivo"
@@ -435,7 +438,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
             <>
               <Button variant="secondary" onClick={() => setAddStep('search')}>Volver</Button>
               <Button className="flex-1" onClick={agregarNuevo} loading={guardando}
-                disabled={!newNombre.trim() || !newProveedorId || !cantidad || Number(cantidad) <= 0}>
+                disabled={!newNombre.trim() || !newProveedorId || !cantidad || Number(cantidad) <= 0 || !newMarca.trim()}>
                 Crear y agregar
               </Button>
             </>
@@ -459,7 +462,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
                   <button key={p.id} onClick={() => selectProducto(p)}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left hover:bg-gray-50 cursor-pointer transition-colors">
                     <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-medium truncate">{p.nombre}</p>
+                      <p className="text-[13px] font-medium truncate">{p.nombre} <span className="font-normal text-[var(--text-muted)]">· {p.marca}</span></p>
                       <p className="text-[11px] text-[var(--text-muted)]">{catLabel(p.categoria)} · {p.proveedor?.nombre ?? <span className="text-amber-500">Sin proveedor</span>}</p>
                     </div>
                   </button>
@@ -479,10 +482,17 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
         {/* Step: new product */}
         {addStep === 'new' && (
           <>
-            <div>
-              <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Nombre</p>
-              <input value={newNombre} onChange={e => setNewNombre(e.target.value)} placeholder="Ej: Algodón"
-                className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Nombre *</p>
+                <input value={newNombre} onChange={e => setNewNombre(e.target.value)} placeholder="Ej: Algodón"
+                  className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+              </div>
+              <div className="w-36">
+                <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Marca *</p>
+                <input value={newMarca} onChange={e => setNewMarca(e.target.value)} placeholder="Ej: Nivea"
+                  className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+              </div>
             </div>
             <div>
               <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Categoría</p>
@@ -593,9 +603,9 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
       />
       <Confirm
         open={!!confirmRestore}
-        title="¿Restaurás este ítem?"
-        message={`"${confirmRestore?.producto?.nombre ?? confirmRestore?.nombre_libre ?? 'Ítem'}" volverá a la lista activa.`}
-        confirmLabel="Restaurar"
+        title={confirmRestore?.estado === 'ordenado' ? '¿Marcás como faltante?' : '¿Restaurás este ítem?'}
+        message={`"${confirmRestore?.producto?.nombre ?? confirmRestore?.nombre_libre ?? 'Ítem'}" volverá a la lista activa como pendiente.`}
+        confirmLabel={confirmRestore?.estado === 'ordenado' ? 'Sí, no llegó' : 'Restaurar'}
         onConfirm={() => confirmRestore && restaurarItem(confirmRestore)}
         onClose={() => setConfirmRestore(null)}
       />
@@ -654,6 +664,9 @@ function ItemRow({ item, cicloAbierto, isAdmin, onEdit, onArchive, onDelete }: {
       <div className="flex-1 min-w-0">
         <span className={`text-[13px] ${item.urgente ? 'font-semibold text-red-700' : 'text-[var(--text)]'}`}>
           {item.producto?.nombre ?? item.nombre_libre ?? 'Ítem'}
+          {item.producto?.marca && item.producto.marca !== 'Sin marca' && (
+            <span className={`text-[11px] font-normal ml-1 ${item.urgente ? 'text-red-500/70' : 'text-[var(--text-muted)]'}`}>· {item.producto.marca}</span>
+          )}
         </span>
         <span className="text-[11px] text-[var(--text-muted)] ml-2">{fmtCantidad(item.cantidad, item.unidad)}</span>
         {item.urgente && <span className="ml-2 text-[9px] font-bold text-red-500 uppercase tracking-wide">urgente</span>}
@@ -676,16 +689,16 @@ function ItemRow({ item, cicloAbierto, isAdmin, onEdit, onArchive, onDelete }: {
 
 // ─── Tab: Exportar ───────────────────────────────────────────────────────────
 
-function TabExportar({ cicloActivo, onCiclosChange, onTabChange }: {
-  cicloActivo: Ciclo | null; onCiclosChange: () => void; onTabChange: (t: string) => void
+function TabExportar({ cicloActivo, onCiclosChange }: {
+  cicloActivo: Ciclo | null; onCiclosChange: () => void
 }) {
   const [grupos, setGrupos] = useState<ExportGroup[]>([])
   const [loading, setLoading] = useState(false)
   const [copiado, setCopiado] = useState<string | null>(null)
-  const [confirmCerrar, setConfirmCerrar] = useState(false)
-  const [cerrando, setCerrando] = useState(false)
+  const [confirmEnviar, setConfirmEnviar] = useState<ExportGroup | null>(null)
+  const [enviando, setEnviando] = useState<string | null>(null)
 
-  useEffect(() => {
+  const cargar = useCallback(() => {
     if (!cicloActivo) return
     setLoading(true)
     fetch(`/api/pedidos/ciclos/${cicloActivo.id}/exportar`)
@@ -695,27 +708,29 @@ function TabExportar({ cicloActivo, onCiclosChange, onTabChange }: {
       .finally(() => setLoading(false))
   }, [cicloActivo])
 
+  useEffect(() => { cargar() }, [cargar])
+
   function copiarProveedor(g: ExportGroup) {
     const urgentes = g.items.filter(i => i.urgente)
     const normales = g.items.filter(i => !i.urgente)
     const lineas = [
-      ...urgentes.map(i => `- ${fmtCantidad(i.cantidad, i.unidad)} ${i.nombre} (urgente)`),
-      ...normales.map(i => `- ${fmtCantidad(i.cantidad, i.unidad)} ${i.nombre}`),
+      ...urgentes.map(i => `- ${fmtCantidad(i.cantidad, i.unidad)} ${i.nombre}${i.marca ? ` (${i.marca})` : ''} (urgente)`),
+      ...normales.map(i => `- ${fmtCantidad(i.cantidad, i.unidad)} ${i.nombre}${i.marca ? ` (${i.marca})` : ''}`),
     ]
     navigator.clipboard.writeText(lineas.join('\n'))
     setCopiado(g.nombre_proveedor)
     setTimeout(() => setCopiado(null), 2000)
   }
 
-  async function cerrarPedido() {
+  async function enviarProveedor(g: ExportGroup) {
     if (!cicloActivo) return
-    setCerrando(true)
-    await fetch(`/api/pedidos/ciclos/${cicloActivo.id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ estado: 'enviado' }),
+    setEnviando(g.nombre_proveedor)
+    await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/cerrar-proveedor`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ proveedor_id: g.proveedor_id }),
     })
-    setCerrando(false); setConfirmCerrar(false)
-    onCiclosChange(); onTabChange('lista')
+    setEnviando(null); setConfirmEnviar(null)
+    cargar(); onCiclosChange()
   }
 
   if (!cicloActivo) return <p className="text-center text-[13px] text-gray-400 py-12">No hay lista activa</p>
@@ -723,30 +738,43 @@ function TabExportar({ cicloActivo, onCiclosChange, onTabChange }: {
   return (
     <div>
       <p className="text-[12px] text-[var(--text-muted)] mb-4">
-        Copiá la lista de cada proveedor y pegala en WhatsApp. El texto copiado no incluye quién lo pidió.
+        Copiá la lista de cada proveedor y pegala en WhatsApp. Al enviar, esos ítems desaparecen de la lista activa.
       </p>
 
       {loading && <Spinner />}
-      {!loading && !grupos.length && <p className="text-center text-[13px] text-gray-400 py-12">No hay ítems en la lista</p>}
+      {!loading && !grupos.length && <p className="text-center text-[13px] text-gray-400 py-12">No hay ítems pendientes</p>}
 
-      <div className="space-y-4 mb-6">
+      <div className="space-y-4">
         {grupos.map(g => (
           <div key={g.nombre_proveedor} className="bg-white border border-[var(--border)] rounded-2xl shadow-sm overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
               <div className="flex items-center gap-2">
                 <IconShoppingBag size={14} className="text-[var(--primary)]" />
                 <p className="text-[13px] font-bold text-[var(--text)]">{g.nombre_proveedor}</p>
+                <span className="text-[11px] text-[var(--text-muted)]">({g.items.length})</span>
               </div>
-              <button onClick={() => copiarProveedor(g)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-semibold cursor-pointer transition-all ${copiado === g.nombre_proveedor ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                {copiado === g.nombre_proveedor ? <><IconCheck size={12} /> Copiado</> : 'Copiar'}
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button onClick={() => copiarProveedor(g)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-semibold cursor-pointer transition-all ${copiado === g.nombre_proveedor ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                  {copiado === g.nombre_proveedor ? <><IconCheck size={12} /> Copiado</> : 'Copiar'}
+                </button>
+                {cicloActivo.estado === 'abierto' && (
+                  <button onClick={() => setConfirmEnviar(g)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-semibold bg-[var(--primary)] text-white cursor-pointer hover:opacity-90 transition-opacity">
+                    Enviar
+                  </button>
+                )}
+              </div>
             </div>
             <div className="divide-y divide-gray-50 px-4">
               {g.items.map(item => (
                 <div key={item.id} className={`py-2.5 flex items-center gap-2 ${item.urgente ? 'text-red-700' : ''}`}>
                   <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.urgente ? 'bg-red-500' : 'bg-gray-300'}`} />
-                  <span className="text-[13px] font-medium flex-1">{item.nombre}</span>
+                  <span className="text-[13px] font-medium flex-1">{item.nombre}
+                    {item.marca && item.marca !== 'Sin marca' && (
+                      <span className="text-[11px] font-normal text-[var(--text-muted)] ml-1">· {item.marca}</span>
+                    )}
+                  </span>
                   <span className="text-[12px] text-[var(--text-muted)]">{fmtCantidad(item.cantidad, item.unidad)}</span>
                   {item.urgente && <span className="text-[9px] font-bold text-red-500 uppercase">URG</span>}
                   <span className="text-[11px] text-[var(--text-muted)]">— {item.usuario}</span>
@@ -757,21 +785,14 @@ function TabExportar({ cicloActivo, onCiclosChange, onTabChange }: {
         ))}
       </div>
 
-      {cicloActivo.estado === 'abierto' && (
-        <Button variant="danger" className="w-full" onClick={() => setConfirmCerrar(true)} disabled={!grupos.length}>
-          Cerrar pedido y archivar lista
-        </Button>
-      )}
-
       <Confirm
-        open={confirmCerrar}
-        onClose={() => setConfirmCerrar(false)}
-        onConfirm={cerrarPedido}
-        title="¿Cerrás el pedido?"
-        message={`Se archivará la lista actual (${grupos.reduce((n, g) => n + g.items.length, 0)} ítems) y se abrirá una nueva vacía.`}
-        confirmLabel="Cerrar pedido"
-        danger
-        loading={cerrando}
+        open={!!confirmEnviar}
+        onClose={() => setConfirmEnviar(null)}
+        onConfirm={() => confirmEnviar && enviarProveedor(confirmEnviar)}
+        title={`¿Enviaste el pedido a ${confirmEnviar?.nombre_proveedor}?`}
+        message={`${confirmEnviar?.items.length} ítem${(confirmEnviar?.items.length ?? 0) > 1 ? 's' : ''} desaparecerán de la lista activa. Si algo no llegó, podés recuperarlo desde la sección Archivados en la Lista.`}
+        confirmLabel="Sí, envié el pedido"
+        loading={!!enviando}
       />
     </div>
   )
@@ -787,6 +808,7 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
   const [showForm, setShowForm] = useState(false)
   const [editando, setEditando] = useState<Producto | null>(null)
   const [nombre, setNombre] = useState('')
+  const [marca, setMarca] = useState('')
   const [categoria, setCategoria] = useState<CatKey>('cocina')
   const [proveedorId, setProveedorId] = useState('')
   const [unidad, setUnidad] = useState('unidad')
@@ -800,18 +822,18 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
   })
 
   function abrirNuevo() {
-    setEditando(null); setNombre(''); setCategoria('cocina'); setProveedorId(''); setUnidad('unidad')
+    setEditando(null); setNombre(''); setMarca(''); setCategoria('cocina'); setProveedorId(''); setUnidad('unidad')
     setShowForm(true)
   }
   function abrirEditar(p: Producto) {
-    setEditando(p); setNombre(p.nombre); setCategoria(p.categoria)
+    setEditando(p); setNombre(p.nombre); setMarca(p.marca ?? ''); setCategoria(p.categoria)
     setProveedorId(p.proveedor_id?.toString() ?? ''); setUnidad(p.unidad)
     setShowForm(true)
   }
 
   async function guardar() {
     setGuardando(true)
-    const body = { nombre, categoria, proveedor_id: proveedorId ? Number(proveedorId) : null, unidad }
+    const body = { nombre, marca: marca.trim() || 'Sin marca', categoria, proveedor_id: proveedorId ? Number(proveedorId) : null, unidad }
     const res = editando
       ? await fetch(`/api/pedidos/productos/${editando.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       : await fetch('/api/pedidos/productos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -858,7 +880,7 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
         {prodsFiltrados.map(p => (
           <div key={p.id} className={`bg-white border rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm border-[var(--border)] ${!p.activo ? 'opacity-50' : ''}`}>
             <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-semibold truncate">{p.nombre}</p>
+              <p className="text-[13px] font-semibold truncate">{p.nombre} <span className="font-normal text-[var(--text-muted)]">{p.marca !== 'Sin marca' ? `· ${p.marca}` : ''}</span></p>
               <p className="text-[11px] text-[var(--text-muted)]">{catLabel(p.categoria)} · {p.unidad} · {p.proveedor?.nombre ?? <span className="text-amber-500">Sin proveedor</span>}</p>
             </div>
             <div className="flex items-center gap-1">
@@ -886,10 +908,17 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
           </>
         }
       >
-        <div>
-          <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Nombre</p>
-          <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Algodón"
-            className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Nombre *</p>
+            <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Algodón"
+              className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+          </div>
+          <div className="w-36">
+            <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Marca</p>
+            <input value={marca} onChange={e => setMarca(e.target.value)} placeholder="Sin marca"
+              className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+          </div>
         </div>
         <div>
           <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Categoría</p>
@@ -1182,7 +1211,7 @@ export default function PedidosClient({ session }: { session: SessionUser }) {
               isAdmin={isAdmin}
             />
           )}
-          {tab === 'exportar' && <TabExportar cicloActivo={cicloActivo} onCiclosChange={cargarCiclos} onTabChange={t => setTab(t as Tab)} />}
+          {tab === 'exportar' && <TabExportar cicloActivo={cicloActivo} onCiclosChange={cargarCiclos} />}
           {tab === 'catalogo' && isAdmin && <TabCatalogo productos={productos} proveedores={proveedores} onRefresh={cargarProductos} />}
           {tab === 'ajustes' && isAdmin && <TabAjustes ciclos={ciclos} onRefreshCiclos={cargarCiclos} />}
         </>

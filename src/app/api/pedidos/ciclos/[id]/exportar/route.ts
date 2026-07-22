@@ -17,8 +17,9 @@ export async function GET(
 
   const { data: items, error } = await supabaseAdmin
     .from('pedidos_items')
-    .select('*, producto:pedidos_productos(nombre, categoria, proveedor_id, proveedor:proveedores(id, nombre))')
+    .select('*, producto:pedidos_productos(nombre, marca, categoria, proveedor_id, proveedor:proveedores(id, nombre))')
     .eq('ciclo_id', id)
+    .eq('archivado', false)
     .order('urgente', { ascending: false })
     .order('created_at', { ascending: true })
 
@@ -33,10 +34,10 @@ export async function GET(
   const userMap: Record<string, string> = {}
   for (const u of usuarios ?? []) userMap[u.id] = u.nombre
 
-  // Agrupar por proveedor
   type ItemExport = {
     id: string
     nombre: string
+    marca: string | null
     cantidad: number
     unidad: string
     notas: string | null
@@ -46,16 +47,18 @@ export async function GET(
     nombre_libre: string | null
     categoria: string | null
   }
-  const porProveedor: Record<string, { nombre_proveedor: string; items: ItemExport[] }> = {}
+  type Group = { proveedor_id: number | null; nombre_proveedor: string; items: ItemExport[] }
+  const porProveedor: Record<string, Group> = {}
 
   for (const item of items ?? []) {
-    const prod = item.producto as { nombre: string; categoria: string; proveedor_id: number | null; proveedor: { id: number; nombre: string } | null } | null
+    const prod = item.producto as { nombre: string; marca: string; categoria: string; proveedor_id: number | null; proveedor: { id: number; nombre: string } | null } | null
     const provId = prod?.proveedor?.id?.toString() ?? 'sin_proveedor'
     const provNombre = prod?.proveedor?.nombre ?? 'Sin proveedor'
-    if (!porProveedor[provId]) porProveedor[provId] = { nombre_proveedor: provNombre, items: [] }
+    if (!porProveedor[provId]) porProveedor[provId] = { proveedor_id: prod?.proveedor?.id ?? null, nombre_proveedor: provNombre, items: [] }
     porProveedor[provId].items.push({
       id: item.id,
       nombre: prod?.nombre ?? item.nombre_libre ?? 'Item sin nombre',
+      marca: prod?.marca ?? null,
       cantidad: item.cantidad,
       unidad: item.unidad,
       notas: item.notas ?? null,
@@ -67,7 +70,6 @@ export async function GET(
     })
   }
 
-  // Sin proveedor al final
   const ordenado = Object.entries(porProveedor).sort(([a], [b]) => {
     if (a === 'sin_proveedor') return 1
     if (b === 'sin_proveedor') return -1

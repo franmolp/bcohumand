@@ -16,10 +16,11 @@ export async function PUT(
 
   const { id } = await params
   const body = await request.json().catch(() => ({}))
-  const { nombre, categoria, proveedor_id, unidad, activo } = body
+  const { nombre, marca, categoria, proveedor_id, unidad, activo } = body
 
   const update: Record<string, unknown> = {}
   if (nombre?.trim()) update.nombre = nombre.trim()
+  if (marca !== undefined) update.marca = marca?.trim() || 'Sin marca'
   if (categoria && CATEGORIAS.includes(categoria)) update.categoria = categoria
   if (proveedor_id !== undefined) update.proveedor_id = proveedor_id ?? null
   if (unidad?.trim()) update.unidad = unidad.trim()

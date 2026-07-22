@@ -15,7 +15,7 @@ export async function GET(
   const [itemsRes, permsRes] = await Promise.all([
     supabaseAdmin
       .from('pedidos_items')
-      .select('*, producto:pedidos_productos(id, nombre, categoria, unidad, proveedor_id, proveedor:proveedores(id, nombre))')
+      .select('*, producto:pedidos_productos(id, nombre, marca, categoria, unidad, proveedor_id, proveedor:proveedores(id, nombre))')
       .eq('ciclo_id', id)
       .order('created_at', { ascending: true }),
     supabaseAdmin

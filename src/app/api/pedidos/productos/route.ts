@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
   if (!isAdmin) return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
 
   const body = await request.json().catch(() => ({}))
-  const { nombre, categoria, proveedor_id, unidad } = body
+  const { nombre, marca, categoria, proveedor_id, unidad } = body
 
   const CATEGORIAS = ['cocina', 'limpieza', 'manicuria', 'masajes', 'cejas_pestanas', 'depilacion', 'peluqueria']
   if (!nombre?.trim()) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 })
@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
     .from('pedidos_productos')
     .insert({
       nombre: nombre.trim(),
+      marca: marca?.trim() || 'Sin marca',
       categoria,
       proveedor_id: proveedor_id ?? null,
       unidad: unidad ?? 'unidad',
