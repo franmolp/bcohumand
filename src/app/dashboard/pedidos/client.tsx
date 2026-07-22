@@ -1277,6 +1277,11 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
   const [stockLogMap, setStockLogMap] = useState<Record<string, StockAuditEntry[]>>({})
   const [stockLogOpen, setStockLogOpen] = useState<Set<string>>(new Set())
 
+  const [varianteForm, setVarianteForm] = useState<{ prod: Producto; variante?: Variante } | null>(null)
+  const [varianteNombre, setVarianteNombre] = useState('')
+  const [varianteMinimo, setVarianteMinimo] = useState('')
+  const [varianteGuardando, setVarianteGuardando] = useState(false)
+
   const [pedirItems, setPedirItems] = useState<Item[]>([])
   useEffect(() => {
     if (!cicloActivo) return
@@ -1404,6 +1409,41 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
       const data = await fetch(`/api/pedidos/stock-auditoria?${param}=${id}`).then(r => r.json()).catch(() => [])
       setStockLogMap(m => ({ ...m, [id]: Array.isArray(data) ? data : [] }))
     }
+  }
+
+  async function guardarVariante() {
+    if (!varianteForm || !varianteNombre.trim()) return
+    setVarianteGuardando(true)
+    const { prod, variante } = varianteForm
+    const body: Record<string, unknown> = {
+      nombre: varianteNombre.trim(),
+      stock_minimo: varianteMinimo !== '' ? Number(varianteMinimo) : null,
+    }
+    if (variante) {
+      await fetch(`/api/pedidos/variantes/${variante.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      setVariantesMap(m => ({
+        ...m,
+        [prod.id]: (m[prod.id] ?? []).map(v =>
+          v.id === variante.id ? { ...v, nombre: varianteNombre.trim(), stock_minimo: body.stock_minimo as number | null } : v
+        ),
+      }))
+    } else {
+      body.producto_id = prod.id
+      const data = await fetch('/api/pedidos/variantes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(r => r.json()).catch(() => null)
+      if (data?.id) {
+        setVariantesMap(m => ({ ...m, [prod.id]: [...(m[prod.id] ?? []), data] }))
+        onRefresh()
+      }
+    }
+    setVarianteGuardando(false)
+    setVarianteForm(null)
+    showToast(variante ? 'Variante actualizada' : 'Variante creada')
   }
 
   async function toggleExpand(prod: Producto) {
@@ -1564,6 +1604,9 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
                   {expandidos.has(p.id) && (
                     <div className="border-t border-[var(--border)]">
                       {loadingVars.has(p.id) && <div className="px-4 py-3"><Spinner /></div>}
+                      {!loadingVars.has(p.id) && (variantesMap[p.id] ?? []).length === 0 && (
+                        <p className="px-4 py-3 text-[12px] text-[var(--text-muted)] italic">Sin variantes</p>
+                      )}
                       {!loadingVars.has(p.id) && (variantesMap[p.id] ?? []).map((v, vi) => (
                         <div key={v.id} className={`border-[var(--border)] ${vi > 0 ? 'border-t' : ''}`}>
                           <div className="flex items-center gap-2 px-3 py-2">
@@ -1580,11 +1623,18 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
                               onLoadHistorial={() => loadHistorial(v.id, true)}
                             />
                             {isAdmin && (
-                              <button
-                                onClick={() => toggleStockLog(v.id, true)}
-                                className={`p-1.5 rounded-lg cursor-pointer transition-colors flex-shrink-0 ${stockLogOpen.has(v.id) ? 'text-[var(--primary)] bg-[var(--primary)]/10' : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100'}`}>
-                                <IconClock size={13} />
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => toggleStockLog(v.id, true)}
+                                  className={`p-1.5 rounded-lg cursor-pointer transition-colors flex-shrink-0 ${stockLogOpen.has(v.id) ? 'text-[var(--primary)] bg-[var(--primary)]/10' : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100'}`}>
+                                  <IconClock size={13} />
+                                </button>
+                                <button
+                                  onClick={() => { setVarianteForm({ prod: p, variante: v }); setVarianteNombre(v.nombre); setVarianteMinimo(v.stock_minimo?.toString() ?? '') }}
+                                  className="p-1.5 rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-100 cursor-pointer transition-colors flex-shrink-0">
+                                  <IconEdit size={13} />
+                                </button>
+                              </>
                             )}
                             {cicloActivo?.estado === 'abierto' && v.activo && (
                               <button
@@ -1612,6 +1662,16 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
                           )}
                         </div>
                       ))}
+                      {!loadingVars.has(p.id) && isAdmin && (
+                        <div className="border-t border-gray-100">
+                          <button
+                            onClick={() => { setVarianteForm({ prod: p }); setVarianteNombre(''); setVarianteMinimo('') }}
+                            className="w-full flex items-center gap-2 px-4 py-2.5 text-[12px] text-[var(--primary)] hover:bg-[var(--primary)]/5 cursor-pointer transition-colors">
+                            <IconPlus size={12} />
+                            Nueva variante
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1652,6 +1712,40 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
           <Select label="Unidad" value={unidad} onChange={setUnidad} className="w-28">
             {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
           </Select>
+        </div>
+      </Modal>
+
+      {/* Variante: nueva / editar */}
+      <Modal
+        open={!!varianteForm} onClose={() => setVarianteForm(null)}
+        title={varianteForm?.variante ? 'Editar variante' : 'Nueva variante'}
+        footer={
+          <>
+            <Button variant="secondary" className="flex-1" onClick={() => setVarianteForm(null)}>Cancelar</Button>
+            <Button className="flex-1" onClick={guardarVariante} loading={varianteGuardando} disabled={!varianteNombre.trim()}>Guardar</Button>
+          </>
+        }
+      >
+        <div className="p-3 bg-gray-50 rounded-xl border border-[var(--border)] text-[12px] text-[var(--text-muted)]">
+          <span className="font-semibold text-[var(--text)]">{varianteForm?.prod.nombre}</span>
+          {varianteForm?.prod.marca && varianteForm.prod.marca !== 'Sin marca' && ` · ${varianteForm.prod.marca}`}
+        </div>
+        <div>
+          <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Nombre de la variante *</p>
+          <input
+            value={varianteNombre} onChange={e => setVarianteNombre(e.target.value)}
+            placeholder="Ej: Tono 7 Rubio Medio"
+            className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+          />
+        </div>
+        <div>
+          <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Stock mínimo (opcional)</p>
+          <input
+            type="number" min="0" step="1" value={varianteMinimo} onChange={e => setVarianteMinimo(e.target.value)}
+            placeholder="Ej: 2"
+            className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+          />
+          <p className="text-[11px] text-[var(--text-muted)] mt-1">Si el stock baja de este número, aparece el aviso de stock bajo.</p>
         </div>
       </Modal>
 
