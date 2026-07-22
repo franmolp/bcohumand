@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import type { SessionUser } from '@/types'
 import { Button, Spinner, Modal, Toast, Confirm, Select } from '@/components/ui'
 import {
-  IconShoppingBag, IconX, IconCheck, IconEdit, IconPlus, IconChevronRight, IconTrash,
+  IconShoppingBag, IconX, IconCheck, IconEdit, IconPlus, IconChevronRight, IconTrash, IconAlertCircle,
 } from '@/components/ui/Icons'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -802,7 +802,7 @@ function StockInput({ id, value, onChange, onSave, unidad, minimo, guardando, hi
       {historial && historial.length >= 2 && (
         <Sparkline data={historial.map(h => h.stock)} />
       )}
-      {isLow && <span className="text-amber-500 text-[12px]" title={`Mínimo: ${minimo}`}>⚠</span>}
+      {isLow && <IconAlertCircle size={13} className="text-amber-500 flex-shrink-0" />}
       <input
         type="number" min="0" step="1" value={value}
         onChange={e => onChange(e.target.value)}
@@ -1142,6 +1142,7 @@ function TabCatalogo({ productos, proveedores, onRefresh, isAdmin, myCats }: {
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   const prodsFiltrados = productos.filter(p => {
+    if (!p.activo) return false
     if (myCats && !myCats.includes(p.categoria)) return false
     if (catFiltro !== 'todas' && p.categoria !== catFiltro) return false
     if (busqueda.length >= 2 && !p.nombre.toLowerCase().includes(busqueda.toLowerCase())) return false
@@ -1173,14 +1174,6 @@ function TabCatalogo({ productos, proveedores, onRefresh, isAdmin, myCats }: {
     }
   }
 
-  async function toggleActivo(p: Producto) {
-    await fetch(`/api/pedidos/productos/${p.id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ activo: !p.activo }),
-    })
-    onRefresh()
-  }
-
   return (
     <div>
       <Toast message={toast?.msg ?? ''} visible={!!toast} type={toast?.type} />
@@ -1206,26 +1199,14 @@ function TabCatalogo({ productos, proveedores, onRefresh, isAdmin, myCats }: {
 
       <div className="space-y-2">
         {prodsFiltrados.map(p => (
-          <div key={p.id} className={`bg-white border rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm border-[var(--border)] ${!p.activo ? 'opacity-50' : ''}`}>
+          <div key={p.id} className="bg-white border rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm border-[var(--border)]">
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-semibold truncate">{p.nombre} <span className="font-normal text-[var(--text-muted)]">{p.marca !== 'Sin marca' ? `· ${p.marca}` : ''}</span></p>
               <p className="text-[11px] text-[var(--text-muted)]">{catLabel(p.categoria)} · {p.unidad} · {p.proveedor?.nombre ?? <span className="text-amber-500">Sin proveedor</span>}</p>
             </div>
-            <div className="flex items-center gap-1">
-              {isAdmin ? (
-                <button onClick={() => toggleActivo(p)}
-                  className={`text-[10px] font-bold px-2 py-1 rounded-full border cursor-pointer transition-colors ${p.activo ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : 'bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200'}`}>
-                  {p.activo ? 'Activo' : 'Inactivo'}
-                </button>
-              ) : (
-                <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${p.activo ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-400 border-gray-200'}`}>
-                  {p.activo ? 'Activo' : 'Inactivo'}
-                </span>
-              )}
-              <button onClick={() => abrirEditar(p)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors">
-                <IconEdit size={14} />
-              </button>
-            </div>
+            <button onClick={() => abrirEditar(p)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors">
+              <IconEdit size={14} />
+            </button>
           </div>
         ))}
         {!prodsFiltrados.length && <p className="text-center text-[13px] text-gray-400 py-10">Sin productos</p>}
@@ -1297,6 +1278,8 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
   const [pedirCantidad, setPedirCantidad] = useState('1')
   const [pedirNotas, setPedirNotas] = useState('')
   const [pedirUrgente, setPedirUrgente] = useState(false)
+  const [pedirMarca, setPedirMarca] = useState('')
+  const [pedirProveedorId, setPedirProveedorId] = useState('')
   const [pedirGuardando, setPedirGuardando] = useState(false)
 
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
@@ -1306,7 +1289,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
 
   const prodsFiltrados = productos.filter(p => {
     if (myCats && !myCats.includes(p.categoria)) return false
-    if (!p.activo && !isAdmin) return false
+    if (!p.activo) return false
     if (catFiltro !== 'todas' && p.categoria !== catFiltro) return false
     if (busqueda.length >= 2 && !normalizar(`${p.nombre} ${p.marca}`).includes(normalizar(busqueda))) return false
     return true
@@ -1335,14 +1318,6 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
       : await fetch('/api/pedidos/productos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     setGuardando(false)
     if (res.ok) { setShowForm(false); onRefresh(); showToast(editando ? 'Producto actualizado' : 'Producto creado') }
-  }
-
-  async function toggleActivo(p: Producto) {
-    await fetch(`/api/pedidos/productos/${p.id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ activo: !p.activo }),
-    })
-    onRefresh()
   }
 
   async function loadHistorial(id: string, isVariante: boolean) {
@@ -1404,13 +1379,31 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
   async function pedirAhora() {
     if (!cicloActivo || !pedirTarget) return
     setPedirGuardando(true)
+    const prod = pedirTarget.prod
+    const marcaNueva = pedirMarca.trim()
+    const provNuevo = pedirProveedorId
+
+    // Update product if marca/proveedor were filled in
+    const needsUpdate = (marcaNueva && (!prod.marca || prod.marca === 'Sin marca')) ||
+      (provNuevo && !prod.proveedor_id)
+    if (needsUpdate) {
+      const upd: Record<string, unknown> = {}
+      if (marcaNueva && (!prod.marca || prod.marca === 'Sin marca')) upd.marca = marcaNueva
+      if (provNuevo && !prod.proveedor_id) upd.proveedor_id = Number(provNuevo)
+      await fetch(`/api/pedidos/productos/${prod.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(upd),
+      })
+      onRefresh()
+    }
+
     const res = await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        producto_id: pedirTarget.prod.id,
+        producto_id: prod.id,
         variante_id: pedirTarget.variante?.id ?? null,
         cantidad: Number(pedirCantidad),
-        unidad: pedirTarget.prod.unidad,
+        unidad: prod.unidad,
         notas: pedirNotas || null,
         urgente: pedirUrgente,
       }),
@@ -1451,7 +1444,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
             )}
             <div className="space-y-2">
               {prods.map(p => (
-                <div key={p.id} className={`bg-white border rounded-2xl shadow-sm border-[var(--border)] overflow-hidden ${!p.activo ? 'opacity-50' : ''}`}>
+                <div key={p.id} className="bg-white border rounded-2xl shadow-sm border-[var(--border)] overflow-hidden">
                   <div className="px-3 py-2.5 flex items-center gap-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-semibold truncate">
@@ -1478,7 +1471,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
                     <div className="flex items-center gap-1 flex-shrink-0">
                       {cicloActivo?.estado === 'abierto' && p.variantes_count === 0 && p.activo && (
                         <button
-                          onClick={() => { setPedirTarget({ prod: p }); setPedirCantidad('1'); setPedirNotas(''); setPedirUrgente(false) }}
+                          onClick={() => { setPedirTarget({ prod: p }); setPedirCantidad('1'); setPedirNotas(''); setPedirUrgente(false); setPedirMarca(p.marca === 'Sin marca' ? '' : (p.marca ?? '')); setPedirProveedorId(p.proveedor_id?.toString() ?? '') }}
                           className="px-2.5 py-1.5 rounded-xl text-[12px] font-semibold bg-[var(--primary)]/10 text-[var(--primary)] hover:bg-[var(--primary)]/20 cursor-pointer transition-colors">
                           Pedir
                         </button>
@@ -1491,15 +1484,9 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
                         </button>
                       )}
                       {isAdmin && (
-                        <>
-                          <button onClick={() => toggleActivo(p)}
-                            className={`text-[10px] font-bold px-2 py-1 rounded-full border cursor-pointer transition-colors ${p.activo ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : 'bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200'}`}>
-                            {p.activo ? 'Act.' : 'Inact.'}
-                          </button>
-                          <button onClick={() => abrirEditar(p)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors">
-                            <IconEdit size={14} />
-                          </button>
-                        </>
+                        <button onClick={() => abrirEditar(p)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors">
+                          <IconEdit size={14} />
+                        </button>
                       )}
                     </div>
                   </div>
@@ -1523,7 +1510,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
                           />
                           {cicloActivo?.estado === 'abierto' && v.activo && (
                             <button
-                              onClick={() => { setPedirTarget({ prod: p, variante: v }); setPedirCantidad('1'); setPedirNotas(''); setPedirUrgente(false) }}
+                              onClick={() => { setPedirTarget({ prod: p, variante: v }); setPedirCantidad('1'); setPedirNotas(''); setPedirUrgente(false); setPedirMarca(p.marca === 'Sin marca' ? '' : (p.marca ?? '')); setPedirProveedorId(p.proveedor_id?.toString() ?? '') }}
                               className="px-2.5 py-1.5 rounded-xl text-[11px] font-semibold bg-[var(--primary)]/10 text-[var(--primary)] hover:bg-[var(--primary)]/20 cursor-pointer transition-colors flex-shrink-0">
                               Pedir
                             </button>
@@ -1590,9 +1577,25 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
         <div className="p-3 bg-gray-50 rounded-xl border border-[var(--border)]">
           <p className="text-[13px] font-semibold">{pedirTarget?.prod.nombre}</p>
           {pedirTarget?.variante && <p className="text-[12px] text-[var(--text-muted)] mt-0.5">{pedirTarget.variante.nombre}</p>}
-          <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{pedirTarget?.prod.proveedor?.nombre ?? 'Sin proveedor'}</p>
         </div>
         {!cicloActivo && <p className="text-[12px] text-amber-600 bg-amber-50 rounded-xl p-3">No hay lista abierta. Creá una desde Ajustes.</p>}
+
+        {/* Marca: solo si el producto no la tiene */}
+        {pedirTarget && (!pedirTarget.prod.marca || pedirTarget.prod.marca === 'Sin marca') && (
+          <div>
+            <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Marca (opcional)</p>
+            <MarcaInput value={pedirMarca} onChange={setPedirMarca} productos={productos} label="" />
+          </div>
+        )}
+
+        {/* Proveedor: solo si el producto no lo tiene */}
+        {pedirTarget && !pedirTarget.prod.proveedor && (
+          <Select label="Proveedor" value={pedirProveedorId} onChange={setPedirProveedorId}>
+            <option value="">Sin proveedor</option>
+            {proveedores.map(pv => <option key={pv.id} value={pv.id}>{pv.nombre}</option>)}
+          </Select>
+        )}
+
         <div className="flex gap-3">
           <div className="flex-1">
             <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Cantidad</p>
