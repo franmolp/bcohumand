@@ -217,17 +217,14 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
     if (needsProv) { setGuardandoError('Elegí un proveedor antes de agregar.'); return }
     setGuardando(true); setGuardandoError('')
 
-    // Background: update product if proveedor or marca were missing
-    const sinMarca = !productoSel.marca || productoSel.marca === 'Sin marca'
-    const patchBody: Record<string, unknown> = {}
-    if (!productoSel.proveedor_id && provConfig) patchBody.proveedor_id = Number(provConfig)
-    if (sinMarca && configMarca.trim()) patchBody.marca = configMarca.trim()
-    if (Object.keys(patchBody).length) {
-      fetch(`/api/pedidos/productos/${productoSel.id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patchBody),
-      }).then(() => onRefreshProductos())
-    }
+    // Siempre pisar proveedor, marca y unidad en el catálogo
+    const patchBody: Record<string, unknown> = { unidad }
+    if (provConfig) patchBody.proveedor_id = Number(provConfig)
+    if (configMarca.trim()) patchBody.marca = configMarca.trim()
+    fetch(`/api/pedidos/productos/${productoSel.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patchBody),
+    }).then(() => onRefreshProductos())
 
     const res = await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -265,6 +262,13 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cantidad: Number(editCantidad), unidad: editUnidad, notas: editNotas || null, urgente: editUrgente }),
     })
+    // Pisar la unidad en el catálogo si cambió
+    if (editItem.producto_id && editUnidad !== editItem.unidad) {
+      fetch(`/api/pedidos/productos/${editItem.producto_id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unidad: editUnidad }),
+      }).then(() => onRefreshProductos())
+    }
     setEditGuardando(false); setEditItem(null); cargar()
   }
 
