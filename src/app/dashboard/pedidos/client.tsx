@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import type { SessionUser } from '@/types'
 import { Button, Spinner, Modal, Toast, Confirm, Select } from '@/components/ui'
 import {
-  IconShoppingBag, IconX, IconCheck, IconEdit, IconPlus, IconChevronRight, IconTrash, IconAlertCircle, IconClock,
+  IconBottle, IconShoppingBag, IconX, IconCheck, IconEdit, IconPlus, IconChevronRight, IconTrash, IconAlertCircle, IconClock,
 } from '@/components/ui/Icons'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -2152,10 +2152,11 @@ export default function PedidosClient({ session, myCats, puedeExportar }: {
     <div className="py-4 fade-in">
       <div className="flex items-center gap-3 mb-5">
         <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
-          <IconShoppingBag size={18} className="text-white" />
+          <IconBottle size={18} className="text-white" />
         </div>
         <div className="flex-1 min-w-0">
-          <h1 className="text-[17px] font-bold text-[var(--text)]">Pedidos</h1>
+          <h1 className="text-[17px] font-bold text-[var(--text)]">Inventario y pedidos</h1>
+          <p className="text-[12px] text-[var(--text-muted)] mt-0.5">Controlá el stock y coordiná pedidos a proveedores</p>
         </div>
       </div>
 
