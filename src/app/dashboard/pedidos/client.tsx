@@ -489,18 +489,12 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
         {/* Step: new product */}
         {addStep === 'new' && (
           <>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Nombre *</p>
-                <input value={newNombre} onChange={e => setNewNombre(e.target.value)} placeholder="Ej: Algodón"
-                  className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
-              </div>
-              <div className="w-36">
-                <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Marca *</p>
-                <input value={newMarca} onChange={e => setNewMarca(e.target.value)} placeholder="Ej: Nivea"
-                  className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
-              </div>
+            <div>
+              <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Nombre *</p>
+              <input value={newNombre} onChange={e => setNewNombre(e.target.value)} placeholder="Ej: Algodón"
+                className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
             </div>
+            <MarcaInput value={newMarca} onChange={setNewMarca} productos={productos} />
             <div>
               <p className="text-[12px] font-medium text-[var(--text-sub)] mb-2">Categoría</p>
               <div className="flex flex-wrap gap-1.5">
@@ -647,6 +641,59 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
         </div>
         <UrgenteToggle value={editUrgente} onChange={setEditUrgente} />
       </Modal>
+    </div>
+  )
+}
+
+function MarcaInput({ value, onChange, productos, label = 'Marca *' }: {
+  value: string; onChange: (v: string) => void; productos: Producto[]; label?: string
+}) {
+  const [showSugs, setShowSugs] = useState(false)
+  const marcas = [...new Set(productos.map(p => p.marca).filter(m => m && m !== 'Sin marca'))].sort() as string[]
+  const filtradas = value.length >= 1
+    ? marcas.filter(m => normalizar(m).includes(normalizar(value)))
+    : marcas
+  const esNueva = value.trim() && value.trim() !== 'Sin marca' && !marcas.map(normalizar).includes(normalizar(value.trim()))
+
+  return (
+    <div className="relative">
+      <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">{label}</p>
+      <input
+        value={value}
+        onChange={e => { onChange(e.target.value); setShowSugs(true) }}
+        onFocus={() => setShowSugs(true)}
+        onBlur={() => setTimeout(() => setShowSugs(false), 150)}
+        placeholder="Ej: Nivea"
+        className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+      />
+      {showSugs && (filtradas.length > 0 || esNueva) && (
+        <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-[var(--border)] rounded-xl shadow-lg overflow-hidden max-h-44 overflow-y-auto">
+          {filtradas.map(m => (
+            <button key={m} onMouseDown={() => { onChange(m); setShowSugs(false) }}
+              className="w-full px-3 py-2 text-left text-[13px] hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0">
+              {m}
+            </button>
+          ))}
+          {esNueva && (
+            <button onMouseDown={() => { onChange(value.trim()); setShowSugs(false) }}
+              className="w-full px-3 py-2 text-left text-[13px] text-[var(--primary)] font-medium hover:bg-[var(--primary)]/5 cursor-pointer border-t border-gray-100">
+              Agregar "{value.trim()}"
+            </button>
+          )}
+          <button onMouseDown={() => { onChange('Sin marca'); setShowSugs(false) }}
+            className="w-full px-3 py-2 text-left text-[12px] text-[var(--text-muted)] italic hover:bg-gray-50 cursor-pointer border-t border-gray-100">
+            Sin marca
+          </button>
+        </div>
+      )}
+      {showSugs && filtradas.length === 0 && !esNueva && (
+        <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-[var(--border)] rounded-xl shadow-lg overflow-hidden">
+          <button onMouseDown={() => { onChange('Sin marca'); setShowSugs(false) }}
+            className="w-full px-3 py-2 text-left text-[12px] text-[var(--text-muted)] italic hover:bg-gray-50 cursor-pointer">
+            Sin marca
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -1041,18 +1088,12 @@ function TabCatalogo({ productos, proveedores, onRefresh, isAdmin, myCats }: {
           </>
         }
       >
-        <div className="flex gap-3">
-          <div className="flex-1">
-            <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Nombre *</p>
-            <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Algodón"
-              className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
-          </div>
-          <div className="w-36">
-            <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Marca</p>
-            <input value={marca} onChange={e => setMarca(e.target.value)} placeholder="Sin marca"
-              className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
-          </div>
+        <div>
+          <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Nombre *</p>
+          <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Algodón"
+            className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
         </div>
+        <MarcaInput value={marca} onChange={setMarca} productos={productos} label="Marca" />
         <div>
           <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Categoría</p>
           <div className="flex flex-wrap gap-1.5">
