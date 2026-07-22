@@ -885,10 +885,11 @@ function TabExportar({ cicloActivo, onCiclosChange }: {
   function copiarProveedor(g: ExportGroup) {
     const urgentes = g.items.filter(i => i.urgente)
     const normales = g.items.filter(i => !i.urgente)
-    const lineas = [
-      ...urgentes.map(i => `- ${fmtCantidad(i.cantidad, i.unidad)} ${i.nombre}${i.marca ? ` (${i.marca})` : ''} (urgente)`),
-      ...normales.map(i => `- ${fmtCantidad(i.cantidad, i.unidad)} ${i.nombre}${i.marca ? ` (${i.marca})` : ''}`),
-    ]
+    const fmt = (i: ExportGroup['items'][number]) => {
+      const marca = i.marca && i.marca !== 'Sin marca' ? ` (${i.marca})` : ''
+      return `- ${fmtCantidad(i.cantidad, i.unidad)} ${i.nombre}${marca}`
+    }
+    const lineas = [...urgentes.map(fmt), ...normales.map(fmt)]
     navigator.clipboard.writeText(lineas.join('\n'))
     setCopiado(g.nombre_proveedor)
     setTimeout(() => setCopiado(null), 2000)
