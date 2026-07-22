@@ -23,9 +23,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
     }
   }
 
+  // Verificar acceso al módulo de pedidos (tiene al menos una categoría habilitada)
+  let hasPedidosAccess = isAdmin
+  if (!isAdmin) {
+    const { data: pedidosPerms } = await supabaseAdmin
+      .from('pedidos_permisos')
+      .select('categoria')
+      .eq('usuario_id', session.id)
+      .limit(1)
+    hasPedidosAccess = (pedidosPerms?.length ?? 0) > 0
+  }
+
   return (
     <div className="h-[100dvh] overflow-hidden bg-[var(--bg)] lg:min-h-[100dvh] lg:h-auto lg:overflow-visible">
-      <Navigation user={session} permisos={userPermisos} />
+      <Navigation user={session} permisos={userPermisos} hasPedidosAccess={hasPedidosAccess} />
       <PushSubscriber />
       <ActivityPing />
       <main className="h-full overflow-y-auto overscroll-contain pt-12 pb-16 px-4 lg:h-auto lg:overflow-visible lg:pt-14 lg:pb-0 lg:pl-52 lg:pr-0" style={{ touchAction: 'pan-y' }}>

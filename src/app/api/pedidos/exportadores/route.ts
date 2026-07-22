@@ -36,14 +36,16 @@ export async function PUT(request: NextRequest) {
   }
 
   if (puede) {
-    await supabaseAdmin
+    const { error } = await supabaseAdmin
       .from('pedidos_exportadores')
       .upsert({ usuario_id }, { onConflict: 'usuario_id' })
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   } else {
-    await supabaseAdmin
+    const { error } = await supabaseAdmin
       .from('pedidos_exportadores')
       .delete()
       .eq('usuario_id', usuario_id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
   return NextResponse.json({ ok: true })

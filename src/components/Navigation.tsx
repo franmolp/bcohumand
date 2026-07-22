@@ -18,7 +18,7 @@ const allNav = [
   { href: '/dashboard/mi-asistencia', label: 'Mi Asistencia', icon: IconClipboard, notAdmin: true, mobile: true },
   { href: '/dashboard/espacio-trabajo', label: 'Espacio de trabajo', icon: IconLayoutGrid, roles: ['Admin', 'admin', 'HR', 'Encargada', 'Compras'] },
   { href: '/dashboard/compras',      label: 'Compras',        icon: IconShoppingBag, roles: ['Admin', 'admin', 'Compras', 'Encargada'] },
-  { href: '/dashboard/pedidos',      label: 'Pedidos',        icon: IconShoppingBag, admin: true },
+  { href: '/dashboard/pedidos',      label: 'Pedidos',        icon: IconShoppingBag },
   { href: '/dashboard/monotributo',  label: 'Monotributo',    icon: IconReceipt },
   { href: '/dashboard/calendario',   label: 'Calendario',     icon: IconCalendar,    mobile: true },
   { href: '/dashboard/muro',            label: 'Muro Social',      icon: IconWall },
@@ -30,7 +30,7 @@ const allNav = [
   { href: '/dashboard/seguridad',    label: 'Seguridad',      icon: IconShield,      admin: true },
 ]
 
-export default function Navigation({ user }: { user: SessionUser }) {
+export default function Navigation({ user, hasPedidosAccess = false }: { user: SessionUser; permisos?: string[] | null; hasPedidosAccess?: boolean }) {
   const path = usePathname()
   const router = useRouter()
   const isAdmin = user.rol === 'admin' || user.rol === 'Admin'
@@ -50,6 +50,7 @@ export default function Navigation({ user }: { user: SessionUser }) {
 
   const items = allNav.filter(i => {
     if (i.admin && !isAdmin) return false
+    if (i.href === '/dashboard/pedidos' && !hasPedidosAccess) return false
     if ((i as {notAdmin?: boolean}).notAdmin && (isAdmin || isEncargada || isHR)) return false
     if (isHR && (i.href === '/dashboard/monotributo' || i.href === '/dashboard/liquidador')) return false
     if (i.roles && !i.roles.includes(user.rol)) return false
