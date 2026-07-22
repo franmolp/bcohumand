@@ -167,6 +167,45 @@ export default async function AdminDashboard({ session }: { session: SessionUser
   )
   const isAdminRole = session.rol === 'admin' || session.rol === 'Admin' || session.rol === 'encargada' || session.rol === 'Encargada'
 
+  // Pedidos pendientes del ciclo abierto, agrupados por proveedor
+  type PedidoProvRow = { nombre: string; count: number }
+  let pedidosPorProveedor: PedidoProvRow[] = []
+  let pedidosTotalItems = 0
+  {
+    const { data: cicloAbierto } = await supabaseAdmin
+      .from('pedidos_ciclos')
+      .select('id')
+      .eq('estado', 'abierto')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (cicloAbierto) {
+      const { data: itemsData } = await supabaseAdmin
+        .from('pedidos_items')
+        .select('id, producto:pedidos_productos(proveedor:proveedores(nombre))')
+        .eq('ciclo_id', cicloAbierto.id)
+        .eq('archivado', false)
+
+      const byProv: Record<string, number> = {}
+      for (const item of itemsData ?? []) {
+        const prod = Array.isArray(item.producto) ? item.producto[0] : item.producto
+        const prov = prod as { proveedor?: { nombre: string } | { nombre: string }[] | null } | null
+        const provObj = Array.isArray(prov?.proveedor) ? prov!.proveedor![0] : prov?.proveedor
+        const provNombre = (provObj as { nombre: string } | null)?.nombre ?? 'Sin proveedor'
+        byProv[provNombre] = (byProv[provNombre] ?? 0) + 1
+      }
+      pedidosTotalItems = (itemsData ?? []).length
+      pedidosPorProveedor = Object.entries(byProv)
+        .map(([nombre, count]) => ({ nombre, count }))
+        .sort((a, b) => {
+          if (a.nombre === 'Sin proveedor') return 1
+          if (b.nombre === 'Sin proveedor') return -1
+          return b.count - a.count
+        })
+    }
+  }
+
   // Fuentes adicionales de actividad (últimos 7 días)
   const [muroPostsRes, votosRes, fotosLogRes, comprasRes, monoRes] = await Promise.all([
     supabaseAdmin.from('muro_posts')
@@ -336,6 +375,29 @@ export default async function AdminDashboard({ session }: { session: SessionUser
             </div>
             <p className="text-[32px] font-bold leading-none mb-1">{adelantosPendientes}</p>
             <p className="text-[11px] text-white/70">Adelantos pend.</p>
+          </Link>
+        )}
+
+        {/* Pedidos pendientes */}
+        {pedidosTotalItems > 0 && (
+          <Link href="/dashboard/pedidos" className="col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 block hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 bg-[image:var(--gradient)] rounded-xl flex items-center justify-center flex-shrink-0">
+                  <IconShoppingBag size={14} className="text-white" />
+                </div>
+                <p className="text-[13px] font-bold text-[var(--text)]">Pedidos pendientes</p>
+              </div>
+              <span className="text-[11px] font-bold text-[var(--primary)] bg-[var(--primary)]/10 px-2 py-0.5 rounded-full">{pedidosTotalItems} ítems</span>
+            </div>
+            <div className="space-y-1.5">
+              {pedidosPorProveedor.map(p => (
+                <div key={p.nombre} className="flex items-center justify-between gap-2">
+                  <p className="text-[12px] text-[var(--text)] truncate">{p.nombre}</p>
+                  <span className="text-[11px] font-semibold text-[var(--text-sub)] flex-shrink-0">{p.count} {p.count === 1 ? 'ítem' : 'ítems'}</span>
+                </div>
+              ))}
+            </div>
           </Link>
         )}
 
