@@ -142,7 +142,8 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
   const [newCategoria, setNewCategoria] = useState<CatKey>('cocina')
   const [newProveedorId, setNewProveedorId] = useState('')
   // Config (new + existing)
-  const [provConfig, setProvConfig] = useState('')  // proveedor selector for existing product without one
+  const [provConfig, setProvConfig] = useState('')
+  const [configMarca, setConfigMarca] = useState('')
   const [cantidad, setCantidad] = useState('1')
   const [unidad, setUnidad] = useState('unidad')
   const [notas, setNotas] = useState('')
@@ -175,7 +176,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
   function openAdd() {
     setShowAdd(true); setAddStep('search'); setBusqueda(''); setProductoSel(null)
     setNewNombre(''); setNewMarca(''); setNewCategoria(isAdmin ? 'cocina' : (myCats[0] as CatKey ?? 'cocina')); setNewProveedorId('')
-    setProvConfig(''); setCantidad('1'); setUnidad('unidad'); setNotas(''); setUrgente(false)
+    setProvConfig(''); setConfigMarca(''); setCantidad('1'); setUnidad('unidad'); setNotas(''); setUrgente(false)
     setGuardandoError('')
   }
 
@@ -183,6 +184,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
     setProductoSel(p)
     setUnidad(p.unidad)
     setProvConfig(p.proveedor_id?.toString() ?? '')
+    setConfigMarca(p.marca && p.marca !== 'Sin marca' ? p.marca : '')
     setAddStep('config')
   }
 
@@ -209,11 +211,15 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
     if (needsProv) { setGuardandoError('Elegí un proveedor antes de agregar.'); return }
     setGuardando(true); setGuardandoError('')
 
-    // Background: save proveedor to product if it didn't have one
-    if (!productoSel.proveedor_id && provConfig) {
+    // Background: update product if proveedor or marca were missing
+    const sinMarca = !productoSel.marca || productoSel.marca === 'Sin marca'
+    const patchBody: Record<string, unknown> = {}
+    if (!productoSel.proveedor_id && provConfig) patchBody.proveedor_id = Number(provConfig)
+    if (sinMarca && configMarca.trim()) patchBody.marca = configMarca.trim()
+    if (Object.keys(patchBody).length) {
       fetch(`/api/pedidos/productos/${productoSel.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ proveedor_id: Number(provConfig) }),
+        body: JSON.stringify(patchBody),
       }).then(() => onRefreshProductos())
     }
 
@@ -551,6 +557,16 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
                   {proveedores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </Select>
                 {provConfig && <p className="text-[11px] text-amber-600 mt-1.5">Se guardará en el catálogo para la próxima vez.</p>}
+              </div>
+            )}
+
+            {(!productoSel.marca || productoSel.marca === 'Sin marca') && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                <p className="text-[12px] font-semibold text-amber-700 mb-2">¿Qué marca es?</p>
+                <MarcaInput value={configMarca} onChange={setConfigMarca} productos={productos} label="" />
+                {configMarca && configMarca !== 'Sin marca' && (
+                  <p className="text-[11px] text-amber-600 mt-1.5">Se guardará en el catálogo para la próxima vez.</p>
+                )}
               </div>
             )}
 
