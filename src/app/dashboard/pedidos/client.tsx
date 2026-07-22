@@ -1274,13 +1274,29 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
 
   const [historialMap, setHistorialMap] = useState<Record<string, StockHistorial[]>>({})
 
+  const [pedirItems, setPedirItems] = useState<Item[]>([])
+  useEffect(() => {
+    if (!cicloActivo) return
+    fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items`).then(r => r.json()).then(d => {
+      setPedirItems(d.items ?? [])
+    }).catch(() => {})
+  }, [cicloActivo])
+
   const [pedirTarget, setPedirTarget] = useState<{ prod: Producto; variante?: Variante } | null>(null)
   const [pedirCantidad, setPedirCantidad] = useState('1')
+  const [pedirUnidad, setPedirUnidad] = useState('unidad')
   const [pedirNotas, setPedirNotas] = useState('')
   const [pedirUrgente, setPedirUrgente] = useState(false)
   const [pedirMarca, setPedirMarca] = useState('')
   const [pedirProveedorId, setPedirProveedorId] = useState('')
   const [pedirGuardando, setPedirGuardando] = useState(false)
+
+  const pedirDuplicado = pedirTarget
+    ? pedirItems.find(i =>
+        i.producto_id === pedirTarget.prod.id &&
+        (!pedirTarget.variante || i.variante_id === pedirTarget.variante.id)
+      ) ?? null
+    : null
 
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   function showToast(msg: string, type: 'success' | 'error' = 'success') {
@@ -1383,12 +1399,12 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
     const marcaNueva = pedirMarca.trim()
     const provNuevo = pedirProveedorId
 
-    // Update product if marca/proveedor were filled in
-    const needsUpdate = (marcaNueva && (!prod.marca || prod.marca === 'Sin marca')) ||
+    // Update product if marca/proveedor were filled in and product lacked them
+    const needsUpdate = (marcaNueva && marcaNueva !== 'Sin marca' && (!prod.marca || prod.marca === 'Sin marca')) ||
       (provNuevo && !prod.proveedor_id)
     if (needsUpdate) {
       const upd: Record<string, unknown> = {}
-      if (marcaNueva && (!prod.marca || prod.marca === 'Sin marca')) upd.marca = marcaNueva
+      if (marcaNueva && marcaNueva !== 'Sin marca' && (!prod.marca || prod.marca === 'Sin marca')) upd.marca = marcaNueva
       if (provNuevo && !prod.proveedor_id) upd.proveedor_id = Number(provNuevo)
       await fetch(`/api/pedidos/productos/${prod.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -1403,7 +1419,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
         producto_id: prod.id,
         variante_id: pedirTarget.variante?.id ?? null,
         cantidad: Number(pedirCantidad),
-        unidad: prod.unidad,
+        unidad: pedirUnidad,
         notas: pedirNotas || null,
         urgente: pedirUrgente,
       }),
@@ -1471,7 +1487,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
                     <div className="flex items-center gap-1 flex-shrink-0">
                       {cicloActivo?.estado === 'abierto' && p.variantes_count === 0 && p.activo && (
                         <button
-                          onClick={() => { setPedirTarget({ prod: p }); setPedirCantidad('1'); setPedirNotas(''); setPedirUrgente(false); setPedirMarca(p.marca === 'Sin marca' ? '' : (p.marca ?? '')); setPedirProveedorId(p.proveedor_id?.toString() ?? '') }}
+                          onClick={() => { setPedirTarget({ prod: p }); setPedirCantidad('1'); setPedirUnidad(p.unidad); setPedirNotas(''); setPedirUrgente(false); setPedirMarca(''); setPedirProveedorId('') }}
                           className="px-2.5 py-1.5 rounded-xl text-[12px] font-semibold bg-[var(--primary)]/10 text-[var(--primary)] hover:bg-[var(--primary)]/20 cursor-pointer transition-colors">
                           Pedir
                         </button>
@@ -1510,7 +1526,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
                           />
                           {cicloActivo?.estado === 'abierto' && v.activo && (
                             <button
-                              onClick={() => { setPedirTarget({ prod: p, variante: v }); setPedirCantidad('1'); setPedirNotas(''); setPedirUrgente(false); setPedirMarca(p.marca === 'Sin marca' ? '' : (p.marca ?? '')); setPedirProveedorId(p.proveedor_id?.toString() ?? '') }}
+                              onClick={() => { setPedirTarget({ prod: p, variante: v }); setPedirCantidad('1'); setPedirUnidad(p.unidad); setPedirNotas(''); setPedirUrgente(false); setPedirMarca(''); setPedirProveedorId('') }}
                               className="px-2.5 py-1.5 rounded-xl text-[11px] font-semibold bg-[var(--primary)]/10 text-[var(--primary)] hover:bg-[var(--primary)]/20 cursor-pointer transition-colors flex-shrink-0">
                               Pedir
                             </button>
@@ -1566,53 +1582,79 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
         title="Agregar a la lista"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setPedirTarget(null)}>Cancelar</Button>
+            <Button variant="secondary" onClick={() => setPedirTarget(null)}>Volver</Button>
             <Button className="flex-1" onClick={pedirAhora} loading={pedirGuardando}
-              disabled={!pedirCantidad || Number(pedirCantidad) <= 0 || !cicloActivo}>
+              disabled={!pedirCantidad || Number(pedirCantidad) <= 0 || !cicloActivo || (!pedirTarget?.prod.proveedor_id && !pedirProveedorId)}>
               Agregar
             </Button>
           </>
         }
       >
-        <div className="p-3 bg-gray-50 rounded-xl border border-[var(--border)]">
-          <p className="text-[13px] font-semibold">{pedirTarget?.prod.nombre}</p>
-          {pedirTarget?.variante && <p className="text-[12px] text-[var(--text-muted)] mt-0.5">{pedirTarget.variante.nombre}</p>}
-        </div>
-        {!cicloActivo && <p className="text-[12px] text-amber-600 bg-amber-50 rounded-xl p-3">No hay lista abierta. Creá una desde Ajustes.</p>}
+        {pedirTarget && (
+          <>
+            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-[var(--border)]">
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-semibold truncate">{pedirTarget.prod.nombre}</p>
+                {pedirTarget.variante && <p className="text-[11px] text-[var(--text-muted)]">{pedirTarget.variante.nombre}</p>}
+                <p className="text-[11px] text-[var(--text-muted)]">{catLabel(pedirTarget.prod.categoria)}</p>
+              </div>
+              <button onClick={() => setPedirTarget(null)} className="p-1 text-gray-400 hover:text-gray-700 cursor-pointer rounded-lg">
+                <IconX size={14} />
+              </button>
+            </div>
 
-        {/* Marca: solo si el producto no la tiene */}
-        {pedirTarget && (!pedirTarget.prod.marca || pedirTarget.prod.marca === 'Sin marca') && (
-          <div>
-            <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Marca (opcional)</p>
-            <MarcaInput value={pedirMarca} onChange={setPedirMarca} productos={productos} label="" />
-          </div>
+            {!cicloActivo && (
+              <p className="text-[12px] text-amber-600 bg-amber-50 border border-amber-200 rounded-xl p-3">No hay lista abierta. Creá una desde Ajustes.</p>
+            )}
+
+            {!pedirTarget.prod.proveedor_id && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                <p className="text-[12px] font-semibold text-amber-700 mb-2">Este producto no tiene proveedor asignado. ¿A cuál se lo pedimos?</p>
+                <Select value={pedirProveedorId} onChange={setPedirProveedorId}>
+                  <option value="">— Elegí un proveedor —</option>
+                  {proveedores.map(pv => <option key={pv.id} value={pv.id}>{pv.nombre}</option>)}
+                </Select>
+                {pedirProveedorId && <p className="text-[11px] text-amber-600 mt-1.5">Se guardará en el catálogo para la próxima vez.</p>}
+              </div>
+            )}
+
+            {(!pedirTarget.prod.marca || pedirTarget.prod.marca === 'Sin marca') && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                <p className="text-[12px] font-semibold text-amber-700 mb-2">¿Qué marca es?</p>
+                <MarcaInput value={pedirMarca} onChange={setPedirMarca} productos={productos} label="" />
+                {pedirMarca && pedirMarca !== 'Sin marca' && (
+                  <p className="text-[11px] text-amber-600 mt-1.5">Se guardará en el catálogo para la próxima vez.</p>
+                )}
+              </div>
+            )}
+
+            {pedirDuplicado && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                <p className="text-[12px] text-amber-700">
+                  Ya fue pedido por <span className="font-semibold">{pedirDuplicado.usuario.nombre}</span>. Podés agregar igual o editar el ítem existente.
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Cantidad</p>
+                <input type="number" min="0.1" step="0.5" value={pedirCantidad} onChange={e => setPedirCantidad(e.target.value)}
+                  className="w-full border border-[var(--border)] rounded-xl px-3 h-11 text-[13px] text-center font-semibold focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+              </div>
+              <Select label="Unidad" value={pedirUnidad} onChange={setPedirUnidad} className="flex-1">
+                {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
+              </Select>
+            </div>
+
+            <div>
+              <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Notas (opcional)</p>
+              <input value={pedirNotas} onChange={e => setPedirNotas(e.target.value)} placeholder="Ej: si no hay marca X, pedir marca Y"
+                className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
+            </div>
+            <UrgenteToggle value={pedirUrgente} onChange={setPedirUrgente} />
+          </>
         )}
-
-        {/* Proveedor: solo si el producto no lo tiene */}
-        {pedirTarget && !pedirTarget.prod.proveedor && (
-          <Select label="Proveedor" value={pedirProveedorId} onChange={setPedirProveedorId}>
-            <option value="">Sin proveedor</option>
-            {proveedores.map(pv => <option key={pv.id} value={pv.id}>{pv.nombre}</option>)}
-          </Select>
-        )}
-
-        <div className="flex gap-3">
-          <div className="flex-1">
-            <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Cantidad</p>
-            <input type="number" min="0.1" step="0.5" value={pedirCantidad} onChange={e => setPedirCantidad(e.target.value)}
-              className="w-full border border-[var(--border)] rounded-xl px-3 h-11 text-[13px] text-center font-semibold focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
-          </div>
-          <div className="w-24">
-            <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Unidad</p>
-            <p className="h-11 flex items-center text-[13px] text-[var(--text-muted)]">{pedirTarget?.prod.unidad}</p>
-          </div>
-        </div>
-        <div>
-          <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Notas (opcional)</p>
-          <input value={pedirNotas} onChange={e => setPedirNotas(e.target.value)} placeholder="Ej: si no hay, pedir otra marca"
-            className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
-        </div>
-        <UrgenteToggle value={pedirUrgente} onChange={setPedirUrgente} />
       </Modal>
     </div>
   )
