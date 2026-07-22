@@ -952,24 +952,23 @@ function TabEnviados({ cicloActivo, isAdmin }: { cicloActivo: Ciclo | null; isAd
       body: JSON.stringify({ estado: 'recibido', cantidad: recibidos || recibirItem.cantidad }),
     })
 
-    // If partial: re-add remainder to active cycle
-    const faltante = recibirItem.cantidad - recibidos
-    if (faltante > 0 && cicloActivo) {
+    // Si no llegó nada: volver a la lista activa como pendiente urgente
+    if (recibidos === 0 && cicloActivo) {
       await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           producto_id: recibirItem.producto_id ?? undefined,
           variante_id: recibirItem.variante_id ?? undefined,
           nombre_libre: recibirItem.producto_id ? undefined : recibirItem.nombre,
-          cantidad: faltante, unidad: recibirItem.unidad,
-          notas: 'Faltante del pedido anterior', urgente: true,
+          cantidad: recibirItem.cantidad, unidad: recibirItem.unidad,
+          notas: 'No llegó en el pedido anterior', urgente: true,
         }),
       })
     }
 
     setRecibirGuardando(false)
     setRecibirItem(null)
-    showToast(recibidos > 0 ? `Stock actualizado +${recibidos} ${recibirItem.unidad}` : 'Ítem registrado')
+    showToast(recibidos > 0 ? `Stock actualizado +${recibidos} ${recibirItem.unidad}` : 'No llegó — vuelto a la lista')
     cargar()
   }
 
@@ -1045,14 +1044,9 @@ function TabEnviados({ cicloActivo, isAdmin }: { cicloActivo: Ciclo | null; isAd
               Todos
             </Button>
           </div>
-          {recibirItem && recibirCantidad !== '' && Number(recibirCantidad) >= 0 && Number(recibirCantidad) < recibirItem.cantidad && (
-            <p className="text-[11px] text-amber-600 mt-1.5">
-              Faltan {recibirItem.cantidad - Number(recibirCantidad)} {recibirItem.unidad} — se vuelven a agregar a la lista activa como urgente
-            </p>
-          )}
           {recibirItem && recibirCantidad !== '' && Number(recibirCantidad) === 0 && (
             <p className="text-[11px] text-orange-600 mt-1.5">
-              Se registra como no recibido. El stock no cambia.
+              No llegó nada — vuelve a la lista activa como urgente. El stock no cambia.
             </p>
           )}
         </div>
