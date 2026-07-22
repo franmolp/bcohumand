@@ -1864,7 +1864,7 @@ export default function PedidosClient({ session, myCats, puedeExportar }: {
 }) {
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
 
-  type Tab = 'inventario' | 'lista' | 'enviados' | 'exportar' | 'catalogo' | 'ajustes'
+  type Tab = 'inventario' | 'lista' | 'enviados' | 'exportar' | 'ajustes'
   const [tab, setTab] = useState<Tab>('inventario')
   const [ciclos, setCiclos] = useState<Ciclo[]>([])
   const [productos, setProductos] = useState<Producto[]>([])
@@ -1898,7 +1898,7 @@ export default function PedidosClient({ session, myCats, puedeExportar }: {
     { key: 'lista',      label: 'Lista' },
     { key: 'enviados',   label: 'Enviados' },
     ...(puedeExportar ? [{ key: 'exportar' as Tab, label: 'Exportar' }] : []),
-    ...(isAdmin ? [{ key: 'catalogo' as Tab, label: 'Catálogo' }, { key: 'ajustes' as Tab, label: 'Ajustes' }] : []),
+    ...(isAdmin ? [{ key: 'ajustes' as Tab, label: 'Ajustes' }] : []),
   ]
 
   return (
@@ -1947,8 +1947,7 @@ export default function PedidosClient({ session, myCats, puedeExportar }: {
           )}
           {tab === 'enviados' && <TabEnviados cicloActivo={cicloActivo} isAdmin={isAdmin} />}
           {tab === 'exportar' && puedeExportar && <TabExportar cicloActivo={cicloActivo} onCiclosChange={cargarCiclos} />}
-          {tab === 'catalogo' && <TabCatalogo productos={productos} proveedores={proveedores} onRefresh={cargarProductos} isAdmin={isAdmin} myCats={isAdmin ? null : myCats} />}
-          {tab === 'ajustes' && isAdmin && <TabAjustes ciclos={ciclos} onRefreshCiclos={cargarCiclos} />}
+{tab === 'ajustes' && isAdmin && <TabAjustes ciclos={ciclos} onRefreshCiclos={cargarCiclos} />}
         </>
       )}
     </div>
