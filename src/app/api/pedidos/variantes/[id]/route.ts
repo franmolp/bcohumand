@@ -11,13 +11,17 @@ export async function PUT(
 
   const { id } = await params
   const body = await request.json().catch(() => ({}))
-  const { nombre, stock_actual, stock_minimo, activo } = body
+  const { nombre, stock_actual, stock_minimo, activo, stock_delta } = body
 
   const update: Record<string, unknown> = {}
   if (nombre?.trim()) update.nombre = nombre.trim()
   if (stock_actual !== undefined) update.stock_actual = stock_actual === '' || stock_actual === null ? null : Number(stock_actual)
   if (stock_minimo !== undefined) update.stock_minimo = stock_minimo === '' || stock_minimo === null ? null : Number(stock_minimo)
   if (activo !== undefined) update.activo = activo === true
+  if (stock_delta !== undefined) {
+    const { data: cur } = await supabaseAdmin.from('pedidos_variantes').select('stock_actual').eq('id', id).single()
+    update.stock_actual = (cur?.stock_actual ?? 0) + Number(stock_delta)
+  }
 
   if (!Object.keys(update).length) {
     return NextResponse.json({ error: 'Nada para actualizar' }, { status: 400 })

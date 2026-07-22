@@ -23,10 +23,11 @@ export async function PUT(
   const body = await request.json().catch(() => ({}))
   const { cantidad, unidad, notas, urgente, estado: estadoBody, archivado: archivadoBody } = body
 
-  // Any authenticated user can mark an archived (sent) item as 'faltante'
+  // Any authenticated user can mark an archived (sent) item as 'faltante' or 'recibido'
   const esFaltante = estadoBody === 'faltante' && (item as { archivado?: boolean }).archivado
+  const esRecibido = estadoBody === 'recibido' && (item as { archivado?: boolean }).archivado
 
-  if (!esFaltante) {
+  if (!esFaltante && !esRecibido) {
     if (!isAdmin && item.usuario_id !== session.id) {
       return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
     }
@@ -37,7 +38,7 @@ export async function PUT(
   }
 
   const update: Record<string, unknown> = {}
-  if (!esFaltante) {
+  if (!esFaltante && !esRecibido) {
     if (cantidad !== undefined && !isNaN(Number(cantidad)) && Number(cantidad) > 0) update.cantidad = Number(cantidad)
     if (unidad?.trim()) update.unidad = unidad.trim()
     if (notas !== undefined) update.notas = notas?.trim() ?? null
@@ -47,8 +48,11 @@ export async function PUT(
       update.archivado = archivadoBody
       if (!archivadoBody) { update.archivado_por = null; update.archivado_en = null }
     }
-  } else {
+  } else if (esFaltante) {
     update.estado = 'faltante'
+  } else {
+    update.estado = 'recibido'
+    if (cantidad !== undefined && !isNaN(Number(cantidad)) && Number(cantidad) >= 0) update.cantidad = Number(cantidad)
   }
 
   if (!Object.keys(update).length) {

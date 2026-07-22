@@ -12,7 +12,7 @@ export async function GET() {
   let query = supabaseAdmin
     .from('pedidos_items')
     .select('*, producto:pedidos_productos(id, nombre, marca, categoria, unidad, proveedor_id, proveedor:proveedores(id, nombre))')
-    .in('estado', ['ordenado', 'faltante'])
+    .in('estado', ['ordenado', 'faltante', 'recibido'])
     .eq('archivado', true)
     .order('archivado_en', { ascending: false })
 
@@ -57,7 +57,7 @@ export async function GET() {
   type EnvioItem = {
     id: string; ciclo_id: string; nombre: string; marca: string | null
     cantidad: number; unidad: string; estado: string; notas: string | null
-    urgente: boolean; usuario: string; producto_id: string | null
+    urgente: boolean; usuario: string; producto_id: string | null; variante_id: string | null
   }
   type EnvioGroup = { fecha: string; proveedor_id: number | null; proveedor_nombre: string; items: EnvioItem[] }
   const groups: Record<string, EnvioGroup> = {}
@@ -82,6 +82,7 @@ export async function GET() {
       urgente: item.urgente,
       usuario: userMap[item.usuario_id] ?? 'Usuario',
       producto_id: item.producto_id ?? null,
+      variante_id: item.variante_id ?? null,
     })
   }
 

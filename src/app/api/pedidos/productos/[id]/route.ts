@@ -32,7 +32,7 @@ export async function PUT(
     if (!perm) return NextResponse.json({ error: 'Sin permisos para esta categoría' }, { status: 403 })
   }
   const body = await request.json().catch(() => ({}))
-  const { nombre, marca, categoria, proveedor_id, unidad, activo, stock_actual, stock_minimo } = body
+  const { nombre, marca, categoria, proveedor_id, unidad, activo, stock_actual, stock_minimo, stock_delta } = body
 
   const update: Record<string, unknown> = {}
   if (nombre?.trim()) update.nombre = nombre.trim()
@@ -43,6 +43,10 @@ export async function PUT(
   if (activo !== undefined) update.activo = activo === true
   if (stock_actual !== undefined) update.stock_actual = stock_actual === null || stock_actual === '' ? null : Number(stock_actual)
   if (stock_minimo !== undefined) update.stock_minimo = stock_minimo === null || stock_minimo === '' ? null : Number(stock_minimo)
+  if (stock_delta !== undefined) {
+    const { data: cur } = await supabaseAdmin.from('pedidos_productos').select('stock_actual').eq('id', id).single()
+    update.stock_actual = (cur?.stock_actual ?? 0) + Number(stock_delta)
+  }
 
   if (!Object.keys(update).length) {
     return NextResponse.json({ error: 'Nada para actualizar' }, { status: 400 })

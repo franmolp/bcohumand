@@ -901,7 +901,7 @@ function ItemRow({ item, cicloAbierto, isAdmin, myId, onEdit, onArchive, onDelet
 type EnvioItem = {
   id: string; ciclo_id: string; nombre: string; marca: string | null
   cantidad: number; unidad: string; estado: string; notas: string | null
-  urgente: boolean; usuario: string; producto_id: string | null
+  urgente: boolean; usuario: string; producto_id: string | null; variante_id: string | null
 }
 type EnvioGroup = { fecha: string; proveedor_id: number | null; proveedor_nombre: string; items: EnvioItem[] }
 
@@ -910,6 +910,9 @@ function TabEnviados({ cicloActivo, isAdmin }: { cicloActivo: Ciclo | null; isAd
   const [loading, setLoading] = useState(true)
   const [procesando, setProcesando] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const [recibirItem, setRecibirItem] = useState<EnvioItem | null>(null)
+  const [recibirCantidad, setRecibirCantidad] = useState('')
+  const [recibirGuardando, setRecibirGuardando] = useState(false)
 
   function showToast(msg: string, type: 'success' | 'error' = 'success') {
     setToast({ msg, type }); setTimeout(() => setToast(null), 3000)
@@ -925,6 +928,50 @@ function TabEnviados({ cicloActivo, isAdmin }: { cicloActivo: Ciclo | null; isAd
   }, [])
 
   useEffect(() => { cargar() }, [cargar])
+
+  async function confirmarRecepcion() {
+    if (!recibirItem) return
+    const recibidos = Number(recibirCantidad)
+    if (isNaN(recibidos) || recibidos < 0) return
+    setRecibirGuardando(true)
+
+    // Update stock via delta (only if something actually arrived)
+    if (recibidos > 0 && (recibirItem.variante_id || recibirItem.producto_id)) {
+      const url = recibirItem.variante_id
+        ? `/api/pedidos/variantes/${recibirItem.variante_id}`
+        : `/api/pedidos/productos/${recibirItem.producto_id}`
+      await fetch(url, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stock_delta: recibidos }),
+      })
+    }
+
+    // Mark item as recibido (with actual received quantity)
+    await fetch(`/api/pedidos/ciclos/${recibirItem.ciclo_id}/items/${recibirItem.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estado: 'recibido', cantidad: recibidos || recibirItem.cantidad }),
+    })
+
+    // If partial: re-add remainder to active cycle
+    const faltante = recibirItem.cantidad - recibidos
+    if (faltante > 0 && cicloActivo) {
+      await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          producto_id: recibirItem.producto_id ?? undefined,
+          variante_id: recibirItem.variante_id ?? undefined,
+          nombre_libre: recibirItem.producto_id ? undefined : recibirItem.nombre,
+          cantidad: faltante, unidad: recibirItem.unidad,
+          notas: 'Faltante del pedido anterior', urgente: true,
+        }),
+      })
+    }
+
+    setRecibirGuardando(false)
+    setRecibirItem(null)
+    showToast(recibidos > 0 ? `Stock actualizado +${recibidos} ${recibirItem.unidad}` : 'Ítem registrado')
+    cargar()
+  }
 
   async function marcarFaltante(item: EnvioItem) {
     setProcesando(item.id)
@@ -963,6 +1010,54 @@ function TabEnviados({ cicloActivo, isAdmin }: { cicloActivo: Ciclo | null; isAd
   return (
     <div>
       <Toast message={toast?.msg ?? ''} visible={!!toast} type={toast?.type} />
+
+      {/* Modal confirmación recepción */}
+      <Modal
+        open={!!recibirItem} onClose={() => setRecibirItem(null)}
+        title="Confirmar recepción"
+        footer={
+          <>
+            <Button variant="secondary" className="flex-1" onClick={() => setRecibirItem(null)}>Cancelar</Button>
+            <Button className="flex-1" onClick={confirmarRecepcion} loading={recibirGuardando}
+              disabled={recibirCantidad === '' || Number(recibirCantidad) < 0}>
+              Confirmar
+            </Button>
+          </>
+        }
+      >
+        <div className="p-3 bg-gray-50 border border-[var(--border)] rounded-xl">
+          <p className="text-[13px] font-semibold text-[var(--text)]">{recibirItem?.nombre}</p>
+          {recibirItem?.marca && recibirItem.marca !== 'Sin marca' && (
+            <p className="text-[11px] text-[var(--text-muted)]">{recibirItem.marca}</p>
+          )}
+          <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
+            Pedimos: {recibirItem ? fmtCantidad(recibirItem.cantidad, recibirItem.unidad) : ''}
+          </p>
+        </div>
+        <div>
+          <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">¿Cuántos llegaron?</p>
+          <div className="flex gap-2">
+            <input
+              type="number" min="0" step="1" value={recibirCantidad} onChange={e => setRecibirCantidad(e.target.value)}
+              className="flex-1 border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+            />
+            <Button variant="secondary" onClick={() => setRecibirCantidad(recibirItem?.cantidad.toString() ?? '')}>
+              Todos
+            </Button>
+          </div>
+          {recibirItem && recibirCantidad !== '' && Number(recibirCantidad) >= 0 && Number(recibirCantidad) < recibirItem.cantidad && (
+            <p className="text-[11px] text-amber-600 mt-1.5">
+              Faltan {recibirItem.cantidad - Number(recibirCantidad)} {recibirItem.unidad} — se vuelven a agregar a la lista activa como urgente
+            </p>
+          )}
+          {recibirItem && recibirCantidad !== '' && Number(recibirCantidad) === 0 && (
+            <p className="text-[11px] text-orange-600 mt-1.5">
+              Se registra como no recibido. El stock no cambia.
+            </p>
+          )}
+        </div>
+      </Modal>
+
       {!grupos.length && <p className="text-center text-[13px] text-gray-400 py-12">No hay pedidos enviados</p>}
       <div className="space-y-5">
         {grupos.map(g => {
@@ -976,7 +1071,7 @@ function TabEnviados({ cicloActivo, isAdmin }: { cicloActivo: Ciclo | null; isAd
               </div>
               <div className="divide-y divide-gray-50 px-4">
                 {g.items.map(item => (
-                  <div key={item.id} className={`py-2.5 flex items-center gap-2 ${item.estado === 'faltante' ? 'opacity-60' : ''}`}>
+                  <div key={item.id} className={`py-2.5 flex items-center gap-2 ${item.estado === 'faltante' || item.estado === 'recibido' ? 'opacity-60' : ''}`}>
                     <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.urgente ? 'bg-red-500' : 'bg-gray-300'}`} />
                     <div className="flex-1 min-w-0">
                       <span className={`text-[13px] font-medium ${item.estado === 'faltante' ? 'line-through text-orange-600' : ''}`}>
@@ -989,18 +1084,25 @@ function TabEnviados({ cicloActivo, isAdmin }: { cicloActivo: Ciclo | null; isAd
                       {item.estado === 'faltante' && (
                         <span className="ml-2 text-[10px] font-bold text-orange-500 uppercase">no llegó</span>
                       )}
+                      {item.estado === 'recibido' && (
+                        <span className="ml-2 text-[10px] font-bold text-green-600 uppercase">recibido</span>
+                      )}
                     </div>
                     <span className="text-[11px] text-[var(--text-muted)]">{item.usuario}</span>
                     {item.estado === 'ordenado' && (
-                      <button
-                        onClick={() => marcarFaltante(item)}
-                        disabled={procesando === item.id}
-                        className="flex-shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 cursor-pointer transition-colors disabled:opacity-50">
-                        {procesando === item.id ? '...' : 'No llegó'}
-                      </button>
-                    )}
-                    {item.estado === 'faltante' && isAdmin && (
-                      <span className="flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-600">Faltante</span>
+                      <>
+                        <button
+                          onClick={() => { setRecibirItem(item); setRecibirCantidad(item.cantidad.toString()) }}
+                          className="flex-shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 cursor-pointer transition-colors">
+                          Recibir
+                        </button>
+                        <button
+                          onClick={() => marcarFaltante(item)}
+                          disabled={procesando === item.id}
+                          className="flex-shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 cursor-pointer transition-colors disabled:opacity-50">
+                          {procesando === item.id ? '...' : 'No llegó'}
+                        </button>
+                      </>
                     )}
                   </div>
                 ))}
@@ -2154,8 +2256,8 @@ export default function PedidosClient({ session, myCats, puedeExportar }: {
   const tabs: { key: Tab; label: string }[] = [
     { key: 'inventario', label: 'Inventario' },
     { key: 'lista',      label: 'A pedir' },
-    { key: 'enviados',   label: 'Ya pedido' },
     ...(puedeExportar ? [{ key: 'exportar' as Tab, label: 'Exportar' }] : []),
+    { key: 'enviados',   label: 'Ya pedido' },
     ...(isAdmin ? [{ key: 'ajustes' as Tab, label: 'Ajustes' }] : []),
   ]
 
