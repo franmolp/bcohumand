@@ -1576,6 +1576,14 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
                           {p.variantes_count}
                         </button>
                       )}
+                      {p.variantes_count === 0 && isAdmin && (
+                        <button
+                          onClick={() => { setVarianteForm({ prod: p }); setVarianteNombre(''); setVarianteMinimo('') }}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[12px] font-medium bg-gray-100 text-gray-500 hover:bg-gray-200 cursor-pointer transition-colors">
+                          <IconPlus size={11} />
+                          Variante
+                        </button>
+                      )}
                       {isAdmin && (
                         <button onClick={() => abrirEditar(p)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors">
                           <IconEdit size={14} />
