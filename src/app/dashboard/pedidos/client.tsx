@@ -124,6 +124,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
   const [showArchivados, setShowArchivados] = useState(false)
   const [confirmArchive, setConfirmArchive] = useState<Item | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<Item | null>(null)
+  const [confirmRestore, setConfirmRestore] = useState<Item | null>(null)
   const [loading, setLoading] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [editItem, setEditItem] = useState<Item | null>(null)
@@ -262,12 +263,12 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
     cargar()
   }
 
-  async function restaurarItem(id: string) {
-    if (!cicloActivo) return
-    await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items/${id}`, {
+  async function restaurarItem(item: Item) {
+    await fetch(`/api/pedidos/ciclos/${item.ciclo_id}/items/${item.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ archivado: false }),
     })
+    setConfirmRestore(null)
     cargar()
   }
 
@@ -397,10 +398,18 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
                       {item.archivado_en && <> el {formatCerradoEn(item.archivado_en)}</>}
                     </p>
                   </div>
-                  <button onClick={() => restaurarItem(item.id)}
-                    className="flex-shrink-0 px-2 py-1 rounded-lg bg-gray-100 text-[11px] font-medium text-gray-600 hover:bg-gray-200 cursor-pointer transition-colors">
-                    Restaurar
-                  </button>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button onClick={() => setConfirmRestore(item)}
+                      className="px-2 py-1 rounded-lg bg-gray-100 text-[11px] font-medium text-gray-600 hover:bg-gray-200 cursor-pointer transition-colors">
+                      Restaurar
+                    </button>
+                    {isAdmin && (
+                      <button onClick={() => setConfirmDelete(item)} title="Eliminar definitivo"
+                        className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 cursor-pointer transition-colors">
+                        <IconTrash size={12} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -581,6 +590,14 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
         danger
         onConfirm={() => confirmDelete && eliminarDefinitivo(confirmDelete.id)}
         onClose={() => setConfirmDelete(null)}
+      />
+      <Confirm
+        open={!!confirmRestore}
+        title="¿Restaurás este ítem?"
+        message={`"${confirmRestore?.producto?.nombre ?? confirmRestore?.nombre_libre ?? 'Ítem'}" volverá a la lista activa.`}
+        confirmLabel="Restaurar"
+        onConfirm={() => confirmRestore && restaurarItem(confirmRestore)}
+        onClose={() => setConfirmRestore(null)}
       />
 
       {/* Modal editar */}
@@ -901,10 +918,12 @@ function TabCatalogo({ productos, proveedores, onRefresh }: {
 
 // ─── Tab: Ajustes ────────────────────────────────────────────────────────────
 
+type CatConfig = { notif: boolean; dia_cierre: number }
+
 function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCiclos: () => void }) {
   const [permisos, setPermisos] = useState<Permiso[]>([])
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
-  const [config, setConfig] = useState<{ dias_aviso: number; hora_aviso: string; dia_cierre: number } | null>(null)
+  const [config, setConfig] = useState<{ dias_aviso: number; hora_aviso: string; dia_cierre: number; categorias_config: Partial<Record<CatKey, CatConfig>> } | null>(null)
   const [loading, setLoading] = useState(true)
   const [guardandoPerm, setGuardandoPerm] = useState<string | null>(null)
   const [guardandoConf, setGuardandoConf] = useState(false)
@@ -947,6 +966,10 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
       ])
     }
     setGuardandoPerm(null)
+  }
+
+  function updateCatConfig(key: CatKey, val: CatConfig) {
+    setConfig(c => c ? { ...c, categorias_config: { ...(c.categorias_config ?? {}), [key]: val } } : c)
   }
 
   async function guardarConfig() {
@@ -1027,21 +1050,30 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
 
       {config && (
         <div>
-          <p className="text-[14px] font-bold text-[var(--text)] mb-3">Recordatorio automático</p>
-          <div className="bg-white border border-[var(--border)] rounded-2xl p-4 shadow-sm space-y-3">
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Días antes del cierre</p>
-                <input type="number" min="0" max="7" value={config.dias_aviso}
-                  onChange={e => setConfig(c => c ? { ...c, dias_aviso: Number(e.target.value) } : c)}
-                  className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
-              </div>
-              <Select label="Día de cierre habitual" value={String(config.dia_cierre)} onChange={v => setConfig(c => c ? { ...c, dia_cierre: Number(v) } : c)} className="flex-1">
-                {DIAS.map((d, i) => <option key={i} value={i}>{d}</option>)}
-              </Select>
-            </div>
-            <Button className="w-full" onClick={guardarConfig} loading={guardandoConf}>Guardar configuración</Button>
+          <p className="text-[14px] font-bold text-[var(--text)] mb-1">Recordatorio automático</p>
+          <p className="text-[12px] text-[var(--text-muted)] mb-3">La notificación se envía 1 día antes del cierre. Activá por categoría y elegí el día de cierre de cada una.</p>
+          <div className="bg-white border border-[var(--border)] rounded-2xl shadow-sm overflow-hidden">
+            {CATEGORIAS.map((cat, i) => {
+              const cc: CatConfig = config.categorias_config?.[cat.key] ?? { notif: false, dia_cierre: 4 }
+              return (
+                <div key={cat.key} className={`flex items-center gap-2 px-4 py-3 ${i > 0 ? 'border-t border-[var(--border)]' : ''}`}>
+                  <p className="text-[13px] font-semibold text-[var(--text)] flex-1 min-w-0">{cat.label}</p>
+                  {cc.notif && (
+                    <Select value={String(cc.dia_cierre)} onChange={v => updateCatConfig(cat.key, { ...cc, dia_cierre: Number(v) })} className="w-32">
+                      {DIAS.map((d, idx) => <option key={idx} value={idx}>{d}</option>)}
+                    </Select>
+                  )}
+                  <button
+                    onClick={() => updateCatConfig(cat.key, { ...cc, notif: !cc.notif })}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-[12px] font-medium border cursor-pointer transition-colors ${cc.notif ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-[var(--border)] text-[var(--text-muted)]'}`}
+                  >
+                    {cc.notif ? 'Activo' : 'Inactivo'}
+                  </button>
+                </div>
+              )
+            })}
           </div>
+          <Button className="w-full mt-3" onClick={guardarConfig} loading={guardandoConf}>Guardar configuración</Button>
         </div>
       )}
 

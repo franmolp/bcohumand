@@ -2,75 +2,58 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { crearNotificaciones } from '@/lib/notificaciones'
 
-function hoyARG(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+const CATEGORIAS_LABELS: Record<string, string> = {
+  cocina: 'Cocina',
+  limpieza: 'Limpieza',
+  manicuria: 'Manicuría',
+  masajes: 'Masajes',
+  cejas_pestanas: 'Cejas y Pestañas',
+  depilacion: 'Depilación',
+  peluqueria: 'Peluquería',
 }
 
-function addDias(fecha: string, dias: number): string {
-  const d = new Date(fecha + 'T00:00:00')
-  d.setDate(d.getDate() + dias)
-  return d.toLocaleDateString('en-CA')
+function hoyDiaARG(): number {
+  const dateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+  return new Date(dateStr + 'T12:00:00').getDay()
 }
-
-function formatFecha(fecha: string): string {
-  const [, m, d] = fecha.split('-')
-  return `${parseInt(d)}/${parseInt(m)}`
-}
-
-const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
 
 export async function GET() {
-  const authHeader = typeof globalThis !== 'undefined'
-    ? undefined
-    : undefined
+  const hoyDia = hoyDiaARG()
 
-  void authHeader
-
-  const hoy = hoyARG()
-
-  // Leer configuración
   const { data: config } = await supabaseAdmin
     .from('pedidos_config')
-    .select('dias_aviso')
+    .select('categorias_config')
     .eq('id', 1)
     .single()
 
-  const diasAviso = config?.dias_aviso ?? 1
-
-  // Buscar ciclos abiertos cuyo cierre cae en hoy + diasAviso
-  const fechaObjetivo = addDias(hoy, diasAviso)
-  const { data: ciclos } = await supabaseAdmin
-    .from('pedidos_ciclos')
-    .select('id, nombre, fecha_cierre')
-    .eq('estado', 'abierto')
-    .eq('fecha_cierre', fechaObjetivo)
-
-  if (!ciclos?.length) {
-    return NextResponse.json({ ok: true, enviadas: 0, mensaje: 'Sin ciclos a recordar hoy' })
-  }
-
-  // Obtener usuarios con permisos de pedidos
-  const { data: permisos } = await supabaseAdmin
-    .from('pedidos_permisos')
-    .select('usuario_id')
-
-  const usuarioIds = [...new Set((permisos ?? []).map(p => p.usuario_id))]
-
-  if (!usuarioIds.length) {
-    return NextResponse.json({ ok: true, enviadas: 0, mensaje: 'Sin usuarios con permisos' })
-  }
+  const categoriasConfig: Partial<Record<string, { notif: boolean; dia_cierre: number }>> = config?.categorias_config ?? {}
 
   let enviadas = 0
-  for (const ciclo of ciclos) {
-    const diaCierre = new Date(ciclo.fecha_cierre + 'T00:00:00').getDay()
-    const mensaje = `El pedido "${ciclo.nombre}" cierra el ${DIAS_SEMANA[diaCierre]} ${formatFecha(ciclo.fecha_cierre)}. ¡No olvides agregar lo que necesitás!`
 
-    await crearNotificaciones(usuarioIds, {
-      titulo: '⏰ Recordatorio de pedido',
+  for (const [cat, cfg] of Object.entries(categoriasConfig)) {
+    if (!cfg?.notif) continue
+
+    // Notificar el día anterior al día de cierre
+    const diaRecordatorio = (cfg.dia_cierre - 1 + 7) % 7
+    if (hoyDia !== diaRecordatorio) continue
+
+    const { data: perms } = await supabaseAdmin
+      .from('pedidos_permisos')
+      .select('usuario_id')
+      .eq('categoria', cat)
+
+    const userIds = [...new Set((perms ?? []).map(p => p.usuario_id))]
+    if (!userIds.length) continue
+
+    const label = CATEGORIAS_LABELS[cat] ?? cat
+    const mensaje = `La lista de ${label} cierra mañana. ¡No olvides agregar lo que necesitás!`
+
+    await crearNotificaciones(userIds, {
+      titulo: 'Recordatorio de pedido',
       mensaje,
       tipo: 'pedido_recordatorio',
     })
-    enviadas += usuarioIds.length
+    enviadas += userIds.length
   }
 
   return NextResponse.json({ ok: true, enviadas })

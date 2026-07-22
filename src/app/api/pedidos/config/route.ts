@@ -24,12 +24,15 @@ export async function PUT(request: NextRequest) {
   if (!isAdmin) return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
 
   const body = await request.json().catch(() => ({}))
-  const { dias_aviso, hora_aviso, dia_cierre } = body
+  const { dias_aviso, hora_aviso, dia_cierre, categorias_config } = body
 
   const update: Record<string, unknown> = {}
   if (dias_aviso !== undefined && !isNaN(Number(dias_aviso))) update.dias_aviso = Number(dias_aviso)
   if (hora_aviso?.trim()) update.hora_aviso = hora_aviso.trim()
   if (dia_cierre !== undefined && !isNaN(Number(dia_cierre))) update.dia_cierre = Number(dia_cierre)
+  if (categorias_config !== undefined && typeof categorias_config === 'object' && categorias_config !== null) {
+    update.categorias_config = categorias_config
+  }
 
   if (!Object.keys(update).length) {
     return NextResponse.json({ error: 'Nada para actualizar' }, { status: 400 })
