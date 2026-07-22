@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { supabaseBrowser } from '@/lib/supabase-browser'
 import type { SessionUser } from '@/types'
 import { Button, Spinner, Modal, Toast, Confirm, Select } from '@/components/ui'
 import {
@@ -176,16 +175,8 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
 
   useEffect(() => {
     if (!cicloActivo) return
-    const channel = supabaseBrowser
-      .channel(`pedidos-items-${cicloActivo.id}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'pedidos_items',
-        filter: `ciclo_id=eq.${cicloActivo.id}`,
-      }, () => { cargar() })
-      .subscribe()
-    return () => { supabaseBrowser.removeChannel(channel) }
+    const interval = setInterval(() => { cargar() }, 15000)
+    return () => clearInterval(interval)
   }, [cicloActivo, cargar])
 
   function openAdd() {
@@ -778,8 +769,7 @@ function ItemRow({ item, cicloAbierto, isAdmin, myId, onEdit, onArchive, onDelet
         {item.notas && <span className="text-[11px] text-[var(--text-muted)] ml-2 italic">· {item.notas}</span>}
       </div>
       <div className="flex items-center gap-1">
-        <Avatar nombre={item.usuario.nombre} foto={item.usuario.foto_perfil} size={16} />
-        <span className="text-[10px] text-[var(--text-muted)] hidden sm:block ml-1">{item.usuario.nombre.split(' ')[0]}</span>
+        <span className="text-[10px] text-[var(--text-muted)]">{item.usuario.nombre.split(' ')[0]}</span>
         {cicloAbierto && canEdit && (
           <div className="flex gap-0.5 ml-1">
             <button onClick={onEdit} title="Editar" className="p-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 cursor-pointer transition-colors"><IconEdit size={12} /></button>
