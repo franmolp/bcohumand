@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { SessionUser } from '@/types'
 import { Button, Spinner, Modal, Toast, Confirm, Select } from '@/components/ui'
 import {
@@ -1379,6 +1379,22 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
   const [varianteNombre, setVarianteNombre] = useState('')
   const [varianteMinimo, setVarianteMinimo] = useState('')
   const [varianteGuardando, setVarianteGuardando] = useState(false)
+  const [varianteRows, setVarianteRows] = useState<{ nombre: string; minimo: string; guardando: boolean; saved: boolean }[]>([])
+  const varianteInputRefs = useRef<(HTMLInputElement | null)[]>([])
+
+  const [confirmarEliminar, setConfirmarEliminar] = useState<Producto | null>(null)
+
+  useEffect(() => {
+    if (varianteForm && !varianteForm.variante) {
+      const pid = varianteForm.prod.id
+      if (pid && variantesMap[pid] === undefined) {
+        fetch(`/api/pedidos/variantes?producto_id=${pid}`).then(r => r.json()).then(data => {
+          setVariantesMap(m => ({ ...m, [pid]: Array.isArray(data) ? data : [] }))
+        }).catch(() => {})
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [varianteForm])
 
   const [pedirItems, setPedirItems] = useState<Item[]>([])
   useEffect(() => {
@@ -1453,7 +1469,9 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
       setShowForm(false); onRefresh(); showToast(editando ? 'Producto actualizado' : 'Producto creado')
       if (thenAddVariante) {
         const prod = editando ?? await res.json()
-        setVarianteForm({ prod }); setVarianteNombre(''); setVarianteMinimo('')
+        setVarianteForm({ prod })
+        setVarianteNombre(''); setVarianteMinimo('')
+        setVarianteRows([{ nombre: '', minimo: '', guardando: false, saved: false }])
       }
     }
   }
@@ -1558,6 +1576,44 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
     setVarianteGuardando(false)
     setVarianteForm(null)
     showToast(variante ? 'Variante actualizada' : 'Variante creada')
+  }
+
+  async function agregarVarianteRow(idx: number) {
+    const row = varianteRows[idx]
+    if (!row || !row.nombre.trim() || !varianteForm) return
+    const newRowIdx = varianteRows.length
+    setVarianteRows(rows => rows.map((r, i) => i === idx ? { ...r, guardando: true } : r))
+    const data = await fetch('/api/pedidos/variantes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nombre: row.nombre.trim(),
+        stock_minimo: row.minimo !== '' ? Number(row.minimo) : null,
+        producto_id: varianteForm.prod.id,
+      }),
+    }).then(r => r.json()).catch(() => null)
+    if (data?.id) {
+      setVariantesMap(m => ({ ...m, [varianteForm.prod.id]: [...(m[varianteForm.prod.id] ?? []), data] }))
+      onRefresh()
+      setVarianteRows(rows => [
+        ...rows.map((r, i) => i === idx ? { ...r, guardando: false, saved: true } : r),
+        { nombre: '', minimo: '', guardando: false, saved: false },
+      ])
+      setTimeout(() => varianteInputRefs.current[newRowIdx]?.focus(), 50)
+    } else {
+      setVarianteRows(rows => rows.map((r, i) => i === idx ? { ...r, guardando: false } : r))
+      showToast('Error al guardar variante', 'error')
+    }
+  }
+
+  async function eliminarProducto(prod: Producto) {
+    await fetch(`/api/pedidos/productos/${prod.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ activo: false }),
+    })
+    setShowForm(false)
+    setConfirmarEliminar(null)
+    onRefresh()
+    showToast('Producto eliminado')
   }
 
   async function toggleExpand(prod: Producto) {
@@ -1802,6 +1858,13 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
         title={editando ? 'Editar producto' : 'Nuevo producto'}
         footer={
           <>
+            {editando && isAdmin && (
+              <button
+                onClick={() => setConfirmarEliminar(editando)}
+                className="p-2.5 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 cursor-pointer transition-colors">
+                <IconTrash size={16} />
+              </button>
+            )}
             <Button variant="secondary" className="flex-1" onClick={() => setShowForm(false)}>Cancelar</Button>
             <Button className="flex-1" onClick={() => guardar()} loading={guardando} disabled={!nombre.trim()}>Guardar</Button>
           </>
@@ -1851,7 +1914,10 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
           disabled={!nombre.trim() || guardando}
           onClick={() => {
             if (editando) {
-              setShowForm(false); setVarianteForm({ prod: editando }); setVarianteNombre(''); setVarianteMinimo('')
+              setShowForm(false)
+              setVarianteForm({ prod: editando })
+              setVarianteNombre(''); setVarianteMinimo('')
+              setVarianteRows([{ nombre: '', minimo: '', guardando: false, saved: false }])
             } else {
               guardar(true)
             }
@@ -1862,39 +1928,111 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
         </button>
       </Modal>
 
-      {/* Variante: nueva / editar */}
+      {/* Variante: nueva (multi-add) / editar */}
       <Modal
         open={!!varianteForm} onClose={() => setVarianteForm(null)}
-        title={varianteForm?.variante ? 'Editar variante' : 'Nueva variante'}
+        title={varianteForm?.variante ? 'Editar variante' : 'Variantes'}
         footer={
-          <>
-            <Button variant="secondary" className="flex-1" onClick={() => setVarianteForm(null)}>Cancelar</Button>
-            <Button className="flex-1" onClick={guardarVariante} loading={varianteGuardando} disabled={!varianteNombre.trim()}>Guardar</Button>
-          </>
+          varianteForm?.variante ? (
+            <>
+              <Button variant="secondary" className="flex-1" onClick={() => setVarianteForm(null)}>Cancelar</Button>
+              <Button className="flex-1" onClick={guardarVariante} loading={varianteGuardando} disabled={!varianteNombre.trim()}>Guardar</Button>
+            </>
+          ) : (
+            <Button className="flex-1" onClick={() => setVarianteForm(null)}>Listo</Button>
+          )
         }
       >
         <div className="p-3 bg-gray-50 rounded-xl border border-[var(--border)] text-[12px] text-[var(--text-muted)]">
           <span className="font-semibold text-[var(--text)]">{varianteForm?.prod.nombre}</span>
           {varianteForm?.prod.marca && varianteForm.prod.marca !== 'Sin marca' && ` · ${varianteForm.prod.marca}`}
         </div>
-        <div>
-          <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Nombre de la variante *</p>
-          <input
-            value={varianteNombre} onChange={e => setVarianteNombre(e.target.value)}
-            placeholder="Ej: Tono 7 Rubio Medio"
-            className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
-          />
-        </div>
-        <div>
-          <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Stock mínimo (opcional)</p>
-          <input
-            type="number" min="0" step="1" value={varianteMinimo} onChange={e => setVarianteMinimo(e.target.value)}
-            placeholder="Ej: 2"
-            className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
-          />
-          <p className="text-[11px] text-[var(--text-muted)] mt-1">Si el stock baja de este número, aparece el aviso de stock bajo.</p>
-        </div>
+
+        {varianteForm?.variante ? (
+          /* ── Modo editar variante existente ── */
+          <>
+            <div>
+              <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Nombre de la variante *</p>
+              <input
+                value={varianteNombre} onChange={e => setVarianteNombre(e.target.value)}
+                placeholder="Ej: Tono 7 Rubio Medio"
+                className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+              />
+            </div>
+            <div>
+              <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Stock mínimo (opcional)</p>
+              <input
+                type="number" min="0" step="1" value={varianteMinimo} onChange={e => setVarianteMinimo(e.target.value)}
+                placeholder="Ej: 2"
+                className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+              />
+              <p className="text-[11px] text-[var(--text-muted)] mt-1">Si el stock baja de este número, aparece el aviso de stock bajo.</p>
+            </div>
+          </>
+        ) : (
+          /* ── Modo agregar rápido ── */
+          <div className="space-y-2">
+            <p className="text-[11px] text-[var(--text-muted)]">
+              Escribí el nombre y presioná <span className="font-semibold">Enter</span> o el botón <span className="font-semibold">+</span> para agregar y pasar a la siguiente.
+            </p>
+
+            {/* Variantes ya guardadas (existentes) */}
+            {(variantesMap[varianteForm?.prod.id ?? ''] ?? []).map(v => (
+              <div key={v.id} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-xl border border-[var(--border)]">
+                <IconCheck size={12} className="text-green-500 flex-shrink-0" />
+                <span className="text-[13px] flex-1 truncate">{v.nombre}</span>
+                {v.stock_minimo != null && <span className="text-[11px] text-[var(--text-muted)]">mín: {v.stock_minimo}</span>}
+              </div>
+            ))}
+
+            {/* Filas de entrada rápida */}
+            {varianteRows.map((row, idx) => (
+              row.saved ? (
+                <div key={idx} className="flex items-center gap-2 px-3 py-2 bg-green-50 rounded-xl border border-green-200">
+                  <IconCheck size={12} className="text-green-600 flex-shrink-0" />
+                  <span className="text-[13px] flex-1 truncate text-green-800">{row.nombre}</span>
+                  {row.minimo && <span className="text-[11px] text-green-600">mín: {row.minimo}</span>}
+                </div>
+              ) : (
+                <div key={idx} className="flex items-center gap-2">
+                  <input
+                    ref={el => { varianteInputRefs.current[idx] = el }}
+                    value={row.nombre}
+                    onChange={e => setVarianteRows(rows => rows.map((r, i) => i === idx ? { ...r, nombre: e.target.value } : r))}
+                    onKeyDown={e => { if (e.key === 'Enter' && row.nombre.trim()) agregarVarianteRow(idx) }}
+                    placeholder="Nombre de la variante"
+                    className="flex-1 border border-[var(--border)] rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+                  />
+                  <input
+                    type="number" min="0" step="1"
+                    value={row.minimo}
+                    onChange={e => setVarianteRows(rows => rows.map((r, i) => i === idx ? { ...r, minimo: e.target.value } : r))}
+                    onKeyDown={e => { if (e.key === 'Enter' && row.nombre.trim()) agregarVarianteRow(idx) }}
+                    placeholder="mín"
+                    className="w-16 border border-[var(--border)] rounded-xl px-2 py-2 text-[13px] text-center focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+                  />
+                  <button
+                    onClick={() => { if (row.nombre.trim()) agregarVarianteRow(idx) }}
+                    disabled={!row.nombre.trim() || row.guardando}
+                    className="p-2 rounded-xl bg-[var(--primary)] text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex-shrink-0">
+                    {row.guardando ? <Spinner size={14} /> : <IconPlus size={14} />}
+                  </button>
+                </div>
+              )
+            ))}
+          </div>
+        )}
       </Modal>
+
+      <Confirm
+        open={!!confirmarEliminar}
+        title="¿Eliminás este producto?"
+        message={`"${confirmarEliminar?.nombre}" se eliminará del inventario y no aparecerá más en la lista. Si necesitás restaurarlo, avisale al soporte técnico.`}
+        confirmLabel="Eliminar"
+        danger
+        onConfirm={() => confirmarEliminar && eliminarProducto(confirmarEliminar)}
+        onClose={() => setConfirmarEliminar(null)}
+      />
 
       {/* Quick pedir */}
       <Modal
