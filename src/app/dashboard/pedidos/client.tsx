@@ -224,7 +224,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
   function goToNew() {
     setNewNombre(busqueda.trim())
     setNewMarca('')
-    setNewCategoria('cocina')
+    setNewCategoria(isAdmin ? 'cocina' : (myCats[0] as CatKey ?? 'cocina'))
     setNewProveedorId('')
     setCantidad('1'); setUnidad('unidad'); setNotas(''); setUrgente(false)
     setAddStep('new')
@@ -246,7 +246,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
 
     // Siempre pisar proveedor, marca y unidad en el catálogo
     const patchBody: Record<string, unknown> = { unidad }
-    if (provConfig) patchBody.proveedor_id = Number(provConfig)
+    if (provConfig) patchBody.proveedor_id = provConfig
     if (configMarca.trim()) patchBody.marca = configMarca.trim()
     fetch(`/api/pedidos/productos/${productoSel.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
