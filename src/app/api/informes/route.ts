@@ -51,13 +51,10 @@ export async function GET(request: NextRequest) {
   const diasDelMes = new Date(y, m, 0).getDate()
   const fin = `${y}-${String(m).padStart(2, '0')}-${String(diasDelMes).padStart(2, '0')}`
 
-  // Hasta ayer (importación Loyverse corre a las 21hs, así que ayer siempre tiene datos)
   const tz = 'America/Argentina/Buenos_Aires'
   const ahora = new Date()
-  const ayerAR = new Date(ahora)
-  ayerAR.setDate(ayerAR.getDate() - 1)
-  const ayerStr = ayerAR.toLocaleDateString('en-CA', { timeZone: tz })
-  const finDatos = ayerStr < fin ? ayerStr : fin
+  const hoyStr = ahora.toLocaleDateString('en-CA', { timeZone: tz })
+  const finDatos = hoyStr < fin ? hoyStr : fin
 
   const diasTranscurridos = finDatos >= fin ? diasDelMes : Math.max(1, parseInt(finDatos.substring(8)))
 
