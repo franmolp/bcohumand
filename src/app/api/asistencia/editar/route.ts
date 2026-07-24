@@ -6,7 +6,8 @@ export async function PUT(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
-  if (!isAdmin) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
+  const isHR = session.rol === 'HR'
+  if (!isAdmin && !isHR) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
 
   const { usuario_id, fecha, estado, fichada_entrada, fichada_salida, horas_fichadas, horario_base_entrada, horario_base_salida, horas_base } = await req.json()
   if (!usuario_id || !fecha) return NextResponse.json({ error: 'Faltan parámetros' }, { status: 400 })

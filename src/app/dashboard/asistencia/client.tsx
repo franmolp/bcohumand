@@ -479,9 +479,10 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
   const [editBaseEntrada, setEditBaseEntrada] = useState('')
   const [editBaseSalida, setEditBaseSalida] = useState('')
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   function openEdit(rec: AsistenciaProcesada) {
-    setEditRec(rec)
+    setEditRec(rec); setSaveError('')
     setEditEstado(rec.estado ?? 'Asistió')
     setEditBaseEntrada(rec.horario_base_entrada?.substring(0, 5) ?? '')
     setEditBaseSalida(rec.horario_base_salida?.substring(0, 5) ?? '')
@@ -491,7 +492,7 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
 
   async function saveEdit() {
     if (!editRec) return
-    setSaving(true)
+    setSaving(true); setSaveError('')
     const horas = editEntrada && editSalida
       ? parseFloat(((toMinutes(editSalida) - toMinutes(editEntrada)) / 60).toFixed(2))
       : null
@@ -515,6 +516,7 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
     const data = await res.json()
     setSaving(false)
     if (!data.error) { setEditRec(null); onRecordEdited() }
+    else setSaveError(data.error)
   }
 
   const estadoOpts = Object.keys(CHIP_INFO)
@@ -1063,6 +1065,7 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
           <p className="text-xs text-violet-600 bg-violet-50 rounded-lg px-3 py-2">
             Este registro quedará bloqueado y no se sobreescribirá al regenerar.
           </p>
+          {saveError && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{saveError}</p>}
           <div className="flex gap-2 justify-end pt-1">
             <button onClick={() => setEditRec(null)}
               className="h-9 px-4 rounded-xl text-sm font-medium text-[var(--text-muted)] hover:bg-gray-100 transition-colors">
@@ -1101,9 +1104,10 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
   const [editBaseEntrada, setEditBaseEntrada] = useState('')
   const [editBaseSalida, setEditBaseSalida] = useState('')
   const [saving, setSaving]                 = useState(false)
+  const [saveError, setSaveError]           = useState('')
 
   function openEdit(rec: AsistenciaProcesada, empNombre: string) {
-    setEditRec(rec)
+    setEditRec(rec); setSaveError('')
     setEditEmpNombre(empNombre)
     setEditEstado(rec.estado ?? 'Asistió')
     setEditBaseEntrada(rec.horario_base_entrada?.substring(0, 5) ?? '')
@@ -1114,7 +1118,7 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
 
   async function saveEdit() {
     if (!editRec) return
-    setSaving(true)
+    setSaving(true); setSaveError('')
     const horas = editEntrada && editSalida
       ? parseFloat(((toMinutes(editSalida) - toMinutes(editEntrada)) / 60).toFixed(2))
       : null
@@ -1138,6 +1142,7 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
     const data = await res.json()
     setSaving(false)
     if (!data.error) { setEditRec(null); onRecordEdited() }
+    else setSaveError(data.error)
   }
 
   const estadoOpts = Object.keys(CHIP_INFO)
@@ -1405,6 +1410,7 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
           <p className="text-xs text-violet-600 bg-violet-50 rounded-lg px-3 py-2">
             Este registro quedará bloqueado y no se sobreescribirá al regenerar.
           </p>
+          {saveError && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{saveError}</p>}
           <div className="flex gap-2 justify-end pt-1">
             <button onClick={() => setEditRec(null)}
               className="h-9 px-4 rounded-xl text-sm font-medium text-[var(--text-muted)] hover:bg-gray-100 transition-colors cursor-pointer">
