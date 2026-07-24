@@ -268,7 +268,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
 
     const prodRes = await fetch('/api/pedidos/productos', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre: newNombre.trim(), marca: newMarca.trim() || 'Sin marca', categoria: newCategoria, proveedor_id: Number(newProveedorId), unidad }),
+      body: JSON.stringify({ nombre: newNombre.trim(), marca: newMarca.trim() || 'Sin marca', categoria: newCategoria, proveedor_id: newProveedorId || null, unidad }),
     })
     if (!prodRes.ok) { setGuardando(false); setGuardandoError('Error al crear el producto.'); return }
     const newProd = await prodRes.json()
