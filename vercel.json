@@ -5,10 +5,6 @@
       "schedule": "0 0 * * *"
     },
     {
-      "path": "/api/cron/loyverse",
-      "schedule": "0 15 * * *"
-    },
-    {
       "path": "/api/cron/cumpleanos",
       "schedule": "0 10 * * *"
     },
