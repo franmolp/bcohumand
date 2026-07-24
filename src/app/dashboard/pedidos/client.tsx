@@ -1769,11 +1769,9 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, canDelete
                           {p.variantes_count}
                         </button>
                       )}
-                      {isAdmin && (
-                        <button onClick={() => abrirEditar(p)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors">
-                          <IconEdit size={14} />
-                        </button>
-                      )}
+                      <button onClick={() => abrirEditar(p)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors">
+                        <IconEdit size={14} />
+                      </button>
                     </div>
                   </div>
 
@@ -1816,19 +1814,17 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, canDelete
                               onLoadHistorial={() => loadHistorial(v.id, true)}
                             />
                             {isAdmin && (
-                              <>
-                                <button
-                                  onClick={() => toggleStockLog(v.id, true)}
-                                  className={`p-1.5 rounded-lg cursor-pointer transition-colors flex-shrink-0 ${stockLogOpen.has(v.id) ? 'text-[var(--primary)] bg-[var(--primary)]/10' : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100'}`}>
-                                  <IconClock size={13} />
-                                </button>
-                                <button
-                                  onClick={() => { setVarianteForm({ prod: p, variante: v }); setVarianteNombre(v.nombre); setVarianteMinimo(v.stock_minimo?.toString() ?? '') }}
-                                  className="p-1.5 rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-100 cursor-pointer transition-colors flex-shrink-0">
-                                  <IconEdit size={13} />
-                                </button>
-                              </>
+                              <button
+                                onClick={() => toggleStockLog(v.id, true)}
+                                className={`p-1.5 rounded-lg cursor-pointer transition-colors flex-shrink-0 ${stockLogOpen.has(v.id) ? 'text-[var(--primary)] bg-[var(--primary)]/10' : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100'}`}>
+                                <IconClock size={13} />
+                              </button>
                             )}
+                            <button
+                              onClick={() => { setVarianteForm({ prod: p, variante: v }); setVarianteNombre(v.nombre); setVarianteMinimo(v.stock_minimo?.toString() ?? '') }}
+                              className="p-1.5 rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-100 cursor-pointer transition-colors flex-shrink-0">
+                              <IconEdit size={13} />
+                            </button>
                             {cicloActivo?.estado === 'abierto' && v.activo && (
                               <button
                                 onClick={() => { setPedirTarget({ prod: p, variante: v }); setPedirCantidad('1'); setPedirUnidad(p.unidad); setPedirNotas(''); setPedirUrgente(false); setPedirMarca(''); setPedirProveedorId('') }}
@@ -1855,7 +1851,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, canDelete
                           )}
                         </div>
                       ))}
-                      {!loadingVars.has(p.id) && isAdmin && (
+                      {!loadingVars.has(p.id) && (
                         <div className="border-t border-gray-100">
                           <button
                             onClick={() => { setVarianteForm({ prod: p }); setVarianteNombre(''); setVarianteMinimo(''); setVarianteRows([{ nombre: '', minimo: '', guardando: false, saved: false }]) }}
