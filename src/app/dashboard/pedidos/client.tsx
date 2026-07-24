@@ -1853,7 +1853,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
                       {!loadingVars.has(p.id) && isAdmin && (
                         <div className="border-t border-gray-100">
                           <button
-                            onClick={() => { setVarianteForm({ prod: p }); setVarianteNombre(''); setVarianteMinimo('') }}
+                            onClick={() => { setVarianteForm({ prod: p }); setVarianteNombre(''); setVarianteMinimo(''); setVarianteRows([{ nombre: '', minimo: '', guardando: false, saved: false }]) }}
                             className="w-full flex items-center gap-2 px-4 py-2.5 text-[12px] text-[var(--primary)] hover:bg-[var(--primary)]/5 cursor-pointer transition-colors">
                             <IconPlus size={12} />
                             Nueva variante
