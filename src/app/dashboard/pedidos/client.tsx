@@ -2005,9 +2005,11 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
                   className="text-[var(--text-muted)] hover:text-[var(--primary)] cursor-pointer p-0.5 flex-shrink-0">
                   <IconEdit size={12} />
                 </button>
-                <button onClick={() => eliminarVariante(v)} className="text-[var(--text-muted)] hover:text-red-500 cursor-pointer p-0.5 flex-shrink-0">
-                  <IconTrash size={12} />
-                </button>
+                {isAdmin && (
+                  <button onClick={() => eliminarVariante(v)} className="text-[var(--text-muted)] hover:text-red-500 cursor-pointer p-0.5 flex-shrink-0">
+                    <IconTrash size={12} />
+                  </button>
+                )}
               </div>
             ))}
 
