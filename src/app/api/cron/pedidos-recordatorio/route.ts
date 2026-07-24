@@ -52,6 +52,7 @@ export async function GET() {
       titulo: 'Recordatorio de pedido',
       mensaje,
       tipo: 'pedido_recordatorio',
+      url: '/dashboard/pedidos',
     })
     enviadas += userIds.length
   }

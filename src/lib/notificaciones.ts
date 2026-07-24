@@ -28,7 +28,7 @@ export type TipoNotif =
   | 'mural_mencion'
   | 'pedido_recordatorio'
 
-export async function sendPushToUsers(usuarioIds: string[], titulo: string, mensaje: string) {
+export async function sendPushToUsers(usuarioIds: string[], titulo: string, mensaje: string, url = '/dashboard/notificaciones') {
   const publicKey  = process.env.VAPID_PUBLIC_KEY
   const privateKey = process.env.VAPID_PRIVATE_KEY
   const email      = process.env.VAPID_EMAIL
@@ -43,7 +43,7 @@ export async function sendPushToUsers(usuarioIds: string[], titulo: string, mens
 
   const webpush = (await import('web-push')).default
   webpush.setVapidDetails(`mailto:${email}`, publicKey, privateKey)
-  const payload = JSON.stringify({ titulo, mensaje, url: '/dashboard/notificaciones' })
+  const payload = JSON.stringify({ titulo, mensaje, url })
 
   await Promise.allSettled(
     subs.map(s =>
@@ -60,6 +60,7 @@ export async function crearNotificacion(data: {
   titulo: string
   mensaje?: string
   tipo: TipoNotif
+  url?: string
 }) {
   await supabaseAdmin.from('notificaciones').insert({
     usuario_id: data.usuario_id,
@@ -68,12 +69,12 @@ export async function crearNotificacion(data: {
     tipo: data.tipo,
     leida: false,
   })
-  await sendPushToUsers([data.usuario_id], data.titulo, data.mensaje ?? '').catch(() => {})
+  await sendPushToUsers([data.usuario_id], data.titulo, data.mensaje ?? '', data.url).catch(() => {})
 }
 
 export async function crearNotificaciones(
   usuario_ids: string[],
-  data: { titulo: string; mensaje?: string; tipo: TipoNotif }
+  data: { titulo: string; mensaje?: string; tipo: TipoNotif; url?: string }
 ) {
   if (!usuario_ids.length) return
   const { error } = await supabaseAdmin.from('notificaciones').insert(
@@ -86,7 +87,7 @@ export async function crearNotificaciones(
     }))
   )
   if (error) console.log('[notif] insert error:', error)
-  await sendPushToUsers(usuario_ids, data.titulo, data.mensaje ?? '').catch(() => {})
+  await sendPushToUsers(usuario_ids, data.titulo, data.mensaje ?? '', data.url).catch(() => {})
 }
 
 export async function getAdminIds(): Promise<string[]> {
