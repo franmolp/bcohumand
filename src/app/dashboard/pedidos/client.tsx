@@ -1351,9 +1351,9 @@ function TabCatalogo({ productos, proveedores, onRefresh, isAdmin, myCats }: {
 
 // ─── Tab: Inventario ─────────────────────────────────────────────────────────
 
-function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, onRefresh }: {
+function TabInventario({ productos, proveedores, cicloActivo, isAdmin, canDelete, myCats, onRefresh }: {
   productos: Producto[]; proveedores: Proveedor[]; cicloActivo: Ciclo | null
-  isAdmin: boolean; myCats: string[] | null; onRefresh: () => void
+  isAdmin: boolean; canDelete: boolean; myCats: string[] | null; onRefresh: () => void
 }) {
   const [busqueda, setBusqueda] = useState('')
   const [catFiltro, setCatFiltro] = useState<CatKey | 'todas'>('todas')
@@ -1881,7 +1881,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
         title={editando ? 'Editar producto' : 'Nuevo producto'}
         footer={
           <>
-            {editando && isAdmin && (
+            {editando && canDelete && (
               <button
                 onClick={() => setConfirmarEliminar(editando)}
                 className="p-2.5 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 cursor-pointer transition-colors">
@@ -1946,7 +1946,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
                   className="text-[var(--text-muted)] hover:text-[var(--primary)] cursor-pointer p-0.5 flex-shrink-0">
                   <IconEdit size={12} />
                 </button>
-                {isAdmin && (
+                {canDelete && (
                   <button onClick={() => eliminarVariante(editando.id, v)} className="text-[var(--text-muted)] hover:text-red-500 cursor-pointer p-0.5 flex-shrink-0">
                     <IconTrash size={12} />
                   </button>
@@ -1980,7 +1980,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
         footer={
           varianteForm?.variante ? (
             <>
-              {isAdmin && (
+              {canDelete && (
                 <button
                   onClick={() => { eliminarVariante(varianteForm.prod.id, varianteForm.variante!); setVarianteForm(null) }}
                   className="p-2.5 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 cursor-pointer transition-colors flex-shrink-0">
@@ -2039,7 +2039,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
                   className="text-[var(--text-muted)] hover:text-[var(--primary)] cursor-pointer p-0.5 flex-shrink-0">
                   <IconEdit size={12} />
                 </button>
-                {isAdmin && (
+                {canDelete && (
                   <button onClick={() => eliminarVariante(varianteForm!.prod.id, v)} className="text-[var(--text-muted)] hover:text-red-500 cursor-pointer p-0.5 flex-shrink-0">
                     <IconTrash size={12} />
                   </button>
@@ -2188,10 +2188,12 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
   const [permisos, setPermisos] = useState<Permiso[]>([])
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [exportadores, setExportadores] = useState<string[]>([])
+  const [puedeEliminar, setPuedeEliminar] = useState<string[]>([])
   const [config, setConfig] = useState<{ dias_aviso: number; hora_aviso: string; dia_cierre: number; categorias_config: Partial<Record<CatKey, CatConfig>> } | null>(null)
   const [loading, setLoading] = useState(true)
   const [guardandoPerm, setGuardandoPerm] = useState<string | null>(null)
   const [guardandoExp, setGuardandoExp] = useState<string | null>(null)
+  const [guardandoElim, setGuardandoElim] = useState<string | null>(null)
   const [guardandoConf, setGuardandoConf] = useState(false)
   const [catAbierta, setCatAbierta] = useState<CatKey | null>(null)
   const [cicloCerrando, setCicloCerrando] = useState<string | null>(null)
@@ -2206,11 +2208,13 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
       fetch('/api/pedidos/permisos').then(r => r.json()),
       fetch('/api/pedidos/config').then(r => r.json()),
       fetch('/api/pedidos/exportadores').then(r => r.json()),
-    ]).then(([p, c, e]) => {
+      fetch('/api/pedidos/puede-eliminar').then(r => r.json()),
+    ]).then(([p, c, e, el]) => {
       setPermisos(p.permisos ?? [])
       setUsuarios(p.usuarios ?? [])
       setConfig(c.error ? null : c)
       setExportadores(e.exportadores ?? [])
+      setPuedeEliminar(el.puedeEliminar ?? [])
     }).finally(() => setLoading(false))
   }, [])
 
@@ -2250,6 +2254,22 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
       showToast(json.error ?? 'Error al guardar', 'error')
     }
     setGuardandoExp(null)
+  }
+
+  async function togglePuedeEliminar(userId: string) {
+    const tiene = puedeEliminar.includes(userId)
+    setGuardandoElim(userId)
+    const res = await fetch('/api/pedidos/puede-eliminar', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario_id: userId, puede: !tiene }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (res.ok) {
+      setPuedeEliminar(prev => tiene ? prev.filter(id => id !== userId) : [...prev, userId])
+    } else {
+      showToast(json.error ?? 'Error al guardar', 'error')
+    }
+    setGuardandoElim(null)
   }
 
   function updateCatConfig(key: CatKey, val: CatConfig) {
@@ -2354,6 +2374,28 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
         </div>
       </div>
 
+      <div>
+        <p className="text-[14px] font-bold text-[var(--text)] mb-1">Puede eliminar productos y variantes</p>
+        <p className="text-[12px] text-[var(--text-muted)] mb-3">Estas personas pueden eliminar productos y variantes del inventario.</p>
+        <div className="bg-white border border-[var(--border)] rounded-2xl shadow-sm overflow-hidden">
+          {usuarios.map((u, i) => {
+            const tiene = puedeEliminar.includes(u.id)
+            const cargando = guardandoElim === u.id
+            return (
+              <div key={u.id} className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-[var(--border)]' : ''}`}>
+                <div onClick={() => !cargando && togglePuedeEliminar(u.id)}
+                  className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all cursor-pointer ${tiene ? 'bg-[image:var(--gradient)] border-transparent' : 'border-gray-300 hover:border-[var(--primary)]'} ${cargando ? 'opacity-50' : ''}`}>
+                  {tiene && <IconCheck size={12} className="text-white" />}
+                </div>
+                <Avatar nombre={u.nombre} foto={u.foto_perfil} size={24} />
+                <span className="text-[13px] text-[var(--text)] flex-1">{u.nombre}</span>
+                {tiene && <span className="text-[10px] font-bold text-red-500 uppercase">Elimina</span>}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
       {config && (
         <div>
           <p className="text-[14px] font-bold text-[var(--text)] mb-1">Recordatorio automático</p>
@@ -2413,10 +2455,11 @@ function TabAjustes({ ciclos, onRefreshCiclos }: { ciclos: Ciclo[]; onRefreshCic
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-export default function PedidosClient({ session, myCats, puedeExportar }: {
-  session: SessionUser; myCats: string[]; puedeExportar: boolean
+export default function PedidosClient({ session, myCats, puedeExportar, puedeEliminar }: {
+  session: SessionUser; myCats: string[]; puedeExportar: boolean; puedeEliminar: boolean
 }) {
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+  const canDelete = isAdmin || puedeEliminar
 
   type Tab = 'inventario' | 'lista' | 'enviados' | 'exportar' | 'ajustes'
   const [tab, setTab] = useState<Tab>('inventario')
@@ -2484,6 +2527,7 @@ export default function PedidosClient({ session, myCats, puedeExportar }: {
               proveedores={proveedores}
               cicloActivo={cicloActivo}
               isAdmin={isAdmin}
+              canDelete={canDelete}
               myCats={isAdmin ? null : myCats}
               onRefresh={cargarProductos}
             />

@@ -16,7 +16,12 @@ export async function PUT(
   const { nombre, stock_actual, stock_minimo, activo, stock_delta } = body
 
   if (activo === false && !isAdmin) {
-    return NextResponse.json({ error: 'Sin permisos para eliminar' }, { status: 403 })
+    const { data: puedeElim } = await supabaseAdmin
+      .from('pedidos_puede_eliminar')
+      .select('usuario_id')
+      .eq('usuario_id', session.id)
+      .maybeSingle()
+    if (!puedeElim) return NextResponse.json({ error: 'Sin permisos para eliminar' }, { status: 403 })
   }
 
   const update: Record<string, unknown> = {}

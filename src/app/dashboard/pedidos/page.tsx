@@ -31,5 +31,16 @@ export default async function PedidosPage() {
     puedeExportar = !!expData
   }
 
-  return <PedidosClient session={session} myCats={myCats} puedeExportar={puedeExportar} />
+  // Check if user can delete products/variants
+  let puedeEliminar = isAdmin
+  if (!isAdmin) {
+    const { data: elimData } = await supabaseAdmin
+      .from('pedidos_puede_eliminar')
+      .select('usuario_id')
+      .eq('usuario_id', session.id)
+      .maybeSingle()
+    puedeEliminar = !!elimData
+  }
+
+  return <PedidosClient session={session} myCats={myCats} puedeExportar={puedeExportar} puedeEliminar={puedeEliminar} />
 }
