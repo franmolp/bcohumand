@@ -129,14 +129,6 @@ function weekMonSat(isoYear: number, isoWeek: number): { de: string; hasta: stri
 }
 
 
-function chipSeverity(estado: string | null): number {
-  if (!estado) return -1
-  if (['Ausente', 'Ausencia injustificada'].includes(estado)) return 5
-  if (estado === 'Sin fichada') return 4
-  if (['Llegada tarde', 'Salida temprana', 'Llegada tarde/Salida temprana', 'Incompleto', 'Tarde justificado/Salida temprana'].includes(estado)) return 3
-  if (['Asistió', 'Tarde justificado'].includes(estado)) return 2
-  return 1
-}
 
 // ─── component ────────────────────────────────────────────────────────────────
 
@@ -241,7 +233,6 @@ export default function AsistenciaClient({ user }: Props) {
 
   const weekData = useMemo(() => {
     if (!weekEmpId) return []
-    const [year] = mes.split('-').map(Number)
     const [my, mm] = mes.split('-').map(Number)
     const mesStart = `${mes}-01`
     const mesEnd = `${mes}-${String(new Date(my, mm, 0).getDate()).padStart(2, '0')}`
@@ -258,7 +249,7 @@ export default function AsistenciaClient({ user }: Props) {
     }
     return Array.from(byWeek.entries()).sort(([a], [b]) => a - b).map(([semana, wr]) => {
       const stats = calcPresentismo(wr as Parameters<typeof calcPresentismo>[0], config, wr.length)
-      const { de: fullDe, hasta: fullHasta } = weekMonSat(year, semana)
+      const { de: fullDe, hasta: fullHasta } = weekMonSat(my, semana)
       const de = fullDe < mesStart ? mesStart : fullDe
       const hasta = fullHasta > mesEnd ? mesEnd : fullHasta
       const diasEnMes = de <= hasta ? countNonSundayRange(de, hasta) : 0
@@ -285,9 +276,8 @@ export default function AsistenciaClient({ user }: Props) {
       body: JSON.stringify({ fechaInicio: `${mes}-01`, fechaFin }),
     })
     const data = await res.json()
-    setRegen(false)
-    if (data.error) showToast(data.error, 'error')
-    else { showToast(`${data.procesados} registros regenerados`, 'success'); loadRecords() }
+    if (data.error) { setRegen(false); showToast(data.error, 'error') }
+    else { showToast(`${data.procesados} registros regenerados`, 'success'); await loadRecords(); setRegen(false) }
   }
 
   async function regenerarAnio() {
@@ -299,9 +289,8 @@ export default function AsistenciaClient({ user }: Props) {
       body: JSON.stringify({ fechaInicio: `${year}-01-01`, fechaFin: ayer }),
     })
     const data = await res.json()
-    setRegenAnio(false)
-    if (data.error) showToast(data.error, 'error')
-    else { showToast(`${data.procesados} registros regenerados`, 'success'); loadRecords() }
+    if (data.error) { setRegenAnio(false); showToast(data.error, 'error') }
+    else { showToast(`${data.procesados} registros regenerados`, 'success'); await loadRecords(); setRegenAnio(false) }
   }
 
   async function saveConfig() {
@@ -468,6 +457,7 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
   homeStats: ReturnType<typeof calcPresentismo>
   onRecordEdited: () => void
 }) {
+  const defaultMes = new Date().toISOString().substring(0, 7)
   const days = Array.from({ length: daysInMonth(mes) }, (_, i) => i + 1)
   const dayMap = new Map(homeRecords.map(r => [r.fecha, r]))
   const hasEmp = !!homeEmpId
@@ -492,10 +482,15 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
 
   async function saveEdit() {
     if (!editRec) return
-    setSaving(true); setSaveError('')
     const horas = editEntrada && editSalida
       ? parseFloat(((toMinutes(editSalida) - toMinutes(editEntrada)) / 60).toFixed(2))
       : null
+    const horasBase = editBaseEntrada && editBaseSalida
+      ? parseFloat(((toMinutes(editBaseSalida) - toMinutes(editBaseEntrada)) / 60).toFixed(2))
+      : null
+    if (horas !== null && horas < 0) { setSaveError('La salida no puede ser anterior a la entrada'); return }
+    if (horasBase !== null && horasBase < 0) { setSaveError('La salida base no puede ser anterior a la entrada base'); return }
+    setSaving(true); setSaveError('')
     const res = await fetch('/api/asistencia/editar', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -508,9 +503,7 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
         horas_fichadas: horas,
         horario_base_entrada: editBaseEntrada || null,
         horario_base_salida: editBaseSalida || null,
-        horas_base: editBaseEntrada && editBaseSalida
-          ? parseFloat(((toMinutes(editBaseSalida) - toMinutes(editBaseEntrada)) / 60).toFixed(2))
-          : null,
+        horas_base: horasBase,
       }),
     })
     const data = await res.json()
@@ -699,7 +692,7 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
             {empList.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
           </select>
         )}
-        <input type="month" value={mes} onChange={e => setMes(e.target.value)}
+        <input type="month" value={mes} onChange={e => setMes(e.target.value)} max={defaultMes}
           className="h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
           style={{ fontSize: 16 }} />
       </div>
@@ -1118,10 +1111,15 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
 
   async function saveEdit() {
     if (!editRec) return
-    setSaving(true); setSaveError('')
     const horas = editEntrada && editSalida
       ? parseFloat(((toMinutes(editSalida) - toMinutes(editEntrada)) / 60).toFixed(2))
       : null
+    const horasBase = editBaseEntrada && editBaseSalida
+      ? parseFloat(((toMinutes(editBaseSalida) - toMinutes(editBaseEntrada)) / 60).toFixed(2))
+      : null
+    if (horas !== null && horas < 0) { setSaveError('La salida no puede ser anterior a la entrada'); return }
+    if (horasBase !== null && horasBase < 0) { setSaveError('La salida base no puede ser anterior a la entrada base'); return }
+    setSaving(true); setSaveError('')
     const res = await fetch('/api/asistencia/editar', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -1134,9 +1132,7 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
         horas_fichadas: horas,
         horario_base_entrada: editBaseEntrada || null,
         horario_base_salida: editBaseSalida || null,
-        horas_base: editBaseEntrada && editBaseSalida
-          ? parseFloat(((toMinutes(editBaseSalida) - toMinutes(editBaseEntrada)) / 60).toFixed(2))
-          : null,
+        horas_base: horasBase,
       }),
     })
     const data = await res.json()
@@ -1441,6 +1437,7 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
   homeRecords: AsistenciaProcesada[]
   onVerFicha: (empId: string) => void
 }) {
+  const defaultMes = new Date().toISOString().substring(0, 7)
   const [sortBy, setSortBy] = useState<'alpha' | 'estado'>('alpha')
   const [novedadesLoading, setNovedadesLoading] = useState(false)
   const [novedadesError, setNovedadesError] = useState<string | null>(null)
@@ -1467,7 +1464,6 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
   // Weekly breakdown in employee view
   const empWeekData = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0]
-    const [year] = mes.split('-').map(Number)
     const [my, mm] = mes.split('-').map(Number)
     const mesStart = `${mes}-01`
     const mesEnd = `${mes}-${String(new Date(my, mm, 0).getDate()).padStart(2, '0')}`
@@ -1483,7 +1479,7 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
     }
     return Array.from(byWeek.values()).sort((a, b) => a.semana - b.semana).map(({ semana, records: wr }) => {
       const stats = calcPresentismo(wr as Parameters<typeof calcPresentismo>[0], config, wr.length)
-      const { de: fullDe, hasta: fullHasta } = weekMonSat(year, semana)
+      const { de: fullDe, hasta: fullHasta } = weekMonSat(my, semana)
       const de = fullDe < mesStart ? mesStart : fullDe
       const hasta = fullHasta > mesEnd ? mesEnd : fullHasta
       const diasEnMes = de <= hasta ? countNonSundayRange(de, hasta) : 0
@@ -1557,7 +1553,7 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
       {/* Selector mes */}
       <div className="flex items-center gap-2">
         <input
-          type="month" value={mes} onChange={e => setMes(e.target.value)}
+          type="month" value={mes} onChange={e => setMes(e.target.value)} max={defaultMes}
           className="h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
           style={{ fontSize: 16 }}
         />
@@ -1650,9 +1646,9 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
                         </span>
                       )}
                       {stats.ausencias > 0 && (
-                        <span className={stats.ausencias >= config.maxAusenciasInjustificadas ? 'text-red-600 font-semibold' : 'text-[var(--text-sub)]'}>
+                        <span className={stats.ausencias > config.maxAusenciasInjustificadas ? 'text-red-600 font-semibold' : 'text-[var(--text-sub)]'}>
                           {stats.ausencias} ausencia{stats.ausencias !== 1 ? 's' : ''}
-                          {stats.ausencias >= config.maxAusenciasInjustificadas && ' · penaliza'}
+                          {stats.ausencias > config.maxAusenciasInjustificadas && ' · penaliza'}
                         </span>
                       )}
                     </div>
@@ -1761,11 +1757,11 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
                 </div>
               )}
               {homeStats.ausencias > 0 && (
-                <div className={`flex-1 rounded-xl border p-3 text-center ${homeStats.ausencias >= config.maxAusenciasInjustificadas ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
-                  <div className={`text-2xl font-bold ${homeStats.ausencias >= config.maxAusenciasInjustificadas ? 'text-red-600' : 'text-[var(--text)]'}`}>{homeStats.ausencias}</div>
+                <div className={`flex-1 rounded-xl border p-3 text-center ${homeStats.ausencias > config.maxAusenciasInjustificadas ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
+                  <div className={`text-2xl font-bold ${homeStats.ausencias > config.maxAusenciasInjustificadas ? 'text-red-600' : 'text-[var(--text)]'}`}>{homeStats.ausencias}</div>
                   <div className="text-[10px] text-[var(--text-muted)] mt-0.5">Ausencias inj.</div>
-                  <div className={`text-[10px] font-medium mt-0.5 ${homeStats.ausencias >= config.maxAusenciasInjustificadas ? 'text-red-500' : 'text-[var(--text-muted)]'}`}>
-                    {homeStats.ausencias >= config.maxAusenciasInjustificadas ? 'Penaliza' : `Límite: ${config.maxAusenciasInjustificadas}`}
+                  <div className={`text-[10px] font-medium mt-0.5 ${homeStats.ausencias > config.maxAusenciasInjustificadas ? 'text-red-500' : 'text-[var(--text-muted)]'}`}>
+                    {homeStats.ausencias > config.maxAusenciasInjustificadas ? 'Penaliza' : `Límite: ${config.maxAusenciasInjustificadas}`}
                   </div>
                 </div>
               )}
@@ -1868,9 +1864,9 @@ function PresentismoTab({ mes, setMes, isAdmin, statsPerEmp, homeStats, config, 
                         </span>
                       )}
                       {empStats.ausencias > 0 && (
-                        <span className={empStats.ausencias >= config.maxAusenciasInjustificadas ? 'text-red-600 font-semibold' : 'text-[var(--text-sub)]'}>
+                        <span className={empStats.ausencias > config.maxAusenciasInjustificadas ? 'text-red-600 font-semibold' : 'text-[var(--text-sub)]'}>
                           {empStats.ausencias} ausencia{empStats.ausencias !== 1 ? 's' : ''}
-                          {empStats.ausencias >= config.maxAusenciasInjustificadas && ' (penaliza)'}
+                          {empStats.ausencias > config.maxAusenciasInjustificadas && ' (penaliza)'}
                         </span>
                       )}
                     </div>
