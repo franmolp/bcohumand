@@ -34,6 +34,10 @@ export async function PUT(
   const body = await request.json().catch(() => ({}))
   const { nombre, marca, categoria, proveedor_id, unidad, activo, stock_actual, stock_minimo, stock_delta } = body
 
+  if (activo === false && !isAdmin) {
+    return NextResponse.json({ error: 'Sin permisos para eliminar' }, { status: 403 })
+  }
+
   const update: Record<string, unknown> = {}
   if (nombre?.trim()) update.nombre = nombre.trim()
   if (marca !== undefined) update.marca = marca?.trim() || 'Sin marca'

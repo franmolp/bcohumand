@@ -9,9 +9,15 @@ export async function PUT(
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
+  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+
   const { id } = await params
   const body = await request.json().catch(() => ({}))
   const { nombre, stock_actual, stock_minimo, activo, stock_delta } = body
+
+  if (activo === false && !isAdmin) {
+    return NextResponse.json({ error: 'Sin permisos para eliminar' }, { status: 403 })
+  }
 
   const update: Record<string, unknown> = {}
   if (nombre?.trim()) update.nombre = nombre.trim()

@@ -1400,6 +1400,15 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [varianteForm])
 
+  useEffect(() => {
+    if (editando && editando.variantes_count > 0) {
+      fetch(`/api/pedidos/variantes?producto_id=${editando.id}`).then(r => r.json()).then(data => {
+        setVariantesMap(m => ({ ...m, [editando.id]: Array.isArray(data) ? data : [] }))
+      }).catch(() => {})
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editando])
+
   const [pedirItems, setPedirItems] = useState<Item[]>([])
   useEffect(() => {
     if (!cicloActivo) return
@@ -1610,16 +1619,12 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
     }
   }
 
-  async function eliminarVariante(v: Variante) {
-    if (!varianteForm) return
+  async function eliminarVariante(prodId: string, v: Variante) {
     await fetch(`/api/pedidos/variantes/${v.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ activo: false }),
     })
-    setVariantesMap(m => ({
-      ...m,
-      [varianteForm.prod.id]: (m[varianteForm.prod.id] ?? []).filter(x => x.id !== v.id),
-    }))
+    setVariantesMap(m => ({ ...m, [prodId]: (m[prodId] ?? []).filter(x => x.id !== v.id) }))
     onRefresh()
   }
 
@@ -1928,6 +1933,28 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
             </div>
           </div>
         )}
+        {editando && (variantesMap[editando.id] ?? []).length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-[12px] font-medium text-[var(--text-sub)]">Variantes</p>
+            {(variantesMap[editando.id] ?? []).map(v => (
+              <div key={v.id} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-xl border border-[var(--border)]">
+                <IconCheck size={12} className="text-green-500 flex-shrink-0" />
+                <span className="text-[13px] flex-1 truncate">{v.nombre}</span>
+                {v.stock_minimo != null && <span className="text-[11px] text-[var(--text-muted)]">mín: {v.stock_minimo}</span>}
+                <button
+                  onClick={() => { setShowForm(false); setVarianteForm({ prod: editando, variante: v }); setVarianteNombre(v.nombre); setVarianteMinimo(v.stock_minimo?.toString() ?? '') }}
+                  className="text-[var(--text-muted)] hover:text-[var(--primary)] cursor-pointer p-0.5 flex-shrink-0">
+                  <IconEdit size={12} />
+                </button>
+                {isAdmin && (
+                  <button onClick={() => eliminarVariante(editando.id, v)} className="text-[var(--text-muted)] hover:text-red-500 cursor-pointer p-0.5 flex-shrink-0">
+                    <IconTrash size={12} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
         <button
           disabled={!nombre.trim() || guardando}
           onClick={() => {
@@ -1953,6 +1980,13 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
         footer={
           varianteForm?.variante ? (
             <>
+              {isAdmin && (
+                <button
+                  onClick={() => { eliminarVariante(varianteForm.prod.id, varianteForm.variante!); setVarianteForm(null) }}
+                  className="p-2.5 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 cursor-pointer transition-colors flex-shrink-0">
+                  <IconTrash size={16} />
+                </button>
+              )}
               <Button variant="secondary" className="flex-1" onClick={() => setVarianteForm(null)}>Cancelar</Button>
               <Button className="flex-1" onClick={guardarVariante} loading={varianteGuardando} disabled={!varianteNombre.trim()}>Guardar</Button>
             </>
@@ -2006,7 +2040,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
                   <IconEdit size={12} />
                 </button>
                 {isAdmin && (
-                  <button onClick={() => eliminarVariante(v)} className="text-[var(--text-muted)] hover:text-red-500 cursor-pointer p-0.5 flex-shrink-0">
+                  <button onClick={() => eliminarVariante(varianteForm!.prod.id, v)} className="text-[var(--text-muted)] hover:text-red-500 cursor-pointer p-0.5 flex-shrink-0">
                     <IconTrash size={12} />
                   </button>
                 )}

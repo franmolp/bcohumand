@@ -25,13 +25,22 @@ export async function POST(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
-  if (!isAdmin) return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
 
   const body = await request.json().catch(() => ({}))
   const { producto_id, nombre, stock_actual, stock_minimo } = body
 
   if (!producto_id || !nombre?.trim()) {
     return NextResponse.json({ error: 'producto_id y nombre requeridos' }, { status: 400 })
+  }
+
+  if (!isAdmin) {
+    const { data: prod } = await supabaseAdmin
+      .from('pedidos_productos').select('categoria').eq('id', producto_id).single()
+    if (!prod) return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 })
+    const { data: perm } = await supabaseAdmin
+      .from('pedidos_permisos').select('categoria')
+      .eq('usuario_id', session.id).eq('categoria', prod.categoria).maybeSingle()
+    if (!perm) return NextResponse.json({ error: 'Sin permisos para esta categoría' }, { status: 403 })
   }
 
   const { data, error } = await supabaseAdmin
