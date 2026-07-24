@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { crearNotificaciones } from '@/lib/notificaciones'
 
@@ -17,7 +17,14 @@ function hoyDiaARG(): number {
   return new Date(dateStr + 'T12:00:00').getDay()
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const secret = request.nextUrl.searchParams.get('secret')
+  const authHeader = request.headers.get('authorization')
+  const bearerSecret = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+  if (secret !== process.env.CRON_SECRET && bearerSecret !== process.env.CRON_SECRET) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  }
+
   const hoyDia = hoyDiaARG()
 
   const { data: config } = await supabaseAdmin

@@ -44,7 +44,8 @@ export async function PUT(
     if (notas !== undefined) update.notas = notas?.trim() ?? null
     if (urgente !== undefined) update.urgente = urgente === true
     if (isAdmin && estadoBody && ['pendiente', 'ordenado', 'recibido'].includes(estadoBody)) update.estado = estadoBody
-    if (isAdmin && typeof archivadoBody === 'boolean') {
+    const isOwner = item.usuario_id === session.id
+    if ((isAdmin || isOwner) && typeof archivadoBody === 'boolean') {
       update.archivado = archivadoBody
       if (!archivadoBody) { update.archivado_por = null; update.archivado_en = null }
     }

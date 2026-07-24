@@ -155,6 +155,11 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
   const [confirmArchive, setConfirmArchive] = useState<Item | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<Item | null>(null)
   const [confirmRestore, setConfirmRestore] = useState<Item | null>(null)
+  const [archivandoConf, setArchivandoConf] = useState(false)
+  const [eliminandoConf, setEliminandoConf] = useState(false)
+  const [restaurandoConf, setRestaurandoConf] = useState(false)
+  const [reabrirLoading, setReabrirLoading] = useState(false)
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [loading, setLoading] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [editItem, setEditItem] = useState<Item | null>(null)
@@ -184,6 +189,11 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
   const [editNotas, setEditNotas] = useState('')
   const [editUrgente, setEditUrgente] = useState(false)
   const [editGuardando, setEditGuardando] = useState(false)
+
+  function showToast(msg: string, type: 'success' | 'error' = 'success') {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3000)
+  }
 
   const cargar = useCallback(() => {
     if (!cicloActivo) return
@@ -301,25 +311,34 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
 
   async function archivarItem(id: string) {
     if (!cicloActivo) return
-    await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items/${id}`, { method: 'DELETE' })
+    setArchivandoConf(true)
+    const res = await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items/${id}`, { method: 'DELETE' })
+    setArchivandoConf(false)
     setConfirmArchive(null)
-    cargar()
+    if (res.ok) cargar()
+    else showToast('Error al archivar el ítem', 'error')
   }
 
   async function eliminarDefinitivo(id: string) {
     if (!cicloActivo) return
-    await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items/${id}?permanente=true`, { method: 'DELETE' })
+    setEliminandoConf(true)
+    const res = await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items/${id}?permanente=true`, { method: 'DELETE' })
+    setEliminandoConf(false)
     setConfirmDelete(null)
-    cargar()
+    if (res.ok) cargar()
+    else showToast('Error al eliminar el ítem', 'error')
   }
 
   async function restaurarItem(item: Item) {
-    await fetch(`/api/pedidos/ciclos/${item.ciclo_id}/items/${item.id}`, {
+    setRestaurandoConf(true)
+    const res = await fetch(`/api/pedidos/ciclos/${item.ciclo_id}/items/${item.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ archivado: false }),
     })
+    setRestaurandoConf(false)
     setConfirmRestore(null)
-    cargar()
+    if (res.ok) cargar()
+    else showToast('Error al restaurar el ítem', 'error')
   }
 
   // Agrupar: proveedor → categoría → items
@@ -348,17 +367,24 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
 
   return (
     <div>
+      <Toast message={toast?.msg ?? ''} visible={!!toast} type={toast?.type} />
       {cicloActivo.estado !== 'abierto' && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 mb-4">
           <div className="flex items-center justify-between gap-2">
             <p className="text-[12px] text-amber-700 font-semibold">Lista cerrada</p>
             {isAdmin && (
-              <Button size="sm" variant="secondary" onClick={async () => {
-                await fetch(`/api/pedidos/ciclos/${cicloActivo.id}`, {
+              <Button size="sm" variant="secondary" loading={reabrirLoading} onClick={async () => {
+                setReabrirLoading(true)
+                const res = await fetch(`/api/pedidos/ciclos/${cicloActivo.id}`, {
                   method: 'PUT', headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ estado: 'abierto' }),
                 })
-                onCiclosChange()
+                setReabrirLoading(false)
+                if (res.ok) onCiclosChange()
+                else {
+                  const err = await res.json().catch(() => ({}))
+                  showToast(err.error ?? 'Error al reabrir el pedido', 'error')
+                }
               }}>Reabrir</Button>
             )}
           </div>
@@ -488,7 +514,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
             <>
               <Button variant="secondary" onClick={() => setAddStep('search')}>Volver</Button>
               <Button className="flex-1" onClick={agregarNuevo} loading={guardando}
-                disabled={!newNombre.trim() || !newProveedorId || !cantidad || Number(cantidad) <= 0 || !newMarca.trim()}>
+                disabled={!newNombre.trim() || !newProveedorId || !cantidad || Number(cantidad) <= 0}>
                 Crear y agregar
               </Button>
             </>
@@ -637,6 +663,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
         title="¿Archivás este ítem?"
         message={`"${confirmArchive?.producto?.nombre ?? confirmArchive?.nombre_libre ?? 'Ítem'}" pasará a la lista de archivados. Quedará registrado quién lo cargó y quién lo archivó.`}
         confirmLabel="Archivar"
+        loading={archivandoConf}
         onConfirm={() => confirmArchive && archivarItem(confirmArchive.id)}
         onClose={() => setConfirmArchive(null)}
       />
@@ -646,6 +673,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
         message={`"${confirmDelete?.producto?.nombre ?? confirmDelete?.nombre_libre ?? 'Ítem'}" se borrará para siempre. Esta acción no se puede deshacer.`}
         confirmLabel="Eliminar"
         danger
+        loading={eliminandoConf}
         onConfirm={() => confirmDelete && eliminarDefinitivo(confirmDelete.id)}
         onClose={() => setConfirmDelete(null)}
       />
@@ -654,6 +682,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
         title={confirmRestore?.estado === 'ordenado' ? '¿Marcás como faltante?' : '¿Restaurás este ítem?'}
         message={`"${confirmRestore?.producto?.nombre ?? confirmRestore?.nombre_libre ?? 'Ítem'}" volverá a la lista activa como pendiente.`}
         confirmLabel={confirmRestore?.estado === 'ordenado' ? 'Sí, no llegó' : 'Restaurar'}
+        loading={restaurandoConf}
         onConfirm={() => confirmRestore && restaurarItem(confirmRestore)}
         onClose={() => setConfirmRestore(null)}
       />
@@ -666,7 +695,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
         footer={
           <>
             <Button variant="secondary" className="flex-1" onClick={() => setEditItem(null)}>Cancelar</Button>
-            <Button className="flex-1" onClick={guardarEdicion} loading={editGuardando}>Guardar</Button>
+            <Button className="flex-1" onClick={guardarEdicion} loading={editGuardando} disabled={!editCantidad || Number(editCantidad) <= 0}>Guardar</Button>
           </>
         }
       >
@@ -949,7 +978,7 @@ function TabEnviados({ cicloActivo, isAdmin }: { cicloActivo: Ciclo | null; isAd
     // Mark item as recibido (with actual received quantity)
     await fetch(`/api/pedidos/ciclos/${recibirItem.ciclo_id}/items/${recibirItem.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ estado: 'recibido', cantidad: recibidos || recibirItem.cantidad }),
+      body: JSON.stringify({ estado: recibidos > 0 ? 'recibido' : 'faltante', cantidad: recibidos > 0 ? recibidos : recibirItem.cantidad }),
     })
 
     // Si no llegó nada: volver a la lista activa como pendiente urgente
@@ -985,6 +1014,7 @@ function TabEnviados({ cicloActivo, isAdmin }: { cicloActivo: Ciclo | null; isAd
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           producto_id: item.producto_id ?? undefined,
+          variante_id: item.variante_id ?? undefined,
           nombre_libre: item.producto_id ? undefined : item.nombre,
           cantidad: item.cantidad,
           unidad: item.unidad,
@@ -1225,130 +1255,6 @@ function TabExportar({ cicloActivo, onCiclosChange }: {
   )
 }
 
-// ─── Tab: Catálogo ───────────────────────────────────────────────────────────
-
-function TabCatalogo({ productos, proveedores, onRefresh, isAdmin, myCats }: {
-  productos: Producto[]; proveedores: Proveedor[]; onRefresh: () => void; isAdmin: boolean; myCats: string[] | null
-}) {
-  const [busqueda, setBusqueda] = useState('')
-  const [catFiltro, setCatFiltro] = useState<CatKey | 'todas'>('todas')
-  const [showForm, setShowForm] = useState(false)
-  const [editando, setEditando] = useState<Producto | null>(null)
-  const [nombre, setNombre] = useState('')
-  const [marca, setMarca] = useState('')
-  const [categoria, setCategoria] = useState<CatKey>('cocina')
-  const [proveedorId, setProveedorId] = useState('')
-  const [unidad, setUnidad] = useState('unidad')
-  const [guardando, setGuardando] = useState(false)
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
-
-  const prodsFiltrados = productos.filter(p => {
-    if (!p.activo) return false
-    if (myCats && !myCats.includes(p.categoria)) return false
-    if (catFiltro !== 'todas' && p.categoria !== catFiltro) return false
-    if (busqueda.length >= 2 && !p.nombre.toLowerCase().includes(busqueda.toLowerCase())) return false
-    return true
-  })
-
-  function abrirNuevo() {
-    const defaultCat = myCats && myCats.length > 0 ? (myCats[0] as CatKey) : 'cocina'
-    setEditando(null); setNombre(''); setMarca(''); setCategoria(defaultCat); setProveedorId(''); setUnidad('unidad')
-    setShowForm(true)
-  }
-  function abrirEditar(p: Producto) {
-    setEditando(p); setNombre(p.nombre); setMarca(p.marca ?? ''); setCategoria(p.categoria)
-    setProveedorId(p.proveedor_id?.toString() ?? ''); setUnidad(p.unidad)
-    setShowForm(true)
-  }
-
-  async function guardar() {
-    setGuardando(true)
-    const body = { nombre, marca: marca.trim() || 'Sin marca', categoria, proveedor_id: proveedorId ? Number(proveedorId) : null, unidad }
-    const res = editando
-      ? await fetch(`/api/pedidos/productos/${editando.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      : await fetch('/api/pedidos/productos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    setGuardando(false)
-    if (res.ok) {
-      setShowForm(false); onRefresh()
-      setToast({ msg: editando ? 'Producto actualizado' : 'Producto creado', type: 'success' })
-      setTimeout(() => setToast(null), 3000)
-    }
-  }
-
-  return (
-    <div>
-      <Toast message={toast?.msg ?? ''} visible={!!toast} type={toast?.type} />
-
-      <div className="flex gap-2 mb-4">
-        <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar producto…"
-          className="flex-1 border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
-        <Button size="sm" onClick={abrirNuevo} icon={<IconPlus size={14} />}>Nuevo</Button>
-      </div>
-
-      <div className="flex gap-1.5 overflow-x-auto pb-1 mb-4">
-        <button onClick={() => setCatFiltro('todas')}
-          className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium cursor-pointer transition-colors ${catFiltro === 'todas' ? 'bg-[image:var(--gradient)] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-          Todas
-        </button>
-        {(myCats ? CATEGORIAS.filter(c => myCats.includes(c.key)) : CATEGORIAS).map(c => (
-          <button key={c.key} onClick={() => setCatFiltro(c.key)}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium cursor-pointer transition-colors ${catFiltro === c.key ? 'bg-[image:var(--gradient)] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-            {c.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="space-y-2">
-        {prodsFiltrados.map(p => (
-          <div key={p.id} className="bg-white border rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm border-[var(--border)]">
-            <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-semibold truncate">{p.nombre} <span className="font-normal text-[var(--text-muted)]">{p.marca !== 'Sin marca' ? `· ${p.marca}` : ''}</span></p>
-              <p className="text-[11px] text-[var(--text-muted)]">{catLabel(p.categoria)} · {p.unidad} · {p.proveedor?.nombre ?? <span className="text-amber-500">Sin proveedor</span>}</p>
-            </div>
-            <button onClick={() => abrirEditar(p)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 cursor-pointer transition-colors">
-              <IconEdit size={14} />
-            </button>
-          </div>
-        ))}
-        {!prodsFiltrados.length && <p className="text-center text-[13px] text-gray-400 py-10">Sin productos</p>}
-      </div>
-
-      <Modal
-        open={showForm}
-        onClose={() => setShowForm(false)}
-        title={editando ? 'Editar producto' : 'Nuevo producto'}
-        footer={
-          <>
-            <Button variant="secondary" className="flex-1" onClick={() => setShowForm(false)}>Cancelar</Button>
-            <Button className="flex-1" onClick={guardar} loading={guardando} disabled={!nombre.trim()}>Guardar</Button>
-          </>
-        }
-      >
-        <div>
-          <p className="text-[12px] font-medium text-[var(--text-sub)] mb-1.5">Nombre *</p>
-          <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Algodón"
-            className="w-full border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
-        </div>
-        <MarcaInput value={marca} onChange={setMarca} productos={productos} label="Marca" />
-        <Select label="Categoría" value={categoria} onChange={v => setCategoria(v as CatKey)}>
-          {(myCats ? CATEGORIAS.filter(c => myCats.includes(c.key)) : CATEGORIAS).map(c => (
-            <option key={c.key} value={c.key}>{c.label}</option>
-          ))}
-        </Select>
-        <div className="flex gap-3">
-          <Select label="Proveedor" value={proveedorId} onChange={setProveedorId} className="flex-1">
-            <option value="">Sin proveedor</option>
-            {proveedores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-          </Select>
-          <Select label="Unidad" value={unidad} onChange={setUnidad} className="w-28">
-            {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
-          </Select>
-        </div>
-      </Modal>
-    </div>
-  )
-}
-
 // ─── Tab: Inventario ─────────────────────────────────────────────────────────
 
 function TabInventario({ productos, proveedores, cicloActivo, isAdmin, canDelete, myCats, onRefresh }: {
@@ -1470,7 +1376,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, canDelete
       nombre, marca: marca.trim() || 'Sin marca', categoria,
       proveedor_id: proveedorId || null, unidad,
     }
-    if (sinVariantes && !thenAddVariante) {
+    if (sinVariantes) {
       body.stock_minimo = stockMinProd !== '' ? Number(stockMinProd) : null
       body.stock_actual = stockActualProd !== '' ? Number(stockActualProd) : null
     }
@@ -1479,9 +1385,23 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, canDelete
       : await fetch('/api/pedidos/productos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     setGuardando(false)
     if (res.ok) {
+      let newProd: Producto | null = null
+      if (!editando) newProd = await res.json()
+      const prodId = editando?.id ?? newProd?.id
+
       setShowForm(false); onRefresh(); showToast(editando ? 'Producto actualizado' : 'Producto creado')
-      if (thenAddVariante) {
-        const prod = editando ?? await res.json()
+
+      // Registrar cambio de stock en auditoría
+      if (sinVariantes && body.stock_actual !== null && body.stock_actual !== undefined && prodId) {
+        const stockAnterior = editando?.stock_actual ?? null
+        fetch('/api/pedidos/stock-auditoria', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ producto_id: prodId, stock_anterior: stockAnterior, stock_nuevo: body.stock_actual }),
+        }).catch(() => {})
+      }
+
+      if (thenAddVariante && (editando || newProd)) {
+        const prod = editando ?? newProd!
         setVarianteForm({ prod })
         setVarianteNombre(''); setVarianteMinimo('')
         setVarianteRows([{ nombre: '', minimo: '', guardando: false, saved: false }])
@@ -1620,10 +1540,11 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, canDelete
   }
 
   async function eliminarVariante(prodId: string, v: Variante) {
-    await fetch(`/api/pedidos/variantes/${v.id}`, {
+    const res = await fetch(`/api/pedidos/variantes/${v.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ activo: false }),
     })
+    if (!res.ok) { showToast('Error al eliminar la variante', 'error'); return }
     setVariantesMap(m => ({ ...m, [prodId]: (m[prodId] ?? []).filter(x => x.id !== v.id) }))
     onRefresh()
   }

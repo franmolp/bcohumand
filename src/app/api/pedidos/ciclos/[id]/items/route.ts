@@ -14,16 +14,11 @@ export async function GET(
 
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
 
-  const [itemsRes, permsRes] = await Promise.all([
-    supabaseAdmin
-      .from('pedidos_items')
-      .select('*, producto:pedidos_productos(id, nombre, marca, categoria, unidad, proveedor_id, proveedor:proveedores(id, nombre)), variante:pedidos_variantes(id, nombre)')
-      .eq('ciclo_id', id)
-      .order('created_at', { ascending: true }),
-    supabaseAdmin
-      .from('pedidos_permisos')
-      .select('usuario_id, categoria'),
-  ])
+  const itemsRes = await supabaseAdmin
+    .from('pedidos_items')
+    .select('*, producto:pedidos_productos(id, nombre, marca, categoria, unidad, proveedor_id, proveedor:proveedores(id, nombre)), variante:pedidos_variantes(id, nombre)')
+    .eq('ciclo_id', id)
+    .order('created_at', { ascending: true })
 
   if (itemsRes.error) return NextResponse.json({ error: itemsRes.error.message }, { status: 500 })
 
@@ -68,12 +63,7 @@ export async function GET(
   // Manual archives: estado='pendiente' (not sent-to-proveedor)
   const archivados = filtrar(itemsConUsuario.filter(i => i.archivado && i.estado === 'pendiente'))
 
-  return NextResponse.json({
-    items: activos,
-    archivados,
-    permisos: permsRes.data ?? [],
-    myCats,
-  })
+  return NextResponse.json({ items: activos, archivados, myCats })
 }
 
 export async function POST(

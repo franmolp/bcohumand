@@ -55,6 +55,16 @@ export async function PUT(
   if (estado === 'abierto') {
     update.cerrado_por = null
     update.cerrado_en = null
+    // Verificar que no haya otro ciclo ya abierto
+    const { data: yaAbierto } = await supabaseAdmin
+      .from('pedidos_ciclos')
+      .select('id')
+      .eq('estado', 'abierto')
+      .neq('id', id)
+      .limit(1)
+    if (yaAbierto?.length) {
+      return NextResponse.json({ error: 'Ya hay un pedido abierto' }, { status: 409 })
+    }
   }
 
   if (!Object.keys(update).length) {
