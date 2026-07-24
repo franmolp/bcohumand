@@ -5,7 +5,7 @@ import Link from 'next/link'
 import type { SessionUser } from '@/types'
 import {
   IconBell, IconCheck, IconX, IconCalendar, IconCalendarCheck,
-  IconShoppingBag, IconReceipt, IconWall, IconAlertCircle, IconPlus, IconTrash, IconFilter, IconHeartFilled, IconFingerprint, IconDollar, IconWrench, IconFileText, IconTrophy,
+  IconShoppingBag, IconReceipt, IconWall, IconAlertCircle, IconPlus, IconTrash, IconFilter, IconHeartFilled, IconFingerprint, IconDollar, IconWrench, IconFileText, IconTrophy, IconBottle,
 } from '@/components/ui/Icons'
 import { Spinner, Modal, Button, Input, Select, Toast } from '@/components/ui'
 
@@ -59,7 +59,7 @@ function tipoConfig(tipo: string) {
     reconocimiento_pendiente:      { icon: <IconTrophy size={14} />,  bg: 'bg-yellow-100',  color: 'text-yellow-600',  href: '/dashboard/reconocimientos' },
     reconocimiento_aprobado:       { icon: <IconTrophy size={14} />,  bg: 'bg-yellow-100',  color: 'text-yellow-600',  href: '/dashboard/reconocimientos' },
     reconocimiento_recordatorio:   { icon: <IconTrophy size={14} />,  bg: 'bg-yellow-100',  color: 'text-yellow-600',  href: '/dashboard/reconocimientos' },
-    pedido_recordatorio:           { icon: <IconShoppingBag size={14} />, bg: 'bg-purple-100', color: 'text-purple-600', href: '/dashboard/pedidos' },
+    pedido_recordatorio:           { icon: <IconBottle size={14} />, bg: 'bg-purple-100', color: 'text-purple-600', href: '/dashboard/pedidos' },
   }
   return map[tipo] ?? { icon: <IconBell size={14} />, bg: 'bg-gray-100', color: 'text-gray-500', href: '/dashboard' }
 }
