@@ -1455,7 +1455,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
     const sinVariantes = !editando || editando.variantes_count === 0
     const body: Record<string, unknown> = {
       nombre, marca: marca.trim() || 'Sin marca', categoria,
-      proveedor_id: proveedorId ? Number(proveedorId) : null, unidad,
+      proveedor_id: proveedorId || null, unidad,
     }
     if (sinVariantes && !thenAddVariante) {
       body.stock_minimo = stockMinProd !== '' ? Number(stockMinProd) : null
@@ -1676,7 +1676,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
       <div className="flex gap-2 mb-4">
         <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar producto…"
           className="flex-1 border border-[var(--border)] rounded-xl px-3 py-2.5 text-[13px] focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]" />
-        {isAdmin && <Button size="sm" onClick={abrirNuevo} icon={<IconPlus size={14} />}>Nuevo</Button>}
+        <Button size="sm" onClick={abrirNuevo} icon={<IconPlus size={14} />}>Nuevo</Button>
       </div>
 
       <div className="flex gap-1.5 overflow-x-auto pb-1 mb-4">
