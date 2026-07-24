@@ -24,7 +24,7 @@ export async function GET(
 
   const { data: items, error } = await supabaseAdmin
     .from('pedidos_items')
-    .select('*, producto:pedidos_productos(nombre, marca, categoria, proveedor_id, proveedor:proveedores(id, nombre))')
+    .select('*, producto:pedidos_productos(nombre, marca, categoria, proveedor_id, proveedor:proveedores(id, nombre)), variante:pedidos_variantes(id, nombre)')
     .eq('ciclo_id', id)
     .eq('archivado', false)
     .order('urgente', { ascending: false })
@@ -44,6 +44,7 @@ export async function GET(
   type ItemExport = {
     id: string
     nombre: string
+    variante_nombre: string | null
     marca: string | null
     cantidad: number
     unidad: string
@@ -62,9 +63,11 @@ export async function GET(
     const provId = prod?.proveedor?.id?.toString() ?? 'sin_proveedor'
     const provNombre = prod?.proveedor?.nombre ?? 'Sin proveedor'
     if (!porProveedor[provId]) porProveedor[provId] = { proveedor_id: prod?.proveedor?.id ?? null, nombre_proveedor: provNombre, items: [] }
+    const variante = item.variante as { nombre: string } | null
     porProveedor[provId].items.push({
       id: item.id,
       nombre: prod?.nombre ?? item.nombre_libre ?? 'Item sin nombre',
+      variante_nombre: variante?.nombre ?? null,
       marca: prod?.marca ?? null,
       cantidad: item.cantidad,
       unidad: item.unidad,

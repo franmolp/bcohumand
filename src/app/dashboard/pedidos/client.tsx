@@ -83,7 +83,7 @@ interface Item {
 interface ExportGroup {
   proveedor_id: number | null
   nombre_proveedor: string
-  items: { id: string; nombre: string; marca: string | null; cantidad: number; unidad: string; notas: string | null; urgente: boolean; estado: string; usuario: string; nombre_libre: string | null; categoria: string | null }[]
+  items: { id: string; nombre: string; variante_nombre: string | null; marca: string | null; cantidad: number; unidad: string; notas: string | null; urgente: boolean; estado: string; usuario: string; nombre_libre: string | null; categoria: string | null }[]
 }
 
 interface Usuario { id: string; nombre: string; foto_perfil: string | null }
@@ -1136,8 +1136,9 @@ function TabExportar({ cicloActivo, onCiclosChange }: {
     const urgentes = g.items.filter(i => i.urgente)
     const normales = g.items.filter(i => !i.urgente)
     const fmt = (i: ExportGroup['items'][number]) => {
+      const variante = i.variante_nombre ? ` ${i.variante_nombre}` : ''
       const marca = i.marca && i.marca !== 'Sin marca' ? ` (${i.marca})` : ''
-      return `- ${fmtCantidad(i.cantidad, i.unidad)} ${i.nombre}${marca}`
+      return `- ${fmtCantidad(i.cantidad, i.unidad)} ${i.nombre}${variante}${marca}`
     }
     const lineas = [...urgentes.map(fmt), ...normales.map(fmt)]
     navigator.clipboard.writeText(lineas.join('\n'))
@@ -1194,6 +1195,9 @@ function TabExportar({ cicloActivo, onCiclosChange }: {
                 <div key={item.id} className={`py-2.5 flex items-center gap-2 ${item.urgente ? 'text-red-700' : ''}`}>
                   <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.urgente ? 'bg-red-500' : 'bg-gray-300'}`} />
                   <span className="text-[13px] font-medium flex-1">{item.nombre}
+                    {item.variante_nombre && (
+                      <span className="text-[11px] font-normal text-[var(--text-muted)] ml-1">· {item.variante_nombre}</span>
+                    )}
                     {item.marca && item.marca !== 'Sin marca' && (
                       <span className="text-[11px] font-normal text-[var(--text-muted)] ml-1">· {item.marca}</span>
                     )}
