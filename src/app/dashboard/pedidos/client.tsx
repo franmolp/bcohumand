@@ -1391,7 +1391,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
   useEffect(() => {
     if (varianteForm && !varianteForm.variante) {
       const pid = varianteForm.prod.id
-      if (pid && variantesMap[pid] === undefined) {
+      if (pid) {
         fetch(`/api/pedidos/variantes?producto_id=${pid}`).then(r => r.json()).then(data => {
           setVariantesMap(m => ({ ...m, [pid]: Array.isArray(data) ? data : [] }))
         }).catch(() => {})
@@ -1585,7 +1585,7 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
   async function agregarVarianteRow(idx: number) {
     const row = varianteRows[idx]
     if (!row || !row.nombre.trim() || !varianteForm) return
-    const newRowIdx = varianteRows.length
+    const lastIdx = varianteRows.length - 1
     setVarianteRows(rows => rows.map((r, i) => i === idx ? { ...r, guardando: true } : r))
     const data = await fetch('/api/pedidos/variantes', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1598,15 +1598,29 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
     if (data?.id) {
       setVariantesMap(m => ({ ...m, [varianteForm.prod.id]: [...(m[varianteForm.prod.id] ?? []), data] }))
       onRefresh()
+      // Quitar la fila guardada (ya aparece en la sección gris) y dejar solo la fila vacía
       setVarianteRows(rows => [
-        ...rows.map((r, i) => i === idx ? { ...r, guardando: false, saved: true } : r),
+        ...rows.filter((_, i) => i !== idx),
         { nombre: '', minimo: '', guardando: false, saved: false },
       ])
-      setTimeout(() => varianteInputRefs.current[newRowIdx]?.focus(), 50)
+      setTimeout(() => varianteInputRefs.current[lastIdx]?.focus(), 50)
     } else {
       setVarianteRows(rows => rows.map((r, i) => i === idx ? { ...r, guardando: false } : r))
       showToast('Error al guardar variante', 'error')
     }
+  }
+
+  async function eliminarVariante(v: Variante) {
+    if (!varianteForm) return
+    await fetch(`/api/pedidos/variantes/${v.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ activo: false }),
+    })
+    setVariantesMap(m => ({
+      ...m,
+      [varianteForm.prod.id]: (m[varianteForm.prod.id] ?? []).filter(x => x.id !== v.id),
+    }))
+    onRefresh()
   }
 
   async function eliminarProducto(prod: Producto) {
@@ -1986,6 +2000,14 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, myCats, o
                 <IconCheck size={12} className="text-green-500 flex-shrink-0" />
                 <span className="text-[13px] flex-1 truncate">{v.nombre}</span>
                 {v.stock_minimo != null && <span className="text-[11px] text-[var(--text-muted)]">mín: {v.stock_minimo}</span>}
+                <button
+                  onClick={() => { setVarianteForm({ prod: varianteForm!.prod, variante: v }); setVarianteNombre(v.nombre); setVarianteMinimo(v.stock_minimo?.toString() ?? '') }}
+                  className="text-[var(--text-muted)] hover:text-[var(--primary)] cursor-pointer p-0.5 flex-shrink-0">
+                  <IconEdit size={12} />
+                </button>
+                <button onClick={() => eliminarVariante(v)} className="text-[var(--text-muted)] hover:text-red-500 cursor-pointer p-0.5 flex-shrink-0">
+                  <IconTrash size={12} />
+                </button>
               </div>
             ))}
 
