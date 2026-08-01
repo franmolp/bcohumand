@@ -111,7 +111,9 @@ export async function POST(req: NextRequest) {
   const { desde: periodoDesde, hasta: periodoHasta } = periodoLimites(periodoMes)
   const monto = Number(body.monto)
 
-  if (day < config.dia_habilitacion) {
+  // Solo aplica el umbral si estamos en la parte principal del período (día >= DIA_CORTE).
+  // Los días 1-7 son la "cola" del período anterior: el umbral ya se cumplió el mes pasado.
+  if (day >= DIA_CORTE && day < config.dia_habilitacion) {
     return NextResponse.json(
       { error: `Los adelantos se habilitan a partir del día ${config.dia_habilitacion} de cada mes` },
       { status: 400 }

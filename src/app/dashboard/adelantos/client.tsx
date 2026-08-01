@@ -609,7 +609,7 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
         </div>
         <div className="flex items-center gap-1.5 text-[12px] text-gray-400 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-100">
           <IconAlertCircle size={13} />
-          Desde el día {config.dia_habilitacion}
+          Del día {config.dia_habilitacion} al 7 de cada mes
         </div>
       </div>
 
