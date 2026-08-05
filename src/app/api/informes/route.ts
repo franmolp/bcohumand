@@ -87,6 +87,7 @@ export async function GET(request: NextRequest) {
     { data: comprasData },
     { data: usuarios },
     { data: sueldosData },
+    { data: tsConfig },
   ] = await Promise.all([
     fetchAll(() => supabaseAdmin
       .from('fresha_citas_detalle')
@@ -122,6 +123,10 @@ export async function GET(request: NextRequest) {
       .select('usuario_id, nombre_excel, bruto')
       .eq('anio', y)
       .eq('mes', m),
+    supabaseAdmin
+      .from('configuracion')
+      .select('clave, valor')
+      .in('clave', ['ultima_importacion_loyverse', 'ultima_importacion_citas_fresha']),
   ])
 
   // Map: shortNorm(nombre) → usuario_id  (para cruzar Loyverse con empleadas)
@@ -335,7 +340,12 @@ export async function GET(request: NextRequest) {
     .sort((a, b) => (b.precioPorHora ?? 0) - (a.precioPorHora ?? 0))
     .slice(0, 10)
 
+  const tsMap = new Map((tsConfig ?? []).map((c: { clave: string; valor: unknown }) => [c.clave, (c.valor as { fecha?: string })?.fecha ?? null]))
+  const ultimaActualizacion = [tsMap.get('ultima_importacion_loyverse'), tsMap.get('ultima_importacion_citas_fresha')]
+    .filter(Boolean).sort().at(-1) ?? null
+
   return NextResponse.json({
+    ultimaActualizacion,
     kpis: {
       totalCitas: citasNoCanc.length,
       canceladas: citasCanceladas.length,

@@ -95,5 +95,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  await supabaseAdmin
+    .from('configuracion')
+    .upsert({ clave: 'ultima_importacion_loyverse', valor: { fecha: new Date().toISOString() } }, { onConflict: 'clave' })
+
   return NextResponse.json({ ok, pagosOk, errors })
 }

@@ -74,6 +74,10 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  await supabaseAdmin
+    .from('configuracion')
+    .upsert({ clave: 'ultima_importacion_citas_fresha', valor: { fecha: new Date().toISOString() } }, { onConflict: 'clave' })
+
   const adminIds = await getAdminIds()
   if (adminIds.length) {
     const noEnc = noEncontrados.size ? ` · ${noEncontrados.size} sin usuario` : ''
