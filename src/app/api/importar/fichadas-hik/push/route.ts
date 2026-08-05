@@ -54,6 +54,11 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  // Guardar timestamp de última importación de fichadas
+  await supabaseAdmin
+    .from('configuracion')
+    .upsert({ clave: 'ultima_importacion_fichadas', valor: { fecha: new Date().toISOString() } }, { onConflict: 'clave' })
+
   const sortedDates = [...dates].sort()
   const fechasStr = sortedDates
     .map(d => { const [, m, day] = d.split('-'); return `${day}/${m}` })

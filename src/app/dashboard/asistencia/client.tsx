@@ -188,7 +188,11 @@ export default function AsistenciaClient({ user }: Props) {
   }, [mes])
 
   useEffect(() => {
-    fetch('/api/espacio-trabajo?fechaInicio=2020-01-01&fechaFin=2020-01-01').then(r => r.json()).then(d => setUltimaImportacion(d.ultimaImportacion ?? null)).catch(() => {})
+    fetch('/api/espacio-trabajo?fechaInicio=2020-01-01&fechaFin=2020-01-01').then(r => r.json()).then(d => {
+      // Mostrar el timestamp más reciente entre fichadas HIKVISION y turnos Fresha
+      const ts = [d.ultimaFichadas, d.ultimaImportacion].filter(Boolean).sort().at(-1) ?? null
+      setUltimaImportacion(ts)
+    }).catch(() => {})
   }, [])
   useEffect(() => { if (isAdmin || isHR || isEncargada) loadEmpList() }, [isAdmin, isHR, isEncargada, loadEmpList])
   useEffect(() => { loadConfig() }, [loadConfig])
