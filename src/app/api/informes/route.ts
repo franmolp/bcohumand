@@ -65,7 +65,8 @@ export async function GET(request: NextRequest) {
   const finDatosUTC = `${finDatosDplusOne.toISOString().slice(0, 10)}T02:59:59.999Z`
 
   // Paginación para tablas con >1000 filas (límite por defecto de Supabase)
-  async function fetchAll<T>(query: () => ReturnType<typeof supabaseAdmin.from>['select']): Promise<T[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function fetchAll<T>(query: () => any): Promise<T[]> {
     const PAGE = 1000
     const rows: T[] = []
     let offset = 0
@@ -89,19 +90,19 @@ export async function GET(request: NextRequest) {
     { data: sueldosData },
     { data: tsConfig },
   ] = await Promise.all([
-    fetchAll(() => supabaseAdmin
+    fetchAll<any>(() => supabaseAdmin
       .from('fresha_citas_detalle')
       .select('usuario_id, nombre_empleada, estado, categoria, servicio, duracion_min, franja_inicio, franja_fin, venta_neta, fecha')
       .gte('fecha', inicio)
       .lte('fecha', finDatos)
     ),
-    fetchAll(() => supabaseAdmin
+    fetchAll<any>(() => supabaseAdmin
       .from('loyverse_tickets')
       .select('profesional, total_money, total_discount, item_name, receipt_date')
       .gte('receipt_date', inicioUTC)
       .lte('receipt_date', finDatosUTC)
     ),
-    fetchAll(() => supabaseAdmin
+    fetchAll<any>(() => supabaseAdmin
       .from('loyverse_pagos')
       .select('payment_name, payment_money')
       .gte('receipt_date', inicioUTC)

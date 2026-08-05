@@ -20,12 +20,12 @@ export async function POST(request: NextRequest) {
     // Modo reparación: elimina registros con URLs rotas antes de re-sincronizar
     let repaired = 0
     if (repair) {
-      const { count } = await supabaseAdmin
+      const { data: repairedRows } = await supabaseAdmin
         .from('recibos_sueldo')
         .delete()
         .not('storage_url', 'like', 'http%')
-        .select('id', { count: 'exact', head: true })
-      repaired = count ?? 0
+        .select('id')
+      repaired = repairedRows?.length ?? 0
     }
 
     const res = await fetch(GAS_URL, {
@@ -54,13 +54,13 @@ export async function POST(request: NextRequest) {
       const entries = Object.entries(data.fileUrls as Record<string, string>)
         .filter(([, url]) => url.startsWith('http'))
       for (const [nombre_archivo, url] of entries) {
-        const { count } = await supabaseAdmin
+        const { data: fixedRows } = await supabaseAdmin
           .from('recibos_sueldo')
           .update({ storage_url: url })
           .eq('nombre_archivo', nombre_archivo)
           .not('storage_url', 'like', 'http%')
-          .select('id', { count: 'exact', head: true })
-        urlsFixed += count ?? 0
+          .select('id')
+        urlsFixed += fixedRows?.length ?? 0
       }
     }
 

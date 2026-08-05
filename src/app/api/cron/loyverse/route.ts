@@ -39,10 +39,11 @@ async function fetchReceipts(from: string, to: string) {
   let cursor: string | null = null
 
   while (true) {
-    const url = cursor ? `${baseUrl}&cursor=${encodeURIComponent(cursor)}` : baseUrl
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${TOKEN}` } })
+    const url: string = cursor ? `${baseUrl}&cursor=${encodeURIComponent(cursor)}` : baseUrl
+    const res: Response = await fetch(url, { headers: { Authorization: `Bearer ${TOKEN}` } })
     if (!res.ok) throw new Error(`Loyverse API ${res.status}: ${await res.text()}`)
-    const data = await res.json()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: any = await res.json()
     const receipts: any[] = data.receipts ?? []
 
     for (const r of receipts) {

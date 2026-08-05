@@ -49,12 +49,12 @@ export async function POST(request: NextRequest) {
 
     if (gasReady()) {
       url = await gasUploadBase64({
-        base64, mimeType: 'application/pdf', fileName: nombreArchivo,
+        base64: base64!, mimeType: 'application/pdf', fileName: nombreArchivo,
         folderType: 'liquidaciones',
         anio, mes,
       })
     } else {
-      const pdfBytes    = Buffer.from(base64, 'base64')
+      const pdfBytes    = Buffer.from(base64!, 'base64')
       const storagePath = `${anio}/${String(mes).padStart(2, '0')}/${nombreArchivo}`
       const { error: uploadError } = await supabaseAdmin.storage
         .from('recibos-sueldo')

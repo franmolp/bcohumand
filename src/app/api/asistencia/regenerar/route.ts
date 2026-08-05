@@ -59,7 +59,8 @@ export async function POST(req: NextRequest) {
 
   function paginate<T extends Record<string, unknown>>(
     table: string, select: string,
-    filters: (q: ReturnType<typeof supabaseAdmin.from>) => ReturnType<typeof supabaseAdmin.from>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    filters: (q: any) => any
   ): Promise<{ data: T[]; error: null }> {
     return (async () => {
       const all: T[] = []

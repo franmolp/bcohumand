@@ -117,7 +117,8 @@ export async function GET(request: NextRequest) {
       .eq('usuario_id', session.id)
       .order('id', { ascending: false })
       .limit(60)
-    data = (res.data ?? []).map((n: Record<string, unknown>) => ({ ...n, created_at: null }))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data = (res.data ?? []).map((n: Record<string, unknown>) => ({ ...n, created_at: null })) as any
     error = res.error
   }
 
