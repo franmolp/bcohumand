@@ -21,16 +21,21 @@ GRANT ALL ON TABLE loyverse_cierres TO authenticated;
 GRANT ALL ON TABLE loyverse_cierres TO service_role;
 
 -- Retiros de caja registrados manualmente por el admin
+-- tipo: 'retiro' = retiro personal (se llevan a casa) | 'sobre' = va a bóveda/caja fuerte del salón
 CREATE TABLE IF NOT EXISTS retiros_caja (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   fecha DATE NOT NULL,
   monto NUMERIC(12,2) NOT NULL CHECK (monto > 0),
   descripcion TEXT,
+  tipo TEXT NOT NULL DEFAULT 'retiro',
   usuario_id UUID NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 GRANT ALL ON TABLE retiros_caja TO authenticated;
 GRANT ALL ON TABLE retiros_caja TO service_role;
+
+-- Migración: agregar columna tipo si la tabla ya existe
+ALTER TABLE retiros_caja ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT 'retiro';
 
 -- Ajustes manuales de saldo (para sincronizar cuando los números no cuadran)
 CREATE TABLE IF NOT EXISTS caja_ajustes (

@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
 
     supabaseAdmin
       .from('retiros_caja')
-      .select('id, fecha, monto, descripcion, created_at')
+      .select('id, fecha, monto, descripcion, tipo, created_at')
       .gte('fecha', calcFrom)
       .lte('fecha', calcEnd)
       .order('fecha')
@@ -115,15 +115,16 @@ export async function GET(req: NextRequest) {
     cierresByFecha.get(f)!.cash_payments += Number(c.cash_payments ?? 0)
   }
 
-  // Index retiros by fecha
-  type RetiroItem = { id: string; monto: number; descripcion: string | null; created_at: string }
-  const retirosByFecha = new Map<string, { total: number; items: RetiroItem[] }>()
+  // Index retiros by fecha — tipo 'retiro' (personal) | 'sobre' (va a caja fuerte)
+  type RetiroItem = { id: string; monto: number; descripcion: string | null; tipo: string; created_at: string }
+  const retirosByFecha = new Map<string, { total: number; sobres: number; items: RetiroItem[] }>()
   for (const r of (retirosRes.data ?? [])) {
     const f = r.fecha as string
-    if (!retirosByFecha.has(f)) retirosByFecha.set(f, { total: 0, items: [] })
+    if (!retirosByFecha.has(f)) retirosByFecha.set(f, { total: 0, sobres: 0, items: [] })
     const entry = retirosByFecha.get(f)!
     entry.total += Number(r.monto)
-    entry.items.push({ id: r.id, monto: Number(r.monto), descripcion: r.descripcion, created_at: r.created_at })
+    if ((r.tipo ?? 'retiro') === 'sobre') entry.sobres += Number(r.monto)
+    entry.items.push({ id: r.id, monto: Number(r.monto), descripcion: r.descripcion, tipo: r.tipo ?? 'retiro', created_at: r.created_at })
   }
 
   // Index ajustes by fecha, most recent per day (query is ordered DESC by created_at)
@@ -154,6 +155,7 @@ export async function GET(req: NextRequest) {
     fecha: string
     efectivo_vendido: number
     retiros: number
+    sobres: number
     saldo: number
     starting_cash: number | null
     discrepancia: number | null
@@ -166,7 +168,7 @@ export async function GET(req: NextRequest) {
 
   for (const day of allDays) {
     const cierre = cierresByFecha.get(day) ?? null
-    const retirosDia = retirosByFecha.get(day) ?? { total: 0, items: [] }
+    const retirosDia = retirosByFecha.get(day) ?? { total: 0, sobres: 0, items: [] }
     const ajuste = ajustesByFecha.get(day) ?? null
 
     let efectivo: number
@@ -176,7 +178,6 @@ export async function GET(req: NextRequest) {
     if (cierre) {
       efectivo = cierre.cash_payments
       starting_cash = cierre.starting_cash
-      // Compare expected opening (= previous saldo) vs Loyverse's counted opening
       if (day > config.fecha_inicio) {
         discrepancia = cierre.starting_cash - saldo
       }
@@ -187,24 +188,26 @@ export async function GET(req: NextRequest) {
     if (ajuste) {
       saldo = ajuste.saldo_nuevo
     } else {
+      // Ambos tipos (retiro personal y sobre) reducen el saldo de caja física
       saldo = saldo + efectivo - retirosDia.total
     }
 
     saldo_actual = saldo
 
-    // Accumulate for all retiros (caja fuerte = total from fecha_inicio to today)
-    caja_fuerte += retirosDia.total
+    // caja_fuerte = sobres acumulados (dinero que fue al sobre/bóveda del salón)
+    caja_fuerte += retirosDia.sobres
 
     // Only add to result if this day falls in the requested month
     const inMes = day >= mesStart && day <= mesEnd
     if (inMes) {
       efectivo_mes += efectivo
-      retiros_mes += retirosDia.total
+      retiros_mes += retirosDia.total - retirosDia.sobres  // solo retiros personales en el KPI
 
       diasDelMes.push({
         fecha: day,
         efectivo_vendido: efectivo,
-        retiros: retirosDia.total,
+        retiros: retirosDia.total - retirosDia.sobres,
+        sobres: retirosDia.sobres,
         saldo,
         starting_cash,
         discrepancia,

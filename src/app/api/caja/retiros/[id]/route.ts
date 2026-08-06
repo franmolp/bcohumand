@@ -15,14 +15,17 @@ export async function PUT(
     fecha?: string
     monto?: number | string
     descripcion?: string
+    tipo?: string
   }
 
   const monto = Number(body.monto ?? 0)
   if (!body.fecha || monto <= 0) return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 })
 
+  const tipo = body.tipo === 'sobre' ? 'sobre' : 'retiro'
+
   const { data, error } = await supabaseAdmin
     .from('retiros_caja')
-    .update({ fecha: body.fecha, monto, descripcion: body.descripcion || null })
+    .update({ fecha: body.fecha, monto, descripcion: body.descripcion || null, tipo })
     .eq('id', id)
     .select()
     .single()

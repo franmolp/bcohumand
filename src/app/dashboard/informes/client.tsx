@@ -119,13 +119,14 @@ interface CajaConfig {
 }
 
 interface RetiroItem {
-  id: string; monto: number; descripcion: string | null; created_at: string
+  id: string; monto: number; descripcion: string | null; tipo: string; created_at: string
 }
 
 interface DiaData {
   fecha: string
   efectivo_vendido: number
   retiros: number
+  sobres: number
   saldo: number
   starting_cash: number | null
   discrepancia: number | null
@@ -152,6 +153,7 @@ function TabCaja({ mes }: { mes: string }) {
   const [rfFecha, setRfFecha] = useState('')
   const [rfMonto, setRfMonto] = useState('')
   const [rfDesc, setRfDesc] = useState('')
+  const [rfTipo, setRfTipo] = useState<'retiro' | 'sobre'>('retiro')
   const [rfSaving, setRfSaving] = useState(false)
   const [rfError, setRfError] = useState('')
 
@@ -172,6 +174,7 @@ function TabCaja({ mes }: { mes: string }) {
   const [editRetiro, setEditRetiro] = useState<(RetiroItem & { fecha: string }) | null>(null)
   const [erMonto, setErMonto] = useState('')
   const [erDesc, setErDesc] = useState('')
+  const [erTipo, setErTipo] = useState<'retiro' | 'sobre'>('retiro')
   const [erSaving, setErSaving] = useState(false)
 
   function cargar() {
@@ -187,7 +190,7 @@ function TabCaja({ mes }: { mes: string }) {
   useEffect(() => { cargar() }, [mes])
 
   function abrirModalRetiro(fecha: string) {
-    setRfFecha(fecha); setRfMonto(''); setRfDesc(''); setRfError('')
+    setRfFecha(fecha); setRfMonto(''); setRfDesc(''); setRfTipo('retiro'); setRfError('')
     setModalRetiro({ fecha })
   }
 
@@ -199,7 +202,7 @@ function TabCaja({ mes }: { mes: string }) {
       const res = await fetch('/api/caja/retiros', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fecha: rfFecha, monto, descripcion: rfDesc || null }),
+        body: JSON.stringify({ fecha: rfFecha, monto, descripcion: rfDesc || null, tipo: rfTipo }),
       })
       const d = await res.json()
       if (!res.ok) { setRfError(d.error ?? 'Error al guardar'); return }
@@ -215,7 +218,7 @@ function TabCaja({ mes }: { mes: string }) {
 
   function abrirEditRetiro(r: RetiroItem, fecha: string) {
     setEditRetiro({ ...r, fecha })
-    setErMonto(String(r.monto)); setErDesc(r.descripcion ?? '')
+    setErMonto(String(r.monto)); setErDesc(r.descripcion ?? ''); setErTipo(r.tipo === 'sobre' ? 'sobre' : 'retiro')
   }
 
   async function guardarEditRetiro() {
@@ -227,7 +230,7 @@ function TabCaja({ mes }: { mes: string }) {
       await fetch(`/api/caja/retiros/${editRetiro.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fecha: editRetiro.fecha, monto, descripcion: erDesc || null }),
+        body: JSON.stringify({ fecha: editRetiro.fecha, monto, descripcion: erDesc || null, tipo: erTipo }),
       })
       setEditRetiro(null); cargar()
     } finally { setErSaving(false) }
@@ -338,14 +341,14 @@ function TabCaja({ mes }: { mes: string }) {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 gap-3">
         <KpiCard label="Efectivo del mes" value={fmt$(kpis.efectivo_mes)} sub="ventas en efectivo" />
-        <KpiCard label="Retiros del mes" value={fmt$(kpis.retiros_mes)} sub="lo que te llevaste" />
+        <KpiCard label="Retiros personales" value={fmt$(kpis.retiros_mes)} sub="lo que te llevaste" />
         <KpiCard
           label="Saldo en caja"
           value={fmt$(kpis.saldo_actual)}
           color={kpis.saldo_actual < 0 ? 'text-red-500' : 'text-green-600'}
           sub="estimado actual"
         />
-        <KpiCard label="Caja fuerte" value={fmt$(kpis.caja_fuerte)} sub="total retiros acumulados" />
+        <KpiCard label="Sobres acumulados" value={fmt$(kpis.caja_fuerte)} sub="en bóveda del salón" />
       </div>
 
       {/* Alert for discrepancies */}
@@ -390,17 +393,23 @@ function TabCaja({ mes }: { mes: string }) {
 
             <div className="px-4 py-3 flex flex-col gap-2.5">
               {/* Metrics */}
-              <div className="flex gap-4">
-                <div className="flex-1">
+              <div className="flex gap-3 flex-wrap">
+                <div className="flex-1 min-w-[80px]">
                   <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide mb-0.5">
                     Efectivo {dia.tiene_cierre_loyverse ? '· Loyverse' : '· estimado'}
                   </p>
                   <p className="text-[15px] font-semibold text-[var(--text)]">{fmt$(dia.efectivo_vendido)}</p>
                 </div>
                 {dia.retiros > 0 && (
-                  <div className="flex-1">
-                    <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide mb-0.5">Retiros</p>
+                  <div className="flex-1 min-w-[80px]">
+                    <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide mb-0.5">Retiro personal</p>
                     <p className="text-[15px] font-semibold text-amber-600">{fmt$(dia.retiros)}</p>
+                  </div>
+                )}
+                {dia.sobres > 0 && (
+                  <div className="flex-1 min-w-[80px]">
+                    <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide mb-0.5">Sobre / caja fuerte</p>
+                    <p className="text-[15px] font-semibold text-purple-600">{fmt$(dia.sobres)}</p>
                   </div>
                 )}
               </div>
@@ -430,13 +439,16 @@ function TabCaja({ mes }: { mes: string }) {
               {/* Retiro list */}
               {dia.retiros_list.length > 0 && (
                 <div className="border-t border-gray-100 pt-2.5">
-                  <p className="text-[10px] text-[var(--text-muted)] font-medium mb-2 uppercase tracking-wide">Retiros del día</p>
+                  <p className="text-[10px] text-[var(--text-muted)] font-medium mb-2 uppercase tracking-wide">Movimientos del día</p>
                   <div className="flex flex-col gap-1.5">
                     {dia.retiros_list.map(r => (
                       <div key={r.id} className="flex items-center gap-2">
-                        <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
+                          <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-md ${r.tipo === 'sobre' ? 'bg-purple-50 text-purple-600' : 'bg-amber-50 text-amber-600'}`}>
+                            {r.tipo === 'sobre' ? '📦 Sobre' : '💸 Retiro'}
+                          </span>
                           <span className="text-[13px] font-medium text-[var(--text)]">{fmt$(r.monto)}</span>
-                          {r.descripcion && <span className="text-[12px] text-[var(--text-muted)] ml-1.5">· {r.descripcion}</span>}
+                          {r.descripcion && <span className="text-[12px] text-[var(--text-muted)]">· {r.descripcion}</span>}
                         </div>
                         <button onClick={() => abrirEditRetiro(r, dia.fecha)}
                           className="p-1.5 text-gray-300 hover:text-[var(--primary)] rounded-lg transition-colors cursor-pointer">
@@ -475,10 +487,26 @@ function TabCaja({ mes }: { mes: string }) {
           <div className="relative bg-white w-full lg:max-w-md rounded-t-3xl lg:rounded-2xl shadow-2xl p-5 pb-8 lg:pb-5" onClick={e => e.stopPropagation()}>
             <div className="flex justify-center mb-3 lg:hidden"><div className="w-9 h-1 bg-gray-300 rounded-full" /></div>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[16px] font-bold text-[var(--text)]">Agregar retiro</h3>
+              <h3 className="text-[16px] font-bold text-[var(--text)]">Registrar movimiento</h3>
               <button onClick={() => setModalRetiro(null)} className="p-1.5 rounded-full text-gray-400 hover:bg-gray-100 cursor-pointer"><IconX size={16} /></button>
             </div>
             <div className="flex flex-col gap-3">
+              {/* Tipo toggle */}
+              <div className="flex rounded-xl border border-gray-200 overflow-hidden">
+                <button
+                  onClick={() => setRfTipo('retiro')}
+                  className={`flex-1 py-2.5 text-[13px] font-semibold transition-colors cursor-pointer ${rfTipo === 'retiro' ? 'bg-amber-500 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>
+                  💸 Retiro personal
+                </button>
+                <button
+                  onClick={() => setRfTipo('sobre')}
+                  className={`flex-1 py-2.5 text-[13px] font-semibold transition-colors cursor-pointer ${rfTipo === 'sobre' ? 'bg-purple-500 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>
+                  📦 Sobre / caja fuerte
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-400 -mt-1">
+                {rfTipo === 'retiro' ? 'Plata que te llevás vos. Reduce el saldo de caja.' : 'Plata que va al sobre o bóveda del salón. También reduce el saldo de caja.'}
+              </p>
               <div>
                 <p className="text-[12px] font-medium text-gray-500 mb-1.5">Fecha</p>
                 <input type="date" value={rfFecha} max={todayAR()} onChange={e => setRfFecha(e.target.value)}
@@ -495,7 +523,8 @@ function TabCaja({ mes }: { mes: string }) {
               </div>
               <div>
                 <p className="text-[12px] font-medium text-gray-500 mb-1.5">Descripción <span className="font-normal text-gray-400">(opcional)</span></p>
-                <input type="text" value={rfDesc} onChange={e => setRfDesc(e.target.value)} placeholder="ej: Sobre del mediodía"
+                <input type="text" value={rfDesc} onChange={e => setRfDesc(e.target.value)}
+                  placeholder={rfTipo === 'sobre' ? 'ej: Sobre del mediodía, pago proveedor' : 'ej: Retiro fin de día'}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[var(--primary)]" />
               </div>
               {rfError && <p className="text-red-500 text-[12px]">{rfError}</p>}
@@ -504,7 +533,7 @@ function TabCaja({ mes }: { mes: string }) {
                   className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-[13px] cursor-pointer hover:bg-gray-50">Cancelar</button>
                 <button onClick={guardarRetiro} disabled={rfSaving}
                   className="flex-1 py-2.5 bg-[image:var(--gradient)] text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-40">
-                  {rfSaving ? 'Guardando…' : 'Guardar retiro'}
+                  {rfSaving ? 'Guardando…' : rfTipo === 'sobre' ? 'Guardar sobre' : 'Guardar retiro'}
                 </button>
               </div>
             </div>
@@ -520,10 +549,20 @@ function TabCaja({ mes }: { mes: string }) {
           <div className="relative bg-white w-full lg:max-w-md rounded-t-3xl lg:rounded-2xl shadow-2xl p-5 pb-8 lg:pb-5" onClick={e => e.stopPropagation()}>
             <div className="flex justify-center mb-3 lg:hidden"><div className="w-9 h-1 bg-gray-300 rounded-full" /></div>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[16px] font-bold text-[var(--text)]">Editar retiro</h3>
+              <h3 className="text-[16px] font-bold text-[var(--text)]">Editar movimiento</h3>
               <button onClick={() => setEditRetiro(null)} className="p-1.5 rounded-full text-gray-400 hover:bg-gray-100 cursor-pointer"><IconX size={16} /></button>
             </div>
             <div className="flex flex-col gap-3">
+              <div className="flex rounded-xl border border-gray-200 overflow-hidden">
+                <button onClick={() => setErTipo('retiro')}
+                  className={`flex-1 py-2 text-[13px] font-semibold transition-colors cursor-pointer ${erTipo === 'retiro' ? 'bg-amber-500 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>
+                  💸 Retiro personal
+                </button>
+                <button onClick={() => setErTipo('sobre')}
+                  className={`flex-1 py-2 text-[13px] font-semibold transition-colors cursor-pointer ${erTipo === 'sobre' ? 'bg-purple-500 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>
+                  📦 Sobre
+                </button>
+              </div>
               <div>
                 <p className="text-[12px] font-medium text-gray-500 mb-1.5">Monto</p>
                 <div className="relative">
