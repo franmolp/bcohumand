@@ -525,7 +525,7 @@ function fmtVal(campo: string, val: unknown): string {
 function fmtDatetimeHist(iso: string | null): string {
   if (!iso) return '—'
   try {
-    return new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+    return new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
   } catch { return iso }
 }
 
@@ -1479,7 +1479,7 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
               <button onClick={() => importRef.current?.click()} disabled={importLoading}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-[var(--border)] rounded-lg text-[var(--text-sub)] hover:border-[var(--primary)] hover:text-[var(--primary)] disabled:opacity-50 transition-colors truncate max-w-xs">
                 <IconUpload size={14} className="flex-shrink-0" />
-                <span className="truncate">{importFile ? importFile.name : 'Seleccionar CSV…'}</span>
+                <span className="truncate">{importFile?.name ?? 'Seleccionar CSV…'}</span>
               </button>
               {importFile && (
                 <>
@@ -1501,12 +1501,12 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
                   <IconCheck size={14} />
-                  {importResult.ok.toLocaleString('es-AR')} importadas de {importResult.total.toLocaleString('es-AR')}
+                  {importResult!.ok.toLocaleString('es-AR')} importadas de {importResult!.total.toLocaleString('es-AR')}
                 </div>
-                {importResult.noEncontrados.length > 0 && (
+                {importResult!.noEncontrados.length > 0 && (
                   <p className="text-xs text-amber-600">
-                    Sin usuario ({importResult.noEncontrados.length}): {importResult.noEncontrados.slice(0,5).join(', ')}
-                    {importResult.noEncontrados.length > 5 ? ` y ${importResult.noEncontrados.length - 5} más` : ''}
+                    Sin usuario ({importResult!.noEncontrados.length}): {importResult!.noEncontrados.slice(0,5).join(', ')}
+                    {importResult!.noEncontrados.length > 5 ? ` y ${importResult!.noEncontrados.length - 5} más` : ''}
                   </p>
                 )}
               </div>

@@ -91,6 +91,7 @@ export interface Proveedor {
   nombre: string
   contacto?: string | null
   activo: boolean
+  solo_admin?: boolean
   created_at: string
 }
 
@@ -108,6 +109,7 @@ export interface Compra {
   usuario_id: string | null
   usuario_email?: string | null
   usuario?: { nombre: string; email: string }
+  cargado_por?: { nombre: string } | null
   created_at: string
 }
 

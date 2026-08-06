@@ -15,13 +15,15 @@ export async function GET() {
 }
 
 async function logFoto(req: NextRequest, userId: string) {
-  await supabaseAdmin.from('log_seguridad').insert({
-    accion: 'foto_perfil_actualizada',
-    detalle: 'Foto de perfil actualizada',
-    ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'desconocida',
-    user_agent: req.headers.get('user-agent') || '',
-    usuario_id: userId,
-  }).catch(() => {})
+  try {
+    await supabaseAdmin.from('log_seguridad').insert({
+      accion: 'foto_perfil_actualizada',
+      detalle: 'Foto de perfil actualizada',
+      ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'desconocida',
+      user_agent: req.headers.get('user-agent') || '',
+      usuario_id: userId,
+    })
+  } catch { /* ignore */ }
 }
 
 export async function POST(req: NextRequest) {

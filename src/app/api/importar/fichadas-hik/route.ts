@@ -51,6 +51,11 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  // Guardar timestamp de última importación de fichadas
+  await supabaseAdmin
+    .from('configuracion')
+    .upsert({ clave: 'ultima_importacion_fichadas', valor: { fecha: new Date().toISOString() } }, { onConflict: 'clave' })
+
   // Notificar a admins cuántas fichadas se importaron
   const fechasStr = [...dates].sort().join(', ')
   const adminIds = await getAdminIds()

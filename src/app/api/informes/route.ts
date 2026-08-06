@@ -51,13 +51,10 @@ export async function GET(request: NextRequest) {
   const diasDelMes = new Date(y, m, 0).getDate()
   const fin = `${y}-${String(m).padStart(2, '0')}-${String(diasDelMes).padStart(2, '0')}`
 
-  // Hasta ayer (importación Loyverse corre a las 21hs, así que ayer siempre tiene datos)
   const tz = 'America/Argentina/Buenos_Aires'
   const ahora = new Date()
-  const ayerAR = new Date(ahora)
-  ayerAR.setDate(ayerAR.getDate() - 1)
-  const ayerStr = ayerAR.toLocaleDateString('en-CA', { timeZone: tz })
-  const finDatos = ayerStr < fin ? ayerStr : fin
+  const hoyStr = ahora.toLocaleDateString('en-CA', { timeZone: tz })
+  const finDatos = hoyStr < fin ? hoyStr : fin
 
   const diasTranscurridos = finDatos >= fin ? diasDelMes : Math.max(1, parseInt(finDatos.substring(8)))
 
@@ -68,7 +65,8 @@ export async function GET(request: NextRequest) {
   const finDatosUTC = `${finDatosDplusOne.toISOString().slice(0, 10)}T02:59:59.999Z`
 
   // Paginación para tablas con >1000 filas (límite por defecto de Supabase)
-  async function fetchAll<T>(query: () => ReturnType<typeof supabaseAdmin.from>['select']): Promise<T[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function fetchAll<T>(query: () => any): Promise<T[]> {
     const PAGE = 1000
     const rows: T[] = []
     let offset = 0
@@ -90,20 +88,21 @@ export async function GET(request: NextRequest) {
     { data: comprasData },
     { data: usuarios },
     { data: sueldosData },
+    { data: tsConfig },
   ] = await Promise.all([
-    fetchAll(() => supabaseAdmin
+    fetchAll<any>(() => supabaseAdmin
       .from('fresha_citas_detalle')
       .select('usuario_id, nombre_empleada, estado, categoria, servicio, duracion_min, franja_inicio, franja_fin, venta_neta, fecha')
       .gte('fecha', inicio)
       .lte('fecha', finDatos)
     ),
-    fetchAll(() => supabaseAdmin
+    fetchAll<any>(() => supabaseAdmin
       .from('loyverse_tickets')
       .select('profesional, total_money, total_discount, item_name, receipt_date')
       .gte('receipt_date', inicioUTC)
       .lte('receipt_date', finDatosUTC)
     ),
-    fetchAll(() => supabaseAdmin
+    fetchAll<any>(() => supabaseAdmin
       .from('loyverse_pagos')
       .select('payment_name, payment_money')
       .gte('receipt_date', inicioUTC)
@@ -125,6 +124,10 @@ export async function GET(request: NextRequest) {
       .select('usuario_id, nombre_excel, bruto')
       .eq('anio', y)
       .eq('mes', m),
+    supabaseAdmin
+      .from('configuracion')
+      .select('clave, valor')
+      .in('clave', ['ultima_importacion_loyverse', 'ultima_importacion_citas_fresha']),
   ])
 
   // Map: shortNorm(nombre) → usuario_id  (para cruzar Loyverse con empleadas)
@@ -338,7 +341,12 @@ export async function GET(request: NextRequest) {
     .sort((a, b) => (b.precioPorHora ?? 0) - (a.precioPorHora ?? 0))
     .slice(0, 10)
 
+  const tsMap = new Map((tsConfig ?? []).map((c: { clave: string; valor: unknown }) => [c.clave, (c.valor as { fecha?: string })?.fecha ?? null]))
+  const ultimaActualizacion = [tsMap.get('ultima_importacion_loyverse'), tsMap.get('ultima_importacion_citas_fresha')]
+    .filter(Boolean).sort().at(-1) ?? null
+
   return NextResponse.json({
+    ultimaActualizacion,
     kpis: {
       totalCitas: citasNoCanc.length,
       canceladas: citasCanceladas.length,

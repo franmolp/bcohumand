@@ -4,12 +4,20 @@ import { requireAuth } from '@/lib/auth'
 
 export async function GET() {
   try {
-    await requireAuth()
-    const { data, error } = await supabaseAdmin
+    const session = await requireAuth()
+    const isAdmin = session.rol === 'Admin' || session.rol === 'admin'
+
+    let query = supabaseAdmin
       .from('proveedores')
       .select('*')
       .eq('activo', true)
       .order('nombre', { ascending: true })
+
+    if (!isAdmin) {
+      query = query.or('solo_admin.is.null,solo_admin.eq.false') as typeof query
+    }
+
+    const { data, error } = await query
     if (error) throw error
     return NextResponse.json(data)
   } catch {

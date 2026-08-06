@@ -37,7 +37,7 @@ function calcEstadoTecla(letra: string, intentos: FilaIntento[]): Estado | null 
       if (fila.palabra[i] !== letra) continue
       const e = fila.resultado[i]
       if (e === 'correct') return 'correct'
-      if (e === 'present' && mejor !== 'correct') mejor = 'present'
+      if (e === 'present') mejor = 'present'
       if (e === 'absent' && !mejor) mejor = 'absent'
     }
   }

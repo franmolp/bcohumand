@@ -72,7 +72,7 @@ function parseUA(ua: string | null): string {
 
 function fmtDateTime(iso: string) {
   const d = new Date(iso)
-  return d.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return d.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
 function nombreUsuario(entry: LogEntry): string {
@@ -145,7 +145,7 @@ export default function SeguridadClient() {
           <IconRefresh size={14} />
           {lastRefresh && (
             <span className="hidden sm:inline">
-              {lastRefresh.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+              {lastRefresh.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}
             </span>
           )}
         </button>

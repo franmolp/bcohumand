@@ -45,7 +45,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { id } = await params
-  const { contenido, parent_id } = await request.json().catch(() => ({}))
+  const body = await request.json().catch(() => ({}))
+  const { contenido, parent_id, mentioned_ids } = body
 
   if (!contenido?.trim()) return NextResponse.json({ error: 'El comentario no puede estar vacío' }, { status: 400 })
 
@@ -74,24 +75,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
   }
 
-  // Notificar a usuarios mencionados con @Nombre
-  const { data: allUsers } = await supabase.from('usuarios').select('id, nombre').eq('estado_cuenta', 'activo')
-  const normStr = (s: string) => s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-  const normContent = normStr(contenido.trim())
-  const mentionedIds: string[] = []
-  for (const u of allUsers ?? []) {
-    if (u.id === session.id) continue
-    const search = normStr(u.nombre)
-    const matchIdx = normContent.indexOf(search)
-    if (matchIdx !== -1) {
-      const before = matchIdx > 0 ? normContent[matchIdx - 1] : ' '
-      const after = normContent[matchIdx + search.length]
-      if (!/[a-záéíóúüñ]/.test(before) && (after === undefined || !/[a-záéíóúüñ]/.test(after))) mentionedIds.push(u.id)
-    }
-  }
-  if (mentionedIds.length) {
+  // Notificar solo a usuarios mencionados explícitamente via autocomplete
+  const explicitMentions: string[] = Array.isArray(mentioned_ids)
+    ? (mentioned_ids as string[]).filter((uid: string) => uid !== session.id)
+    : []
+  if (explicitMentions.length) {
     const preview = contenido.trim().length > 80 ? contenido.trim().slice(0, 80) + '…' : contenido.trim()
-    await crearNotificaciones(mentionedIds, {
+    await crearNotificaciones(explicitMentions, {
       titulo: `${session.nombre} te mencionó en un comentario`,
       mensaje: preview,
       tipo: 'mural_mencion',

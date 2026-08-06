@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import type { SessionUser } from '@/types'
 import { Spinner } from '@/components/ui'
-import { IconBarChart, IconChevronLeft, IconChevronRight, IconDollar, IconCalendarCheck, IconUsers, IconReceipt } from '@/components/ui/Icons'
+import { IconBarChart, IconChevronLeft, IconChevronRight, IconDollar, IconCalendarCheck, IconUsers, IconReceipt, IconClock } from '@/components/ui/Icons'
 
 interface Kpis {
   totalCitas: number
@@ -50,6 +50,16 @@ interface ApiData {
   productividad: EmpleadaRow[]
   servicios: ServicioRow[]
   rentabilidad: ServicioRow[]
+  ultimaActualizacion: string | null
+}
+
+function relTime(iso: string): string {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (mins < 60) return `hace ${mins} min`
+  const hs = Math.floor(mins / 60)
+  if (hs < 24) return `hace ${hs}h`
+  const ds = Math.floor(hs / 24)
+  return ds === 1 ? 'ayer' : `hace ${ds} días`
 }
 
 function fmt$(n: number) {
@@ -113,6 +123,7 @@ function coefPct(e: EmpleadaRow): number | null {
 export default function InformesClient({ user }: { user: SessionUser }) {
   const [mes, setMes] = useState(mesActual)
   const [datos, setDatos] = useState<ApiData | null>(null)
+  const [ultimaActualizacion, setUltimaActualizacion] = useState<string | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('coef')
@@ -128,7 +139,7 @@ export default function InformesClient({ user }: { user: SessionUser }) {
     setError(null)
     fetch(`/api/informes?mes=${mes}`)
       .then(r => r.json())
-      .then(d => { if (d.error) setError(d.error); else setDatos(d) })
+      .then(d => { if (d.error) setError(d.error); else { setDatos(d); if (d.ultimaActualizacion) setUltimaActualizacion(d.ultimaActualizacion) } })
       .catch(() => setError('Error al cargar'))
       .finally(() => setCargando(false))
   }, [mes])
@@ -172,7 +183,15 @@ export default function InformesClient({ user }: { user: SessionUser }) {
         <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
           <IconBarChart size={18} className="text-white" />
         </div>
-        <h1 className="text-[17px] font-bold text-[var(--text)]">Informes</h1>
+        <div>
+          <h1 className="text-[17px] font-bold text-[var(--text)] leading-tight">Informes</h1>
+          {ultimaActualizacion && (
+            <p className="text-[11px] text-[var(--text-muted)] flex items-center gap-1 mt-0.5">
+              <IconClock size={11} />
+              Actualizado {relTime(ultimaActualizacion)}
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center justify-between bg-white rounded-2xl border border-[var(--border)] px-4 py-3 mb-5">

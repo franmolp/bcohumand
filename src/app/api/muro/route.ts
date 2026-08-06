@@ -157,21 +157,10 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Notificar a usuarios mencionados con @Nombre
-  const { data: allUsers } = await supabase.from('usuarios').select('id, nombre').eq('estado_cuenta', 'activo')
-  const normStr = (s: string) => s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-  const normContent = normStr(contenido)
-  const mentionedIds: string[] = []
-  for (const u of allUsers ?? []) {
-    if (u.id === session.id) continue
-    const search = normStr(u.nombre)
-    const idx = normContent.indexOf(search)
-    if (idx !== -1) {
-      const before = idx > 0 ? normContent[idx - 1] : ' '
-      const after = normContent[idx + search.length]
-      if (!/[a-záéíóúüñ]/.test(before) && (after === undefined || !/[a-záéíóúüñ]/.test(after))) mentionedIds.push(u.id)
-    }
-  }
+  // Notificar solo a usuarios mencionados explícitamente via autocomplete
+  const mentionedIds: string[] = Array.isArray(body.mentioned_ids)
+    ? (body.mentioned_ids as string[]).filter((id: string) => id !== session.id)
+    : []
   if (mentionedIds.length) {
     const preview = contenido.trim().length > 80 ? contenido.trim().slice(0, 80) + '…' : contenido.trim()
     await crearNotificaciones(mentionedIds, {

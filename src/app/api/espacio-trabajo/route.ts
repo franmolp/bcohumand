@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
 
   // Load config and schedules in parallel
   const [configRes, horariosRes] = await Promise.all([
-    supabase.from('configuracion').select('clave, valor').in('clave', ['espacio_trabajo', 'ultima_importacion_turnos']),
+    supabase.from('configuracion').select('clave, valor').in('clave', ['espacio_trabajo', 'ultima_importacion_turnos', 'ultima_importacion_fichadas']),
     supabaseAdmin
       .from('horarios_base')
       .select('usuario_id, fecha, inicio_base, fin_base')
@@ -48,10 +48,12 @@ export async function GET(req: NextRequest) {
   const capacidadesOverride: Record<string, number> = espacioConfig?.capacidades ?? {}
   const ultimaImportacionData = configMap.get('ultima_importacion_turnos') as { fecha?: string } | undefined
   const ultimaImportacion = ultimaImportacionData?.fecha ?? null
+  const ultimaFichadasData = configMap.get('ultima_importacion_fichadas') as { fecha?: string } | undefined
+  const ultimaFichadas = ultimaFichadasData?.fecha ?? null
 
   const horarios = horariosRes.data ?? []
   if (horarios.length === 0) {
-    return NextResponse.json({ turnos: [], ultimaImportacion, capacidades: {} })
+    return NextResponse.json({ turnos: [], ultimaImportacion, ultimaFichadas, capacidades: {} })
   }
 
   // Two separate queries — avoid FK join which can fail silently
@@ -104,5 +106,5 @@ export async function GET(req: NextRequest) {
     capacidades[name] = capacidadesOverride[name] ?? defaultCapacity(name)
   }
 
-  return NextResponse.json({ turnos, ultimaImportacion, capacidades })
+  return NextResponse.json({ turnos, ultimaImportacion, ultimaFichadas, capacidades })
 }

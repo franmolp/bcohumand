@@ -13,8 +13,8 @@ interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 const bv = {
   primary: 'bg-[image:var(--gradient)] text-white hover:brightness-110 shadow-sm',
-  secondary: 'bg-white text-[var(--text)] border border-[var(--border)] hover:bg-gray-50',
-  danger: 'bg-red-500 text-white hover:bg-red-600',
+  secondary: 'bg-gray-50 text-[var(--text)] border border-gray-300 hover:bg-gray-100',
+  danger: 'bg-red-500 text-white hover:bg-red-600 shadow-sm',
   ghost: 'text-[var(--text-sub)] hover:bg-gray-100',
 }
 const bs = { sm: 'h-9 px-3.5 text-[13px]', md: 'h-11 px-5 text-sm' }
@@ -22,7 +22,7 @@ const bs = { sm: 'h-9 px-3.5 text-[13px]', md: 'h-11 px-5 text-sm' }
 export function Button({ variant = 'primary', size = 'md', loading, icon, children, disabled, className = '', ...r }: BtnProps) {
   return (
     <button disabled={disabled || loading}
-      className={`inline-flex items-center justify-center font-semibold rounded-xl transition-opacity active:opacity-75 disabled:opacity-40 disabled:pointer-events-none cursor-pointer gap-2 ${bv[variant]} ${bs[size]} ${className}`} {...r}>
+      className={`inline-flex items-center justify-center font-semibold rounded-xl transition active:opacity-75 disabled:opacity-40 disabled:pointer-events-none cursor-pointer gap-2 ${bv[variant]} ${bs[size]} ${className}`} {...r}>
       {loading ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : icon}
       {children}
     </button>
