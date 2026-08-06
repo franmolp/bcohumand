@@ -25,7 +25,7 @@ const allNav = [
   { href: '/dashboard/reconocimientos', label: 'Reconocimientos',  icon: IconTrophy },
   { href: '/dashboard/reparaciones',  label: 'Reparaciones',    icon: IconWrench },
   { href: '/dashboard/juegos',        label: 'Juegos',          icon: IconStar,        mobile: true },
-  { href: '/dashboard/informes',       label: 'Informes',        icon: IconBarChart,   roles: ['Admin', 'admin'] },
+  { href: '/dashboard/informes',       label: 'Contabilidad',    icon: IconBarChart,   roles: ['Admin', 'admin'] },
   { href: '/dashboard/equipos',       label: 'Equipos y Roles', icon: IconSettings,   admin: true },
   { href: '/dashboard/seguridad',    label: 'Seguridad',      icon: IconShield,      admin: true },
 ]
@@ -59,7 +59,7 @@ export default function Navigation({ user, hasPedidosAccess = false }: { user: S
     return true
   })
   const mobileHrefs = isAdmin
-    ? ['/dashboard', '/dashboard/asistencia', '/dashboard/solicitudes', '/dashboard/calendario', '/dashboard/informes']
+    ? ['/dashboard', '/dashboard/asistencia', '/dashboard/solicitudes', '/dashboard/calendario', '/dashboard/informes'] // Contabilidad en mobile bar admin
     : isHR
     ? ['/dashboard', '/dashboard/asistencia', '/dashboard/solicitudes', '/dashboard/empleados', '/dashboard/calendario']
     : ['/dashboard', '/dashboard/mi-asistencia', '/dashboard/solicitudes', '/dashboard/liquidador', '/dashboard/calendario']
