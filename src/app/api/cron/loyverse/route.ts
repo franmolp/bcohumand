@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { crearNotificaciones, getAdminIds } from '@/lib/notificaciones'
+import { fetchAndStoreShifts } from '@/app/api/importar/loyverse-cierres/route'
 
 const TOKEN  = process.env.LOYVERSE_TOKEN
 const SECRET = process.env.CRON_SECRET
@@ -167,6 +168,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ message: 'Sin datos para el período', from, to })
     }
     const result = await upsertData(rows, pagoRows, from, to)
+
+    // Importar cierres de caja (shifts) del mismo período
+    await fetchAndStoreShifts(from, to).catch(e => console.error('[cron/loyverse] shifts:', e.message))
 
     const adminIds = await getAdminIds()
     if (adminIds.length) {
