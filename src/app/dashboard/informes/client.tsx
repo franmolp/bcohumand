@@ -170,6 +170,9 @@ function TabCaja({ mes }: { mes: string }) {
   const [cfSaving, setCfSaving] = useState(false)
   const [cfError, setCfError] = useState('')
 
+  const [reimportando, setReimportando] = useState(false)
+  const [reimportMsg, setReimportMsg] = useState('')
+
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [editRetiro, setEditRetiro] = useState<(RetiroItem & { fecha: string }) | null>(null)
   const [erMonto, setErMonto] = useState('')
@@ -184,6 +187,26 @@ function TabCaja({ mes }: { mes: string }) {
       .then(d => { if (d.error) setError(d.error); else setResumen(d) })
       .catch(() => setError('Error al cargar'))
       .finally(() => setCargando(false))
+  }
+
+  async function reimportarCierres() {
+    setReimportando(true); setReimportMsg('')
+    try {
+      const from = `${mes}-01`
+      const to = todayAR()
+      const res = await fetch('/api/importar/loyverse-cierres', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from, to }),
+      })
+      const d = await res.json()
+      if (!res.ok) { setReimportMsg(d.error ?? 'Error'); return }
+      setReimportMsg(`${d.ok ?? 0} cierres importados`)
+      cargar()
+    } finally {
+      setReimportando(false)
+      setTimeout(() => setReimportMsg(''), 4000)
+    }
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -362,11 +385,18 @@ function TabCaja({ mes }: { mes: string }) {
         </div>
       )}
 
-      {/* Config edit */}
-      <div className="flex justify-end">
+      {/* Config edit + reimport */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button onClick={reimportarCierres} disabled={reimportando}
+            className="flex items-center gap-1.5 text-[12px] text-[var(--text-muted)] hover:text-green-600 transition-colors cursor-pointer disabled:opacity-40">
+            <IconReceipt size={13} /> {reimportando ? 'Importando…' : 'Reimportar Loyverse'}
+          </button>
+          {reimportMsg && <span className="text-[11px] text-green-600">{reimportMsg}</span>}
+        </div>
         <button onClick={abrirConfig}
           className="flex items-center gap-1.5 text-[12px] text-[var(--text-muted)] hover:text-[var(--primary)] transition-colors cursor-pointer">
-          <IconEdit size={13} /> Configuración de caja
+          <IconEdit size={13} /> Configuración
         </button>
       </div>
 
