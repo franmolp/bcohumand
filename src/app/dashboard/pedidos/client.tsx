@@ -137,7 +137,7 @@ function EstadoBadge({ estado }: { estado: string }) {
 
 // ─── Tab: Lista ──────────────────────────────────────────────────────────────
 
-type AddStep = 'search' | 'new' | 'config'
+type AddStep = 'search' | 'variantes' | 'new' | 'config'
 
 function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefreshProductos, isAdmin, myCats, myId }: {
   cicloActivo: Ciclo | null
@@ -168,6 +168,9 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
   const [addStep, setAddStep] = useState<AddStep>('search')
   const [busqueda, setBusqueda] = useState('')
   const [productoSel, setProductoSel] = useState<Producto | null>(null)
+  const [varianteSel, setVarianteSel] = useState<Variante | null>(null)
+  const [variantesDisponibles, setVariantesDisponibles] = useState<Variante[]>([])
+  const [loadingVariantes, setLoadingVariantes] = useState(false)
   // New product form
   const [newNombre, setNewNombre] = useState('')
   const [newMarca, setNewMarca] = useState('')
@@ -218,16 +221,35 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
 
   function openAdd() {
     setShowAdd(true); setAddStep('search'); setBusqueda(''); setProductoSel(null)
+    setVarianteSel(null); setVariantesDisponibles([])
     setNewNombre(''); setNewMarca(''); setNewCategoria(isAdmin ? 'cocina' : (myCats[0] as CatKey ?? 'cocina')); setNewProveedorId('')
     setProvConfig(''); setConfigMarca(''); setCantidad('1'); setUnidad('unidad'); setNotas(''); setUrgente(false)
     setGuardandoError('')
   }
 
-  function selectProducto(p: Producto) {
+  async function selectProducto(p: Producto) {
     setProductoSel(p)
+    setVarianteSel(null)
+    if (p.variantes_count > 0) {
+      setAddStep('variantes')
+      setLoadingVariantes(true)
+      const data = await fetch(`/api/pedidos/variantes?producto_id=${p.id}`).then(r => r.json()).catch(() => [])
+      setVariantesDisponibles(Array.isArray(data) ? data.filter((v: Variante) => v.activo) : [])
+      setLoadingVariantes(false)
+      return
+    }
     setUnidad(p.unidad)
     setProvConfig(p.proveedor_id?.toString() ?? '')
     setConfigMarca(p.marca && p.marca !== 'Sin marca' ? p.marca : '')
+    setAddStep('config')
+  }
+
+  function selectVariante(v: Variante) {
+    if (!productoSel) return
+    setVarianteSel(v)
+    setUnidad(productoSel.unidad)
+    setProvConfig(productoSel.proveedor_id?.toString() ?? '')
+    setConfigMarca(productoSel.marca && productoSel.marca !== 'Sin marca' ? productoSel.marca : '')
     setAddStep('config')
   }
 
@@ -246,7 +268,9 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
       && (busqueda.length < 2 || normalizar(p.nombre).includes(normalizar(busqueda))))
     .slice(0, 10)
 
-  const duplicado = productoSel ? items.find(i => i.producto_id === productoSel.id) : null
+  const duplicado = productoSel
+    ? items.find(i => i.producto_id === productoSel.id && i.variante_id === (varianteSel?.id ?? null))
+    : null
 
   async function agregarExistente() {
     if (!cicloActivo || !productoSel) return
@@ -254,7 +278,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
     if (needsProv) { setGuardandoError('Elegí un proveedor antes de agregar.'); return }
     setGuardando(true); setGuardandoError('')
 
-    // Siempre pisar proveedor, marca y unidad en el catálogo
+    // Siempre pisar proveedor, marca y unidad en el catálogo (a nivel del producto raíz)
     const patchBody: Record<string, unknown> = { unidad }
     if (provConfig) patchBody.proveedor_id = provConfig
     if (configMarca.trim()) patchBody.marca = configMarca.trim()
@@ -265,7 +289,11 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
 
     const res = await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ producto_id: productoSel.id, cantidad: Number(cantidad), unidad, notas: notas || null, urgente }),
+      body: JSON.stringify({
+        producto_id: productoSel.id,
+        variante_id: varianteSel?.id ?? null,
+        cantidad: Number(cantidad), unidad, notas: notas || null, urgente,
+      }),
     })
     setGuardando(false)
     if (res.ok) { setShowAdd(false); cargar() }
@@ -500,11 +528,11 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
       <Modal
         open={showAdd}
         onClose={() => setShowAdd(false)}
-        title={addStep === 'new' ? 'Nuevo producto' : 'Agregar a la lista'}
+        title={addStep === 'new' ? 'Nuevo producto' : addStep === 'variantes' ? 'Elegí una variante' : 'Agregar a la lista'}
         footer={
           addStep === 'config' ? (
             <>
-              <Button variant="secondary" onClick={() => setAddStep('search')}>Volver</Button>
+              <Button variant="secondary" onClick={() => setAddStep(productoSel && productoSel.variantes_count > 0 ? 'variantes' : 'search')}>Volver</Button>
               <Button className="flex-1" onClick={agregarExistente} loading={guardando}
                 disabled={!cantidad || Number(cantidad) <= 0 || (!productoSel?.proveedor_id && !provConfig)}>
                 Agregar
@@ -518,6 +546,8 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
                 Crear y agregar
               </Button>
             </>
+          ) : addStep === 'variantes' ? (
+            <Button variant="secondary" className="flex-1" onClick={() => setAddStep('search')}>Volver</Button>
           ) : undefined
         }
       >
@@ -541,6 +571,11 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
                       <p className="text-[13px] font-medium truncate">{p.nombre} <span className="font-normal text-[var(--text-muted)]">· {p.marca}</span></p>
                       <p className="text-[11px] text-[var(--text-muted)]">{catLabel(p.categoria)} · {p.proveedor?.nombre ?? <span className="text-amber-500">Sin proveedor</span>}</p>
                     </div>
+                    {p.variantes_count > 0 && (
+                      <span className="flex items-center gap-0.5 text-[11px] font-medium text-[var(--text-muted)] flex-shrink-0">
+                        {p.variantes_count} <IconChevronRight size={12} />
+                      </span>
+                    )}
                   </button>
                 ))}
                 <button onClick={goToNew}
@@ -551,6 +586,36 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
             )}
             {busqueda.length < 2 && (
               <p className="text-[12px] text-[var(--text-muted)] mt-3">Escribí al menos 2 letras para buscar</p>
+            )}
+          </div>
+        )}
+
+        {/* Step: choose variant (producto raíz no se puede agregar directo si tiene variantes) */}
+        {addStep === 'variantes' && productoSel && (
+          <div>
+            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-[var(--border)] mb-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-semibold truncate">{productoSel.nombre}</p>
+                <p className="text-[11px] text-[var(--text-muted)]">{catLabel(productoSel.categoria)} · Elegí qué variante pedís</p>
+              </div>
+              <button onClick={() => setAddStep('search')} className="p-1 text-gray-400 hover:text-gray-700 cursor-pointer rounded-lg">
+                <IconX size={14} />
+              </button>
+            </div>
+            {loadingVariantes && <div className="py-6 flex justify-center"><Spinner /></div>}
+            {!loadingVariantes && variantesDisponibles.length === 0 && (
+              <p className="text-[12px] text-[var(--text-muted)] italic py-3">Este producto no tiene variantes activas cargadas.</p>
+            )}
+            {!loadingVariantes && variantesDisponibles.length > 0 && (
+              <div className="space-y-0.5 max-h-64 overflow-y-auto">
+                {variantesDisponibles.map(v => (
+                  <button key={v.id} onClick={() => selectVariante(v)}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-left hover:bg-gray-50 cursor-pointer transition-colors">
+                    <span className="text-[13px] font-medium truncate">{v.nombre}</span>
+                    <IconChevronRight size={13} className="text-gray-300 flex-shrink-0" />
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -598,10 +663,12 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
           <>
             <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-[var(--border)]">
               <div className="flex-1 min-w-0">
-                <p className="text-[13px] font-semibold truncate">{productoSel.nombre}</p>
+                <p className="text-[13px] font-semibold truncate">
+                  {productoSel.nombre}{varianteSel && <span className="font-normal text-[var(--text-muted)]"> · {varianteSel.nombre}</span>}
+                </p>
                 <p className="text-[11px] text-[var(--text-muted)]">{catLabel(productoSel.categoria)}</p>
               </div>
-              <button onClick={() => setAddStep('search')} className="p-1 text-gray-400 hover:text-gray-700 cursor-pointer rounded-lg">
+              <button onClick={() => setAddStep(productoSel.variantes_count > 0 ? 'variantes' : 'search')} className="p-1 text-gray-400 hover:text-gray-700 cursor-pointer rounded-lg">
                 <IconX size={14} />
               </button>
             </div>
