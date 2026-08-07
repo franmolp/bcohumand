@@ -10,8 +10,7 @@ export default async function EspacioTrabajoPage() {
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
   const isHR = session.rol === 'HR'
   const isEncargada = session.rol === 'Encargada'
-  const isCompras = session.rol === 'Compras'
-  const isGestion = isAdmin || isHR || isEncargada || isCompras
+  const isGestion = isAdmin || isHR || isEncargada
 
   if (isGestion) return <EspacioTrabajoClient user={session} isAdminOrEncargada={isAdmin || isEncargada} />
 
