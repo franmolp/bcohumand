@@ -122,6 +122,17 @@ interface RetiroItem {
   id: string; monto: number; descripcion: string | null; tipo: string; created_at: string
 }
 
+interface Evento {
+  tipo: 'apertura' | 'cierre' | 'retiro' | 'sobre' | 'ajuste'
+  hora: string
+  monto: number
+  ventas?: number
+  contado?: number
+  discrepancia?: number | null
+  detalle?: string | null
+  id?: string
+}
+
 interface DiaData {
   fecha: string
   efectivo_vendido: number
@@ -132,8 +143,10 @@ interface DiaData {
   discrepancia: number | null
   tiene_cierre_loyverse: boolean
   tiene_seguimiento: boolean
+  tiene_discrepancia: boolean
   ajuste: { saldo_nuevo: number; motivo: string | null } | null
   retiros_list: RetiroItem[]
+  eventos: Evento[]
 }
 
 interface CajaResumen {
@@ -173,6 +186,7 @@ function TabCaja({ mes }: { mes: string }) {
 
   const [reimportando, setReimportando] = useState(false)
   const [reimportMsg, setReimportMsg] = useState('')
+  const [logAbierto, setLogAbierto] = useState<string | null>(null)
 
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [editRetiro, setEditRetiro] = useState<(RetiroItem & { fecha: string }) | null>(null)
@@ -407,7 +421,7 @@ function TabCaja({ mes }: { mes: string }) {
       )}
 
       {dias.map(dia => {
-        const hasDisc = dia.discrepancia !== null && Math.abs(dia.discrepancia) >= 1
+        const hasDisc = dia.tiene_discrepancia || (dia.discrepancia !== null && Math.abs(dia.discrepancia) >= 1)
         return (
           <div key={dia.fecha} className={`bg-white rounded-2xl border overflow-hidden ${hasDisc ? 'border-red-200' : 'border-[var(--border)]'}`}>
             {/* Header */}
@@ -498,6 +512,65 @@ function TabCaja({ mes }: { mes: string }) {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Log cronológico del día */}
+              {dia.eventos.length > 0 && (
+                <div className="border-t border-gray-100 pt-2">
+                  <button onClick={() => setLogAbierto(logAbierto === dia.fecha ? null : dia.fecha)}
+                    className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--primary)] transition-colors cursor-pointer">
+                    <IconClock size={12} />
+                    {logAbierto === dia.fecha ? 'Ocultar log del día' : 'Ver log del día'}
+                  </button>
+
+                  {logAbierto === dia.fecha && (
+                    <div className="mt-2.5 flex flex-col gap-0">
+                      {dia.eventos.map((ev, i) => {
+                        const evDisc = ev.tipo === 'apertura' && ev.discrepancia !== null && ev.discrepancia !== undefined && Math.abs(ev.discrepancia) >= 1
+                        const cfg: Record<Evento['tipo'], { icon: string; label: string; color: string }> = {
+                          apertura: { icon: '🔓', label: 'Apertura de turno', color: 'text-[var(--text)]' },
+                          cierre: { icon: '🔒', label: 'Cierre de turno', color: 'text-[var(--text)]' },
+                          retiro: { icon: '💸', label: 'Retiro personal', color: 'text-amber-600' },
+                          sobre: { icon: '📦', label: 'Sobre / caja fuerte', color: 'text-purple-600' },
+                          ajuste: { icon: '✏️', label: 'Ajuste manual', color: 'text-blue-600' },
+                        }
+                        const c = cfg[ev.tipo]
+                        return (
+                          <div key={i} className={`flex items-start gap-2.5 py-2 ${i > 0 ? 'border-t border-gray-50' : ''} ${evDisc ? 'bg-red-50/60 -mx-1 px-1 rounded-lg' : ''}`}>
+                            <span className="text-[13px] mt-0.5">{c.icon}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`text-[12px] font-semibold ${c.color}`}>{c.label}</span>
+                                <span className="text-[11px] text-[var(--text-muted)]">{ev.hora}hs</span>
+                              </div>
+                              <p className="text-[13px] font-medium text-[var(--text)] mt-0.5">
+                                {fmt$(ev.monto)}
+                                {ev.tipo === 'cierre' && ev.ventas !== undefined && (
+                                  <span className="text-[11px] font-normal text-[var(--text-muted)]"> · vendieron {fmt$(ev.ventas)}</span>
+                                )}
+                              </p>
+                              {ev.contado !== undefined && (
+                                <p className="text-[11px] text-amber-600 mt-0.5">Contado por el local: {fmt$(ev.contado)}</p>
+                              )}
+                              {ev.detalle && <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{ev.detalle}</p>}
+                              {evDisc && ev.discrepancia !== null && ev.discrepancia !== undefined && (
+                                <p className="text-[11px] font-semibold text-red-600 mt-0.5">
+                                  ⚠️ No coincide con el cierre anterior · diferencia {fmt$(ev.discrepancia)}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {dia.tiene_seguimiento && (
+                        <div className="flex items-center justify-between pt-2 mt-1 border-t border-gray-100">
+                          <span className="text-[11px] font-medium text-[var(--text-muted)]">Cierre del día / apertura esperada mañana</span>
+                          <span className={`text-[13px] font-bold ${dia.saldo! < 0 ? 'text-red-500' : 'text-green-600'}`}>{fmt$(dia.saldo!)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
