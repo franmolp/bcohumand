@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { fmtFechaLarga } from '@/lib/fecha'
+import { deArticulo } from '@/lib/gaps'
 import { crearNotificacion } from '@/lib/notificaciones'
 
 function puedeAprobar(rol: string): boolean {
@@ -36,12 +37,13 @@ export async function POST(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  const tipo = solicitud.tipo_recurso as 'mesa' | 'box'
   const fechaTxt = fmtFechaLarga(solicitud.fecha)
   const horarioTxt = `${solicitud.hora_inicio.slice(0, 5)} a ${solicitud.hora_fin.slice(0, 5)}`
   await crearNotificacion({
     usuario_id: solicitud.usuario_id,
     titulo: 'Se deshizo tu puesto aprobado',
-    mensaje: `La aprobación del ${solicitud.tipo_recurso} de ${solicitud.equipo_nombre} del ${fechaTxt} de ${horarioTxt} fue anulada. El puesto vuelve a estar disponible.`,
+    mensaje: `La aprobación ${deArticulo(tipo)} de ${solicitud.equipo_nombre} del ${fechaTxt}, de ${horarioTxt}, fue anulada. El puesto vuelve a estar disponible para otra persona.`,
     tipo: 'puesto_deshecho',
     url: '/dashboard/espacio-trabajo',
   }).catch(() => {})

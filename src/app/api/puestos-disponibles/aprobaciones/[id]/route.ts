@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { fmtFechaLarga } from '@/lib/fecha'
+import { conArticuloDef, deArticulo } from '@/lib/gaps'
 import { crearNotificacion, crearNotificaciones } from '@/lib/notificaciones'
 
 function puedeAprobar(rol: string): boolean {
@@ -40,6 +41,7 @@ export async function PUT(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  const tipo = solicitud.tipo_recurso as 'mesa' | 'box'
   const fechaTxt = fmtFechaLarga(solicitud.fecha)
   const horarioTxt = `${solicitud.hora_inicio.slice(0, 5)} a ${solicitud.hora_fin.slice(0, 5)}`
 
@@ -47,7 +49,7 @@ export async function PUT(
     await crearNotificacion({
       usuario_id: solicitud.usuario_id,
       titulo: 'Puesto aprobado',
-      mensaje: `Te aprobaron el ${solicitud.tipo_recurso} de ${solicitud.equipo_nombre} del ${fechaTxt} de ${horarioTxt}.`,
+      mensaje: `Te aprobaron ${conArticuloDef(tipo)} de ${solicitud.equipo_nombre} del ${fechaTxt}, de ${horarioTxt}.`,
       tipo: 'puesto_aprobado',
       url: '/dashboard/espacio-trabajo',
     }).catch(() => {})
@@ -72,7 +74,7 @@ export async function PUT(
 
       await crearNotificaciones(otras.map(o => o.usuario_id), {
         titulo: 'Puesto ya cubierto',
-        mensaje: `El ${solicitud.tipo_recurso} de ${solicitud.equipo_nombre} del ${fechaTxt} de ${horarioTxt} que solicitaste ya fue cubierto por otra persona.`,
+        mensaje: `El puesto que solicitaste (${conArticuloDef(tipo)} de ${solicitud.equipo_nombre}, ${fechaTxt} de ${horarioTxt}) ya fue cubierto por otra persona.`,
         tipo: 'puesto_rechazado',
         url: '/dashboard/espacio-trabajo',
       }).catch(() => {})
@@ -81,7 +83,7 @@ export async function PUT(
     await crearNotificacion({
       usuario_id: solicitud.usuario_id,
       titulo: 'Puesto rechazado',
-      mensaje: `Tu solicitud del ${solicitud.tipo_recurso} de ${solicitud.equipo_nombre} del ${fechaTxt} de ${horarioTxt} no fue aprobada${body.motivo ? `: ${body.motivo}` : '.'}`,
+      mensaje: `Tu solicitud ${deArticulo(tipo)} de ${solicitud.equipo_nombre} del ${fechaTxt}, de ${horarioTxt}, no fue aprobada${body.motivo ? `: ${body.motivo}` : '.'}`,
       tipo: 'puesto_rechazado',
       url: '/dashboard/espacio-trabajo',
     }).catch(() => {})

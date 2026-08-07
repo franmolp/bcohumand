@@ -36,11 +36,23 @@ export function isManicura(equipo: string): boolean {
 }
 
 // 'mesa' | 'box' = equipo elegible para la dinámica de puestos libres. null = no participa
-// (peluquería, recepción, o cualquier equipo que no exista todavía).
+// (peluquería, recepción, sin equipo asignado, o cualquier equipo que no exista todavía).
 export function tipoRecurso(equipo: string): 'mesa' | 'box' | null {
+  if (!equipo) return null
   if (isMasajistaODepiladora(equipo)) return 'box'
   if (isPeluqueria(equipo) || isRecepcion(equipo)) return null
   return 'mesa'
+}
+
+// Concordancia de género para armar oraciones ("una mesa" / "un box")
+export function conArticulo(tipo: 'mesa' | 'box'): string {
+  return tipo === 'box' ? 'un box' : 'una mesa'
+}
+export function conArticuloDef(tipo: 'mesa' | 'box'): string {
+  return tipo === 'box' ? 'el box' : 'la mesa'
+}
+export function deArticulo(tipo: 'mesa' | 'box'): string {
+  return tipo === 'box' ? 'del box' : 'de la mesa'
 }
 
 export function defaultCapacity(equipoNombre: string): number {

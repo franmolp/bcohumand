@@ -17,6 +17,40 @@ export interface PuestoDisponible {
   mi_solicitud: 'none' | 'pending'
 }
 
+const CONFIG_KEY_EQUIPOS = 'puestos_equipos'
+
+// IDs de equipo habilitados por el admin para la dinámica de puestos libres.
+// Sin configurar todavía = ninguno habilitado (opt-in explícito, no todos por defecto).
+export async function getEquiposHabilitadosPuestos(): Promise<number[]> {
+  const { data } = await supabaseAdmin.from('configuracion').select('valor').eq('clave', CONFIG_KEY_EQUIPOS).single()
+  const val = data?.valor as { equipoIds?: number[] } | null
+  return val?.equipoIds ?? []
+}
+
+export async function setEquiposHabilitadosPuestos(equipoIds: number[]): Promise<void> {
+  await supabaseAdmin.from('configuracion').upsert({ clave: CONFIG_KEY_EQUIPOS, valor: { equipoIds } }, { onConflict: 'clave' })
+}
+
+// Resuelve el equipo del usuario por nombre y confirma que esté habilitado por el admin.
+// Se usa tanto para gatear el acceso (nav, page.tsx) como antes de calcular/crear solicitudes.
+export async function resolverAccesoPuestos(
+  equipoUsuario: string
+): Promise<{ ok: true; equipoId: number; equipoNombre: string; tipo: 'mesa' | 'box' } | { ok: false; error: string; status: number }> {
+  if (!equipoUsuario) return { ok: false, error: 'No tenés un equipo asignado', status: 400 }
+
+  const [{ data: equipoRow }, habilitados] = await Promise.all([
+    supabaseAdmin.from('equipos').select('id, nombre').eq('nombre', equipoUsuario).single(),
+    getEquiposHabilitadosPuestos(),
+  ])
+  if (!equipoRow) return { ok: false, error: 'Tu equipo no está configurado correctamente. Avisale a un admin.', status: 400 }
+  if (!habilitados.includes(equipoRow.id)) {
+    return { ok: false, error: 'Esta función todavía no está habilitada para tu equipo', status: 403 }
+  }
+
+  const tipo = tipoRecurso(equipoUsuario) ?? 'mesa'
+  return { ok: true, equipoId: equipoRow.id, equipoNombre: equipoRow.nombre, tipo }
+}
+
 // Puestos libres (>=3h) para el equipo del usuario, semana actual + próxima, restando
 // solicitudes ya aprobadas y excluyendo huecos que se pisan con un turno propio ese día.
 // Compartida entre la API /api/puestos-disponibles y la card del Home (server component).
@@ -24,14 +58,10 @@ export async function getPuestosDisponibles(
   usuarioId: string,
   equipoUsuario: string
 ): Promise<{ tipo_recurso: 'mesa' | 'box'; puestos: PuestoDisponible[] } | { error: string; status: number }> {
-  const tipo = tipoRecurso(equipoUsuario)
-  if (!tipo) return { error: 'Esta sección es solo para manicura y masajes/depilación', status: 403 }
-
-  const { data: me } = await supabaseAdmin.from('usuarios').select('equipo_id').eq('id', usuarioId).single()
-  if (!me?.equipo_id) return { error: 'No tenés un equipo asignado', status: 400 }
-
-  const { data: equipoRow } = await supabaseAdmin.from('equipos').select('id, nombre').eq('id', me.equipo_id).single()
-  if (!equipoRow) return { error: 'Equipo no encontrado', status: 400 }
+  const acceso = await resolverAccesoPuestos(equipoUsuario)
+  if (!acceso.ok) return { error: acceso.error, status: acceso.status }
+  const { equipoId, equipoNombre, tipo } = acceso
+  const equipoRow = { id: equipoId, nombre: equipoNombre }
 
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
   const hasta = addDays(today, 13) // semana actual + próxima

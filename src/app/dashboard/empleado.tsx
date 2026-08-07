@@ -4,7 +4,6 @@ import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { IconCalendar, IconBell, IconAlertCircle, IconChevronRight, IconStar, IconClock, IconWall, IconTrophy, IconLayoutGrid } from '@/components/ui/Icons'
 import GoogleReviewsCarousel from '@/components/GoogleReviewsCarousel'
-import { tipoRecurso } from '@/lib/gaps'
 import { getPuestosDisponibles } from '@/lib/puestos'
 import { fmtFechaLarga } from '@/lib/fecha'
 
@@ -412,10 +411,9 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
     ? ((usersRes.data ?? []).find(u => u.id === muroPost.usuario_id) ?? null)
     : null
 
-  // Puestos libres (solo manicura/masajes) — card sólo aparece si hay algo disponible
-  const recursoElegible = tipoRecurso(session.equipo)
-  const puestosResult = recursoElegible ? await getPuestosDisponibles(session.id, session.equipo) : null
-  const puestosDisponibles = puestosResult && !('error' in puestosResult) ? puestosResult.puestos : []
+  // Puestos libres (solo equipos habilitados por el admin) — card sólo aparece si hay algo disponible
+  const puestosResult = await getPuestosDisponibles(session.id, session.equipo)
+  const puestosDisponibles = !('error' in puestosResult) ? puestosResult.puestos : []
 
   return (
     <div className="py-4 fade-in space-y-5">

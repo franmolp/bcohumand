@@ -1,6 +1,7 @@
 import { getSession } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { resolverAccesoPuestos } from '@/lib/puestos'
 import Navigation from '@/components/Navigation'
 import PushSubscriber from '@/components/PushSubscriber'
 import ActivityPing from '@/components/ActivityPing'
@@ -34,9 +35,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
     hasPedidosAccess = (pedidosPerms?.length ?? 0) > 0
   }
 
+  // Espacio de trabajo / puestos libres: solo si el equipo del usuario fue habilitado por el admin
+  let hasPuestosAccess = isAdmin
+  if (!isAdmin) {
+    const acceso = await resolverAccesoPuestos(session.equipo)
+    hasPuestosAccess = acceso.ok
+  }
+
   return (
     <div className="h-[100dvh] overflow-hidden bg-[var(--bg)] lg:min-h-[100dvh] lg:h-auto lg:overflow-visible">
-      <Navigation user={session} permisos={userPermisos} hasPedidosAccess={hasPedidosAccess} />
+      <Navigation user={session} permisos={userPermisos} hasPedidosAccess={hasPedidosAccess} hasPuestosAccess={hasPuestosAccess} />
       <PushSubscriber />
       <ActivityPing />
       <main className="h-full overflow-y-auto overscroll-contain pt-12 pb-16 px-4 lg:h-auto lg:overflow-visible lg:pt-14 lg:pb-0 lg:pl-52 lg:pr-0" style={{ touchAction: 'pan-y' }}>

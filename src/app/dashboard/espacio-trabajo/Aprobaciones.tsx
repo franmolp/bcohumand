@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Spinner } from '@/components/ui'
-import { IconCheck, IconX, IconRefresh, IconClock } from '@/components/ui/Icons'
+import { IconCheck, IconX, IconRefresh, IconClock, IconSettings, IconBell } from '@/components/ui/Icons'
 import { fmtFechaLarga } from '@/lib/fecha'
 
 interface Solicitud {
@@ -22,14 +22,16 @@ interface Solicitud {
   created_at: string
 }
 
-const SUBTABS = [
-  { key: 'pending', label: 'Pendientes' },
-  { key: 'approved', label: 'Aprobadas' },
-  { key: 'rejected', label: 'Rechazadas' },
-] as const
+type SubtabKey = 'pending' | 'approved' | 'rejected' | 'ajustes'
 
-export default function Aprobaciones() {
-  const [subtab, setSubtab] = useState<'pending' | 'approved' | 'rejected'>('pending')
+export default function Aprobaciones({ isAdmin }: { isAdmin: boolean }) {
+  const SUBTABS: { key: SubtabKey; label: string }[] = [
+    { key: 'pending', label: 'Pendientes' },
+    { key: 'approved', label: 'Aprobadas' },
+    { key: 'rejected', label: 'Rechazadas' },
+    ...(isAdmin ? [{ key: 'ajustes' as const, label: 'Ajustes' }] : []),
+  ]
+  const [subtab, setSubtab] = useState<SubtabKey>('pending')
   const [items, setItems] = useState<Solicitud[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [procesando, setProcesando] = useState<string | null>(null)
@@ -44,7 +46,7 @@ export default function Aprobaciones() {
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { cargar(subtab) }, [subtab, cargar])
+  useEffect(() => { if (subtab !== 'ajustes') cargar(subtab) }, [subtab, cargar])
 
   useEffect(() => {
     fetch('/api/puestos-disponibles/aprobaciones?estado=pending')
@@ -102,7 +104,9 @@ export default function Aprobaciones() {
         ))}
       </div>
 
-      {loading ? (
+      {subtab === 'ajustes' ? (
+        <AjustesEquipos />
+      ) : loading ? (
         <div className="py-14"><Spinner /></div>
       ) : subtab === 'pending' ? (
         grupos.length === 0 ? (
@@ -209,4 +213,132 @@ function relTime(iso: string): string {
   if (hs < 24) return `hace ${hs}h`
   const ds = Math.floor(hs / 24)
   return ds === 1 ? 'ayer' : `hace ${ds} días`
+}
+
+interface EquipoConfig {
+  id: number
+  nombre: string
+  tipo_recurso: 'mesa' | 'box'
+  habilitado: boolean
+}
+
+function AjustesEquipos() {
+  const [equipos, setEquipos] = useState<EquipoConfig[] | null>(null)
+  const [seleccionados, setSeleccionados] = useState<Set<number>>(new Set())
+  const [loading, setLoading] = useState(true)
+  const [guardando, setGuardando] = useState(false)
+  const [notificando, setNotificando] = useState(false)
+  const [toast, setToast] = useState('')
+
+  useEffect(() => {
+    fetch('/api/puestos-disponibles/config')
+      .then(r => r.json())
+      .then(d => {
+        const lista: EquipoConfig[] = d.equipos ?? []
+        setEquipos(lista)
+        setSeleccionados(new Set(lista.filter(e => e.habilitado).map(e => e.id)))
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(''), 4000)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  function toggle(id: number) {
+    setSeleccionados(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function guardar() {
+    setGuardando(true)
+    try {
+      const res = await fetch('/api/puestos-disponibles/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ equipoIds: [...seleccionados] }),
+      })
+      setToast(res.ok ? 'Ajustes guardados' : 'Error al guardar')
+    } finally { setGuardando(false) }
+  }
+
+  async function notificarAhora() {
+    setNotificando(true)
+    try {
+      const res = await fetch('/api/cron/puestos-disponibles-semana', { method: 'POST' })
+      const d = await res.json()
+      if (!res.ok) { setToast(d.error ?? 'Error al enviar'); return }
+      const conHuecos = (d.resultados ?? []).filter((r: { huecos: number }) => r.huecos > 0)
+      setToast(conHuecos.length > 0
+        ? `Aviso enviado a ${conHuecos.map((r: { equipo: string }) => r.equipo).join(', ')}`
+        : 'No hay puestos libres la próxima semana en ningún equipo — no se envió nada')
+    } finally { setNotificando(false) }
+  }
+
+  if (loading) return <div className="py-14"><Spinner /></div>
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
+        <div className="px-4 py-3 border-b border-[var(--border)] flex items-center gap-2">
+          <IconSettings size={15} className="text-[var(--text-muted)]" />
+          <p className="text-[13px] font-semibold text-[var(--text)]">Equipos con acceso a puestos libres</p>
+        </div>
+        <p className="text-[12px] text-[var(--text-muted)] px-4 pt-3">
+          Solo las personas de los equipos marcados van a ver la sección de puestos disponibles y podrán solicitarlos.
+        </p>
+        <div className="divide-y divide-gray-50 mt-2">
+          {(equipos ?? []).map(e => (
+            <label key={e.id} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50/60">
+              <input
+                type="checkbox"
+                checked={seleccionados.has(e.id)}
+                onChange={() => toggle(e.id)}
+                className="w-4 h-4 rounded border-gray-300 text-[var(--primary)] cursor-pointer"
+              />
+              <span className="text-[13px] text-[var(--text)] flex-1">{e.nombre}</span>
+              <span className="text-[11px] text-[var(--text-muted)] capitalize">{e.tipo_recurso}</span>
+            </label>
+          ))}
+          {(equipos ?? []).length === 0 && (
+            <p className="text-center text-[13px] text-gray-400 py-8">No hay equipos cargados</p>
+          )}
+        </div>
+        <div className="p-4">
+          <button onClick={guardar} disabled={guardando}
+            className="w-full py-2.5 bg-[image:var(--gradient)] text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-50">
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-[var(--border)] p-4">
+        <div className="flex items-center gap-2 mb-1.5">
+          <IconBell size={15} className="text-[var(--text-muted)]" />
+          <p className="text-[13px] font-semibold text-[var(--text)]">Aviso semanal</p>
+        </div>
+        <p className="text-[12px] text-[var(--text-muted)] mb-3">
+          Todos los sábados se avisa automáticamente a cada equipo si tiene puestos libres la semana próxima.
+          Usá este botón para mandarlo ahora mismo, sin esperar al sábado.
+        </p>
+        <button onClick={notificarAhora} disabled={notificando}
+          className="w-full flex items-center justify-center gap-2 py-2.5 border border-[var(--border)] text-[var(--text)] hover:bg-gray-50 rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-50">
+          <IconBell size={14} />
+          {notificando ? 'Enviando…' : 'Enviar aviso ahora'}
+        </button>
+      </div>
+
+      {toast && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[13px] px-4 py-2.5 rounded-xl shadow-lg z-50 max-w-[90vw] text-center">
+          {toast}
+        </div>
+      )}
+    </div>
+  )
 }

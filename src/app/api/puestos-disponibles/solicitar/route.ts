@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { tipoRecurso, defaultCapacity, findGapsForDay, toMin, overlaps } from '@/lib/gaps'
+import { defaultCapacity, findGapsForDay, toMin, overlaps, conArticulo } from '@/lib/gaps'
 import { fmtFechaLarga } from '@/lib/fecha'
+import { resolverAccesoPuestos } from '@/lib/puestos'
 import { crearNotificaciones, getAdminAndEncargadaIds } from '@/lib/notificaciones'
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const tipo = tipoRecurso(session.equipo)
-  if (!tipo) return NextResponse.json({ error: 'Esta sección es solo para manicura y masajes/depilación' }, { status: 403 })
+  const acceso = await resolverAccesoPuestos(session.equipo)
+  if (!acceso.ok) return NextResponse.json({ error: acceso.error }, { status: acceso.status })
+  const tipo = acceso.tipo
 
   const body = await req.json().catch(() => ({})) as { id?: string }
   const partes = body.id?.split('|') ?? []
@@ -25,13 +27,12 @@ export async function POST(req: NextRequest) {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
   if (fecha < today) return NextResponse.json({ error: 'Esa fecha ya pasó' }, { status: 400 })
 
-  const { data: me } = await supabaseAdmin.from('usuarios').select('equipo_id, nombre').eq('id', session.id).single()
-  if (!me?.equipo_id || me.equipo_id !== equipoId) {
+  if (acceso.equipoId !== equipoId) {
     return NextResponse.json({ error: 'Ese puesto no pertenece a tu equipo' }, { status: 403 })
   }
+  const equipoRow = { id: acceso.equipoId, nombre: acceso.equipoNombre }
 
-  const { data: equipoRow } = await supabaseAdmin.from('equipos').select('id, nombre').eq('id', equipoId).single()
-  if (!equipoRow) return NextResponse.json({ error: 'Equipo no encontrado' }, { status: 400 })
+  const { data: me } = await supabaseAdmin.from('usuarios').select('nombre').eq('id', session.id).single()
 
   // Revalidar server-side que el hueco sigue libre — nunca confiar en lo que mandó el cliente
   const [configRes, miembrosRes, horariosRes, solicitudesRes] = await Promise.all([
@@ -104,7 +105,7 @@ export async function POST(req: NextRequest) {
   if (encargadaIds.length) {
     await crearNotificaciones(encargadaIds, {
       titulo: 'Nueva solicitud de puesto',
-      mensaje: `${me.nombre} solicitó cubrir un ${tipo} de ${equipoRow.nombre} el ${fmtFechaLarga(fecha)} de ${horaInicio} a ${horaFin}.`,
+      mensaje: `${me?.nombre ?? session.nombre} solicitó cubrir ${conArticulo(tipo)} de ${equipoRow.nombre} el ${fmtFechaLarga(fecha)}, de ${horaInicio} a ${horaFin}.`,
       tipo: 'puesto_solicitado',
       url: '/dashboard/espacio-trabajo?tab=aprobaciones',
     }).catch(() => {})

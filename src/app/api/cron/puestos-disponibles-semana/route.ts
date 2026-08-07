@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { tipoRecurso, defaultCapacity, findGapsForDay, toMin, minToStr, overlaps } from '@/lib/gaps'
+import { getEquiposHabilitadosPuestos } from '@/lib/puestos'
 import { fmtFechaLarga } from '@/lib/fecha'
 import { crearNotificaciones, getUserIdsByEquipo } from '@/lib/notificaciones'
 
@@ -10,24 +12,24 @@ function addDays(date: string, n: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-// Corre los sábados: por cada equipo de manicura/masajes, si hay puestos libres para la
-// semana que viene (lunes a sábado), avisa a todo el equipo. Si no hay nada, no manda nada.
-export async function GET(req: NextRequest) {
-  const secret = req.nextUrl.searchParams.get('secret')
-  const authHeader = req.headers.get('authorization')
-  const bearerSecret = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
-  if (secret !== process.env.CRON_SECRET && bearerSecret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+function puedeAprobar(rol: string): boolean {
+  return rol === 'admin' || rol === 'Admin' || rol === 'Encargada'
+}
 
+// Por cada equipo habilitado por el admin, si hay puestos libres para la semana que viene
+// (lunes a sábado), avisa a todo el equipo. Si no hay nada, no manda nada.
+async function enviarAvisoSemanal() {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
   const dow = new Date(today + 'T12:00:00Z').getUTCDay() // 0=Dom..6=Sáb
   const diasHastaLunes = (8 - dow) % 7
   const lunes = addDays(today, diasHastaLunes)
   const sabado = addDays(lunes, 5)
 
-  const { data: equipos } = await supabaseAdmin.from('equipos').select('id, nombre')
-  const elegibles = (equipos ?? []).filter(e => tipoRecurso(e.nombre) !== null)
+  const [{ data: equipos }, habilitados] = await Promise.all([
+    supabaseAdmin.from('equipos').select('id, nombre'),
+    getEquiposHabilitadosPuestos(),
+  ])
+  const elegibles = (equipos ?? []).filter(e => habilitados.includes(e.id))
 
   const { data: configData } = await supabaseAdmin.from('configuracion').select('valor').eq('clave', 'espacio_trabajo').single()
   const capacidadesOverride = (configData?.valor as { capacidades?: Record<string, number> } | null)?.capacidades ?? {}
@@ -35,7 +37,7 @@ export async function GET(req: NextRequest) {
   const resultados: { equipo: string; huecos: number; notificados: number }[] = []
 
   for (const equipo of elegibles) {
-    const tipo = tipoRecurso(equipo.nombre)!
+    const tipo = tipoRecurso(equipo.nombre) ?? 'mesa'
     const capacity = capacidadesOverride[equipo.nombre] ?? defaultCapacity(equipo.nombre)
 
     const { data: miembros } = await supabaseAdmin.from('usuarios').select('id').eq('equipo_id', equipo.id).eq('estado_cuenta', 'activo')
@@ -88,7 +90,7 @@ export async function GET(req: NextRequest) {
       const m = masProximo as { fecha: string; inicio: string; fin: string }
       await crearNotificaciones(destinatarios, {
         titulo: `Hay ${tipo === 'box' ? 'boxes' : 'mesas'} libres la próxima semana`,
-        mensaje: `${huecosTotal} puesto${huecosTotal !== 1 ? 's' : ''} disponible${huecosTotal !== 1 ? 's' : ''} en ${equipo.nombre}. El más próximo: ${fmtFechaLarga(m.fecha)} de ${m.inicio} a ${m.fin}.`,
+        mensaje: `${huecosTotal} puesto${huecosTotal !== 1 ? 's' : ''} disponible${huecosTotal !== 1 ? 's' : ''} en ${equipo.nombre}. El más próximo: ${fmtFechaLarga(m.fecha)}, de ${m.inicio} a ${m.fin}.`,
         tipo: 'puestos_disponibles_semana',
         url: '/dashboard/espacio-trabajo',
       }).catch(() => {})
@@ -97,5 +99,28 @@ export async function GET(req: NextRequest) {
     resultados.push({ equipo: equipo.nombre, huecos: huecosTotal, notificados: destinatarios.length })
   }
 
-  return NextResponse.json({ ok: true, semana: { lunes, sabado }, resultados })
+  return { ok: true, semana: { lunes, sabado }, resultados }
+}
+
+// Cron automático (Vercel cron, sábados)
+export async function GET(req: NextRequest) {
+  const secret = req.nextUrl.searchParams.get('secret')
+  const authHeader = req.headers.get('authorization')
+  const bearerSecret = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+  if (secret !== process.env.CRON_SECRET && bearerSecret !== process.env.CRON_SECRET) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  }
+
+  const result = await enviarAvisoSemanal()
+  return NextResponse.json(result)
+}
+
+// Trigger manual desde el panel de Ajustes (Admin/Encargada)
+export async function POST() {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  if (!puedeAprobar(session.rol)) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
+
+  const result = await enviarAvisoSemanal()
+  return NextResponse.json(result)
 }

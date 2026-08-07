@@ -1,6 +1,6 @@
 import { getSession } from '@/lib/auth'
 import { redirect } from 'next/navigation'
-import { tipoRecurso } from '@/lib/gaps'
+import { resolverAccesoPuestos } from '@/lib/puestos'
 import EspacioTrabajoClient from './client'
 import PuestosEmpleadaView from './PuestosEmpleada'
 
@@ -15,8 +15,9 @@ export default async function EspacioTrabajoPage() {
 
   if (isGestion) return <EspacioTrabajoClient user={session} isAdminOrEncargada={isAdmin || isEncargada} />
 
-  // Manicura/masajes: vista simplificada para solicitar puestos libres, no el panel de gestión
-  if (tipoRecurso(session.equipo)) return <PuestosEmpleadaView />
+  // Solo equipos habilitados por el admin: vista simplificada para solicitar puestos libres
+  const acceso = await resolverAccesoPuestos(session.equipo)
+  if (acceso.ok) return <PuestosEmpleadaView />
 
   redirect('/dashboard')
 }

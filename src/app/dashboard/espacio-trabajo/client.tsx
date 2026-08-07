@@ -594,7 +594,7 @@ export default function EspacioTrabajoClient({ user, isAdminOrEncargada }: { use
 
       {/* Content */}
       {tab === 'aprobaciones' && isAdminOrEncargada ? (
-        <Aprobaciones />
+        <Aprobaciones isAdmin={user.rol === 'admin' || user.rol === 'Admin'} />
       ) : loading ? (
         <div className="py-16"><Spinner /></div>
       ) : error ? (

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Spinner } from '@/components/ui'
 import { IconLayoutGrid, IconCalendarCheck, IconX, IconClock } from '@/components/ui/Icons'
 import { fmtFechaLarga } from '@/lib/fecha'
+import { conArticulo } from '@/lib/gaps'
 
 interface Puesto {
   id: string
@@ -21,7 +22,7 @@ function todayStr() {
 
 export default function PuestosEmpleadaView() {
   const [puestos, setPuestos] = useState<Puesto[] | null>(null)
-  const [tipoRecurso, setTipoRecurso] = useState<'mesa' | 'box'>('mesa')
+  const [recurso, setRecurso] = useState<'mesa' | 'box'>('mesa')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [enviando, setEnviando] = useState<string | null>(null)
@@ -31,7 +32,7 @@ export default function PuestosEmpleadaView() {
     setLoading(true); setError('')
     fetch('/api/puestos-disponibles')
       .then(r => r.json())
-      .then(d => { if (d.error) setError(d.error); else { setPuestos(d.puestos); setTipoRecurso(d.tipo_recurso) } })
+      .then(d => { if (d.error) setError(d.error); else { setPuestos(d.puestos); setRecurso(d.tipo_recurso) } })
       .catch(() => setError('No se pudo cargar'))
       .finally(() => setLoading(false))
   }, [])
@@ -79,7 +80,7 @@ export default function PuestosEmpleadaView() {
         </div>
         <div>
           <h1 className="text-[17px] font-bold text-[var(--text)] leading-tight">Puestos disponibles</h1>
-          <p className="text-[12px] text-[var(--text-muted)]">Sumá horas cubriendo un {tipoRecurso} libre esta semana o la próxima</p>
+          <p className="text-[12px] text-[var(--text-muted)]">Pedí cubrir {conArticulo(recurso)} libre esta semana o la próxima, y sumá horas de trabajo</p>
         </div>
       </div>
 
