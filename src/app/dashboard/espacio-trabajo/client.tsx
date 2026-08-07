@@ -456,6 +456,16 @@ export default function EspacioTrabajoClient({ user, isAdminOrEncargada }: { use
     }
   }, [isAdminOrEncargada])
 
+  // Puntito en la pestaña "Aprobaciones" cuando hay solicitudes de puesto sin resolver
+  const [pendingAprobaciones, setPendingAprobaciones] = useState(0)
+  useEffect(() => {
+    if (!isAdminOrEncargada) return
+    fetch('/api/puestos-disponibles/aprobaciones?estado=pending')
+      .then(r => r.json())
+      .then(d => setPendingAprobaciones(Array.isArray(d) ? d.length : 0))
+      .catch(() => {})
+  }, [isAdminOrEncargada, tab])
+
   // Loaded week's dates
   const dates = useMemo(() => getWeekDates(weekYear, weekNum), [weekYear, weekNum])
 
@@ -587,6 +597,9 @@ export default function EspacioTrabajoClient({ user, isAdminOrEncargada }: { use
                   : 'text-[var(--text-muted)] hover:text-[var(--text-sub)]'
               }`}>
               Aprobaciones
+              {pendingAprobaciones > 0 && tab !== 'aprobaciones' && (
+                <span className="ml-1.5 inline-flex items-center justify-center w-1.5 h-1.5 rounded-full bg-red-500" />
+              )}
             </button>
           )}
         </div>

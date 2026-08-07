@@ -91,12 +91,12 @@ export default function Aprobaciones({ isAdmin }: { isAdmin: boolean }) {
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
         {SUBTABS.map(t => (
           <button key={t.key} onClick={() => setSubtab(t.key)}
-            className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all cursor-pointer ${
+            className={`flex-1 min-w-0 px-1.5 py-1.5 text-sm font-medium rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${
               subtab === t.key ? 'bg-white text-[var(--text)] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-sub)]'
             }`}>
-            {t.label}
+            <span className="truncate">{t.label}</span>
             {t.key === 'pending' && pendingCount > 0 && (
-              <span className="ml-1.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold">
+              <span className="flex-shrink-0 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold">
                 {pendingCount}
               </span>
             )}
