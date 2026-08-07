@@ -43,7 +43,7 @@ export async function POST(
   await crearNotificacion({
     usuario_id: solicitud.usuario_id,
     titulo: 'Se deshizo tu puesto aprobado',
-    mensaje: `La aprobación ${deArticulo(tipo)} de ${solicitud.equipo_nombre} del ${fechaTxt}, de ${horarioTxt}, fue anulada. El puesto vuelve a estar disponible para otra persona.`,
+    mensaje: `La aprobación ${deArticulo(tipo)} del ${fechaTxt} de ${horarioTxt} fue anulada. El puesto vuelve a estar disponible.`,
     tipo: 'puesto_deshecho',
     url: '/dashboard/espacio-trabajo',
   }).catch(() => {})

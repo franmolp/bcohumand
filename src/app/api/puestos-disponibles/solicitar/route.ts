@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
   if (encargadaIds.length) {
     await crearNotificaciones(encargadaIds, {
       titulo: 'Nueva solicitud de puesto',
-      mensaje: `${me?.nombre ?? session.nombre} solicitó cubrir ${conArticulo(tipo)} de ${equipoRow.nombre} el ${fmtFechaLarga(fecha)}, de ${horaInicio} a ${horaFin}.`,
+      mensaje: `${me?.nombre ?? session.nombre} solicitó cubrir ${conArticulo(tipo)} el ${fmtFechaLarga(fecha)} de ${horaInicio} a ${horaFin}.`,
       tipo: 'puesto_solicitado',
       url: '/dashboard/espacio-trabajo?tab=aprobaciones',
     }).catch(() => {})

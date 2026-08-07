@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { tipoRecurso, defaultCapacity, findGapsForDay, restarAprobados, decomponerGap, toMin, minToStr } from '@/lib/gaps'
+import { tipoRecurso, defaultCapacity, findGapsForDay, restarAprobados, decomponerGap, toMin } from '@/lib/gaps'
 import { getEquiposHabilitadosPuestos } from '@/lib/puestos'
-import { fmtFechaLarga } from '@/lib/fecha'
 import { crearNotificaciones, getUserIdsByEquipo } from '@/lib/notificaciones'
 
 function addDays(date: string, n: number): string {
@@ -67,19 +66,13 @@ async function enviarAvisoSemanal() {
     }
 
     let huecosTotal = 0
-    let masProximo: { fecha: string; inicio: string; fin: string } | null = null
 
     for (const [fecha, shiftsDia] of turnosPorFecha.entries()) {
       const gapsCrudos = findGapsForDay(shiftsDia, capacity)
       const aprobadosDia = aprobadosPorFecha.get(fecha) ?? []
       const gapsLibres = restarAprobados(gapsCrudos, aprobadosDia)
       for (const gap of gapsLibres) {
-        for (const pieza of decomponerGap(gap, tipo)) {
-          huecosTotal++
-          if (!masProximo || fecha < masProximo.fecha || (fecha === masProximo.fecha && pieza.start < toMin(masProximo.inicio))) {
-            masProximo = { fecha, inicio: minToStr(pieza.start), fin: minToStr(pieza.end) }
-          }
-        }
+        huecosTotal += decomponerGap(gap, tipo).length
       }
     }
 
@@ -87,11 +80,10 @@ async function enviarAvisoSemanal() {
     if (huecosTotal === 0) { resultados.push({ equipo: equipo.nombre, huecos: 0, notificados: 0 }); continue }
 
     const destinatarios = await getUserIdsByEquipo(equipo.nombre)
-    if (destinatarios.length > 0 && masProximo) {
-      const m = masProximo as { fecha: string; inicio: string; fin: string }
+    if (destinatarios.length > 0) {
       await crearNotificaciones(destinatarios, {
-        titulo: `Hay ${tipo === 'box' ? 'boxes' : 'mesas'} libres la próxima semana`,
-        mensaje: `${huecosTotal} puesto${huecosTotal !== 1 ? 's' : ''} disponible${huecosTotal !== 1 ? 's' : ''} en ${equipo.nombre}. El más próximo: ${fmtFechaLarga(m.fecha)}, de ${m.inicio} a ${m.fin}.`,
+        titulo: 'Hay turnos vacantes para esta semana',
+        mensaje: 'Hace click acá y solicitalos para sumar horas.',
         tipo: 'puestos_disponibles_semana',
         url: '/dashboard/espacio-trabajo',
       }).catch(() => {})

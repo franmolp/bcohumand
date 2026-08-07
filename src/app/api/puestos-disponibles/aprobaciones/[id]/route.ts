@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { fmtFechaLarga } from '@/lib/fecha'
-import { conArticuloDef, deArticulo } from '@/lib/gaps'
 import { crearNotificacion, crearNotificaciones } from '@/lib/notificaciones'
 
 function puedeAprobar(rol: string): boolean {
@@ -53,7 +52,7 @@ export async function PUT(
     await crearNotificacion({
       usuario_id: solicitud.usuario_id,
       titulo: 'Puesto aprobado',
-      mensaje: `Te aprobaron ${conArticuloDef(tipo)} de ${solicitud.equipo_nombre} del ${fechaTxt}, de ${horarioTxt}.`,
+      mensaje: `Te aprobaron ${tipo === 'box' ? 'el box solicitado' : 'la mesa solicitada'} el ${fechaTxt} de ${horarioTxt}.`,
       tipo: 'puesto_aprobado',
       url: '/dashboard/espacio-trabajo',
     }).catch(() => {})
@@ -78,7 +77,7 @@ export async function PUT(
 
       await crearNotificaciones(otras.map(o => o.usuario_id), {
         titulo: 'Puesto ya cubierto',
-        mensaje: `El puesto que solicitaste (${conArticuloDef(tipo)} de ${solicitud.equipo_nombre}, ${fechaTxt} de ${horarioTxt}) ya fue cubierto por otra persona.`,
+        mensaje: `Lamentablemente, el turno que solicitaste (${fechaTxt} de ${horarioTxt}) ya fue cubierto por otra persona.`,
         tipo: 'puesto_rechazado',
         url: '/dashboard/espacio-trabajo',
       }).catch(() => {})
@@ -87,7 +86,7 @@ export async function PUT(
     await crearNotificacion({
       usuario_id: solicitud.usuario_id,
       titulo: 'Puesto rechazado',
-      mensaje: `Tu solicitud ${deArticulo(tipo)} de ${solicitud.equipo_nombre} del ${fechaTxt}, de ${horarioTxt}, no fue aprobada${body.motivo ? `: ${body.motivo}` : '.'}`,
+      mensaje: `Lamentablemente, el turno que solicitaste (${fechaTxt} de ${horarioTxt}) no fue aprobado${body.motivo ? `: ${body.motivo}` : '.'}`,
       tipo: 'puesto_rechazado',
       url: '/dashboard/espacio-trabajo',
     }).catch(() => {})
