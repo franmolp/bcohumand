@@ -228,27 +228,51 @@ async function descargarReporte(page, url, label) {
     )
   }
 
-  // A veces Fresha muestra un panel/overlay TRANSITORIO (toast, aviso de carga, etc.
-  // — clase "modalSlide-...", o un backdrop data-qa="overlay" dentro del portal
-  // data-react-aria-top-layer) que tapa la UI unos segundos y desaparece solo.
-  // Lo más seguro es esperar a que se vaya, no forzar el click por encima ni tocar
-  // el DOM — eso confundía a React y después el menú de "Opciones" no abría bien.
+  // A veces Fresha muestra un panel/overlay que tapa la UI — puede ser transitorio
+  // (toast, aviso de carga) o un anuncio de "nueva funcionalidad" que hay que cerrar
+  // (clase "modalSlide-...", o un backdrop data-qa="overlay" dentro del portal
+  // data-react-aria-top-layer). Se maneja en 3 etapas, escalando solo si hace falta:
+  //   1) esperar a que desaparezca solo
+  //   2) cerrarlo activamente (botón de cerrar, o click "afuera" en una esquina neutra)
+  //   3) como último recurso, remover del DOM específicamente el panel de anuncio
+  //      (no cualquier overlay genérico — eso rompió el menú la vez pasada, probablemente
+  //      porque el data-qa="overlay" es el backdrop legítimo de otro popover de Fresha)
   const overlaySelector = '[class*="modalSlide" i], [data-qa="overlay"], [data-react-aria-top-layer] [role="dialog"]'
-  const esperarSinOverlay = async (timeout) => {
+  const promoSelector = '[class*="modalSlide" i]'
+
+  const limpiarOverlay = async () => {
     const overlay = page.locator(overlaySelector).first()
     if (await overlay.count() === 0) return
-    console.log(`[${label}] Overlay transitorio detectado, esperando a que desaparezca...`)
-    await overlay.waitFor({ state: 'hidden', timeout }).catch(() =>
-      console.warn(`[${label}] El overlay no desapareció en ${timeout}ms, se intenta clickear igual`)
-    )
+
+    console.log(`[${label}] Overlay detectado, esperando a que desaparezca solo...`)
+    const desaparecio = await overlay.waitFor({ state: 'hidden', timeout: 6000 }).then(() => true).catch(() => false)
+    if (desaparecio) return
+
+    console.log(`[${label}] Overlay sigue presente, intentando cerrarlo activamente`)
+    const closeBtn = overlay.locator('button[aria-label*="close" i], button[aria-label*="cerrar" i], button:has-text("×")').first()
+    if (await closeBtn.count() > 0) {
+      await closeBtn.click({ timeout: 3000 }).catch(() => {})
+    } else {
+      // Click "afuera", forma habitual de cerrar popovers/anuncios sin depender de un botón
+      await page.mouse.click(5, 5).catch(() => {})
+    }
+    await page.waitForTimeout(500)
+    if (await page.locator(overlaySelector).count() === 0) return
+
+    const promo = page.locator(promoSelector).first()
+    if (await promo.count() > 0) {
+      console.log(`[${label}] Overlay sigue tapando la UI, eliminando el panel de anuncio del DOM`)
+      await promo.evaluate(el => el.remove()).catch(() => {})
+      await page.waitForTimeout(300)
+    }
   }
 
-  await esperarSinOverlay(15000)
+  await limpiarOverlay()
   try {
     await opcionesBtn.click({ timeout: 15000 })
   } catch (e) {
-    console.warn(`[${label}] Click en "Opciones" falló, esperando overlay de nuevo: ${e.message}`)
-    await esperarSinOverlay(10000)
+    console.warn(`[${label}] Click en "Opciones" falló, reintentando: ${e.message}`)
+    await limpiarOverlay()
     try {
       await opcionesBtn.click({ timeout: 15000 })
     } catch (e2) {
