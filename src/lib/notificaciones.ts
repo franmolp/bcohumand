@@ -27,6 +27,11 @@ export type TipoNotif =
   | 'reconocimiento_recordatorio'
   | 'mural_mencion'
   | 'pedido_recordatorio'
+  | 'puesto_solicitado'
+  | 'puesto_aprobado'
+  | 'puesto_rechazado'
+  | 'puesto_deshecho'
+  | 'puestos_disponibles_semana'
 
 export async function sendPushToUsers(usuarioIds: string[], titulo: string, mensaje: string, url = '/dashboard/notificaciones') {
   const publicKey  = process.env.VAPID_PUBLIC_KEY

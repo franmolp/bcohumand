@@ -2,8 +2,11 @@ import Link from 'next/link'
 import type { SessionUser } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { IconCalendar, IconBell, IconAlertCircle, IconChevronRight, IconStar, IconClock, IconWall, IconTrophy } from '@/components/ui/Icons'
+import { IconCalendar, IconBell, IconAlertCircle, IconChevronRight, IconStar, IconClock, IconWall, IconTrophy, IconLayoutGrid } from '@/components/ui/Icons'
 import GoogleReviewsCarousel from '@/components/GoogleReviewsCarousel'
+import { tipoRecurso } from '@/lib/gaps'
+import { getPuestosDisponibles } from '@/lib/puestos'
+import { fmtFechaLarga } from '@/lib/fecha'
 
 const VACACIONES_DEFAULT = 14
 
@@ -366,6 +369,10 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   }
   unifiedItems.sort((a, b) => a.diasHasta - b.diasHasta)
 
+  // Mostrar las próximas 3 fechas distintas (si un día tiene varias cosas, se muestran todas esas)
+  const primerasFechas = [...new Set(unifiedItems.map(i => i.fecha))].slice(0, 3)
+  const itemsAMostrar = unifiedItems.filter(i => primerasFechas.includes(i.fecha))
+
   const TIPOS_AUSENCIA = ['Ausencia por Salud', 'Ausencia Injustificada', 'Vacaciones', 'Solicitud de Días', 'Cambio de horario/día']
   const ausentesHoyList = (ausentesRes.data ?? []).filter(r => {
     if (!TIPOS_AUSENCIA.includes(r.tipo)) return false
@@ -405,6 +412,11 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
     ? ((usersRes.data ?? []).find(u => u.id === muroPost.usuario_id) ?? null)
     : null
 
+  // Puestos libres (solo manicura/masajes) — card sólo aparece si hay algo disponible
+  const recursoElegible = tipoRecurso(session.equipo)
+  const puestosResult = recursoElegible ? await getPuestosDisponibles(session.id, session.equipo) : null
+  const puestosDisponibles = puestosResult && !('error' in puestosResult) ? puestosResult.puestos : []
+
   return (
     <div className="py-4 fade-in space-y-5">
       {/* Greeting */}
@@ -426,6 +438,25 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
         posicionMes={posicionMes}
         mesNombre={mesNombre}
       />
+
+      {/* Puestos libres — sólo manicura/masajes, y sólo si hay algo disponible */}
+      {puestosDisponibles.length > 0 && (
+        <Link href="/dashboard/espacio-trabajo"
+          className="flex items-center gap-3 rounded-2xl p-4 shadow-sm hover:opacity-95 transition-opacity"
+          style={{ background: 'var(--gradient)' }}>
+          <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+            <IconLayoutGrid size={20} className="text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[14px] font-bold text-white">Sumá horas esta semana</p>
+            <p className="text-[12px] text-white/70">
+              Hay {puestosDisponibles.length} {puestosDisponibles[0].tipo_recurso === 'box' ? 'boxes' : 'mesas'} libres
+              {' '}— el más próximo: {fmtFechaLarga(puestosDisponibles[0].fecha)}, {puestosDisponibles[0].hora_inicio}–{puestosDisponibles[0].hora_fin}
+            </p>
+          </div>
+          <IconChevronRight size={16} className="text-white/60 shrink-0" />
+        </Link>
+      )}
 
       {/* Últimas novedades del muro — solo si hubo posts en las últimas 24hs */}
       {muroPost && muroAutor && (
@@ -682,7 +713,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
               {unifiedItems.length === 0 && (
                 <p className="text-center text-[13px] text-gray-400 py-8">Sin eventos próximos</p>
               )}
-              {unifiedItems.slice(0, 8).map(item => {
+              {itemsAMostrar.map(item => {
                 const isCumple = item.kind === 'cumple'
                 const dotColor = item.kind === 'evento' ? 'bg-violet-400' : 'bg-blue-400'
                 const titulo = isCumple ? `Cumpleaños de ${item.titulo}` : item.titulo

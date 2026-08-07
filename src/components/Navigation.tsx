@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom'
 import type { SessionUser } from '@/types'
 import { IconHome, IconUsers, IconClipboard, IconLogout, IconBell, IconShoppingBag, IconWall, IconDollar, IconSettings, IconX, IconMore, IconCalendar, IconReceipt, IconShield, IconCamera, IconCalendarCheck, IconWrench, IconStar, IconLayoutGrid, IconBarChart, IconTrophy, IconBottle } from '@/components/ui/Icons'
 import PhotoCropModal from '@/components/PhotoCropModal'
+import { tipoRecurso } from '@/lib/gaps'
 
 const allNav = [
   { href: '/dashboard',              label: 'Inicio',         icon: IconHome,        mobile: true },
@@ -53,7 +54,8 @@ export default function Navigation({ user, hasPedidosAccess = false }: { user: S
     if (i.href === '/dashboard/pedidos' && !hasPedidosAccess) return false
     if ((i as {notAdmin?: boolean}).notAdmin && (isAdmin || isEncargada || isHR)) return false
     if (isHR && (i.href === '/dashboard/monotributo' || i.href === '/dashboard/liquidador')) return false
-    if (i.roles && !i.roles.includes(user.rol)) return false
+    if (i.href === '/dashboard/espacio-trabajo' && i.roles && !i.roles.includes(user.rol) && !tipoRecurso(user.equipo)) return false
+    if (i.href !== '/dashboard/espacio-trabajo' && i.roles && !i.roles.includes(user.rol)) return false
     const beta = (i as {beta?: string[]}).beta
     if (beta && !beta.includes(user.usuario ?? '') && !beta.includes(user.email ?? '')) return false
     return true

@@ -1,6 +1,8 @@
 import { getSession } from '@/lib/auth'
 import { redirect } from 'next/navigation'
+import { tipoRecurso } from '@/lib/gaps'
 import EspacioTrabajoClient from './client'
+import PuestosEmpleadaView from './PuestosEmpleada'
 
 export default async function EspacioTrabajoPage() {
   const session = await getSession()
@@ -9,6 +11,12 @@ export default async function EspacioTrabajoPage() {
   const isHR = session.rol === 'HR'
   const isEncargada = session.rol === 'Encargada'
   const isCompras = session.rol === 'Compras'
-  if (!isAdmin && !isHR && !isEncargada && !isCompras) redirect('/dashboard')
-  return <EspacioTrabajoClient user={session} />
+  const isGestion = isAdmin || isHR || isEncargada || isCompras
+
+  if (isGestion) return <EspacioTrabajoClient user={session} isAdminOrEncargada={isAdmin || isEncargada} />
+
+  // Manicura/masajes: vista simplificada para solicitar puestos libres, no el panel de gestión
+  if (tipoRecurso(session.equipo)) return <PuestosEmpleadaView />
+
+  redirect('/dashboard')
 }

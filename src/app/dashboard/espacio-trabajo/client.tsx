@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import type { SessionUser } from '@/types'
 import { Spinner } from '@/components/ui'
 import { IconLayoutGrid, IconChevronLeft, IconChevronRight, IconClock } from '@/components/ui/Icons'
+import Aprobaciones from './Aprobaciones'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface Turno {
@@ -434,7 +435,7 @@ function sectionOrder(equipoNombre: string): number {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-export default function EspacioTrabajoClient({ user }: { user: SessionUser }) {
+export default function EspacioTrabajoClient({ user, isAdminOrEncargada }: { user: SessionUser; isAdminOrEncargada: boolean }) {
   const todayStr = new Date().toLocaleDateString('sv')
   const initIso = isoWeekOf(todayStr)
 
@@ -443,10 +444,17 @@ export default function EspacioTrabajoClient({ user }: { user: SessionUser }) {
   const [weekYear, setWeekYear] = useState(initIso.year)
   const [weekNum, setWeekNum] = useState(initIso.week)
   const [selectedDate, setSelectedDate] = useState(todayStr)
-  const [tab, setTab] = useState<'ocupacion' | 'disponibles'>('ocupacion')
+  const [tab, setTab] = useState<'ocupacion' | 'disponibles' | 'aprobaciones'>('ocupacion')
   const [apiData, setApiData] = useState<ApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Si vino desde una notificación (?tab=aprobaciones), abrir directo esa pestaña
+  useEffect(() => {
+    if (isAdminOrEncargada && new URLSearchParams(window.location.search).get('tab') === 'aprobaciones') {
+      setTab('aprobaciones')
+    }
+  }, [isAdminOrEncargada])
 
   // Loaded week's dates
   const dates = useMemo(() => getWeekDates(weekYear, weekNum), [weekYear, weekNum])
@@ -543,34 +551,51 @@ export default function EspacioTrabajoClient({ user }: { user: SessionUser }) {
       />
 
       {/* Tabs */}
-      {apiData && groups.length > 0 && (
+      {apiData && (groups.length > 0 || isAdminOrEncargada) && (
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-          <button
-            onClick={() => setTab('ocupacion')}
-            className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all cursor-pointer ${
-              tab === 'ocupacion'
-                ? 'bg-white text-[var(--text)] shadow-sm'
-                : 'text-[var(--text-muted)] hover:text-[var(--text-sub)]'
-            }`}>
-            Ocupación
-          </button>
-          <button
-            onClick={() => setTab('disponibles')}
-            className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all cursor-pointer ${
-              tab === 'disponibles'
-                ? 'bg-white text-[var(--text)] shadow-sm'
-                : 'text-[var(--text-muted)] hover:text-[var(--text-sub)]'
-            }`}>
-            Disponibles
-            {hasAvailable && tab !== 'disponibles' && (
-              <span className="ml-1.5 inline-flex items-center justify-center w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            )}
-          </button>
+          {groups.length > 0 && (
+            <>
+              <button
+                onClick={() => setTab('ocupacion')}
+                className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all cursor-pointer ${
+                  tab === 'ocupacion'
+                    ? 'bg-white text-[var(--text)] shadow-sm'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-sub)]'
+                }`}>
+                Ocupación
+              </button>
+              <button
+                onClick={() => setTab('disponibles')}
+                className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all cursor-pointer ${
+                  tab === 'disponibles'
+                    ? 'bg-white text-[var(--text)] shadow-sm'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-sub)]'
+                }`}>
+                Disponibles
+                {hasAvailable && tab !== 'disponibles' && (
+                  <span className="ml-1.5 inline-flex items-center justify-center w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                )}
+              </button>
+            </>
+          )}
+          {isAdminOrEncargada && (
+            <button
+              onClick={() => setTab('aprobaciones')}
+              className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all cursor-pointer ${
+                tab === 'aprobaciones'
+                  ? 'bg-white text-[var(--text)] shadow-sm'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-sub)]'
+              }`}>
+              Aprobaciones
+            </button>
+          )}
         </div>
       )}
 
       {/* Content */}
-      {loading ? (
+      {tab === 'aprobaciones' && isAdminOrEncargada ? (
+        <Aprobaciones />
+      ) : loading ? (
         <div className="py-16"><Spinner /></div>
       ) : error ? (
         <div className="py-10 text-center text-sm text-red-500">{error}</div>
