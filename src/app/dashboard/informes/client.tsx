@@ -7,7 +7,7 @@ import { Spinner } from '@/components/ui'
 import {
   IconBarChart, IconChevronLeft, IconChevronRight, IconDollar, IconCalendarCheck,
   IconUsers, IconReceipt, IconClock, IconX, IconEdit, IconPlus,
-  IconLock, IconLockOpen, IconArchive, IconAlertCircle, IconCheck,
+  IconLock, IconLockOpen, IconArchive, IconAlertCircle, IconCheck, IconShoppingBag,
 } from '@/components/ui/Icons'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -124,7 +124,7 @@ interface RetiroItem {
 }
 
 interface Evento {
-  tipo: 'apertura' | 'cierre' | 'retiro' | 'sobre' | 'ajuste'
+  tipo: 'apertura' | 'cierre' | 'retiro' | 'sobre' | 'ajuste' | 'compra'
   hora: string
   monto: number
   ventas?: number
@@ -148,7 +148,7 @@ interface DiaData {
   ajuste: { saldo_nuevo: number; motivo: string | null } | null
   retiros_list: RetiroItem[]
   eventos: Evento[]
-  alerta_salida: { loyverse: number; cargado: number } | null
+  alerta_salida: { loyverse: number; sobres: number; compras: number } | null
 }
 
 interface CajaResumen {
@@ -427,6 +427,7 @@ function TabCaja({ mes }: { mes: string }) {
           retiro: { Icon: IconDollar, label: 'Retiro', color: 'text-amber-600' },
           sobre: { Icon: IconArchive, label: 'Sobre', color: 'text-purple-600' },
           ajuste: { Icon: IconEdit, label: 'Ajuste', color: 'text-blue-600' },
+          compra: { Icon: IconShoppingBag, label: 'Compra', color: 'text-slate-500' },
         }
         return (
           <div key={dia.fecha} className={`bg-white rounded-2xl border overflow-hidden ${hasDisc ? 'border-red-200' : 'border-[var(--border)]'}`}>
@@ -471,15 +472,14 @@ function TabCaja({ mes }: { mes: string }) {
                 </div>
               )}
 
-              {/* Salida de Loyverse sin sobre cargado (o que no coincide) */}
+              {/* Salida de Loyverse que no cuadra contra sobres + compras en efectivo */}
               {dia.alerta_salida && (
                 <div className="bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
                   <IconAlertCircle size={13} className="text-amber-600 shrink-0" />
                   <p className="text-[12px] text-amber-700">
-                    Loyverse registró <span className="font-semibold">{fmt$(dia.alerta_salida.loyverse)}</span> en salidas de caja
-                    {dia.alerta_salida.cargado > 0
-                      ? <> pero cargaste <span className="font-semibold">{fmt$(dia.alerta_salida.cargado)}</span> como sobre — revisá la diferencia</>
-                      : <> y no cargaste ningún sobre — revisá si falta anotarlo</>}
+                    Loyverse registró <span className="font-semibold">{fmt$(dia.alerta_salida.loyverse)}</span> en salidas,
+                    pero sobre ({fmt$(dia.alerta_salida.sobres)}) + compras en efectivo ({fmt$(dia.alerta_salida.compras)})
+                    dan <span className="font-semibold">{fmt$(dia.alerta_salida.sobres + dia.alerta_salida.compras)}</span> — revisá la diferencia
                   </p>
                 </div>
               )}
