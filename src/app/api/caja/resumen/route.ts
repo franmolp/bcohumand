@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
   const queryFrom = mesStart < trackFrom ? mesStart : trackFrom
   const hayTracking = trackFrom <= calcEnd
 
-  const [cierresRes, retirosRes, ajustesRes, pagosRes, comprasRes] = await Promise.all([
+  const [cierresRes, retirosRes, ajustesRes, pagosRes, comprasRes, sobresTotalRes] = await Promise.all([
     supabaseAdmin
       .from('loyverse_cierres')
       .select('id, fecha, opened_at, closed_at, starting_cash, cash_payments, actual_cash, expected_cash, paid_out')
@@ -124,6 +124,13 @@ export async function GET(req: NextRequest) {
       .eq('estado_pago', 'efectivo')
       .order('fecha')
       .order('created_at'),
+
+    // Total histórico de sobres (caja fuerte) — independiente del mes visualizado
+    // y de fecha_inicio: un sobre cargado para cualquier fecha cuenta siempre.
+    supabaseAdmin
+      .from('retiros_caja')
+      .select('monto')
+      .eq('tipo', 'sobre'),
   ])
 
   // Turnos (shifts de Loyverse) agrupados por fecha, ordenados por apertura
@@ -191,7 +198,7 @@ export async function GET(req: NextRequest) {
   const allDays = enumerateDays(queryFrom, calcEnd)
   let efectivo_mes = 0
   let retiros_mes = 0
-  let caja_fuerte = 0
+  const caja_fuerte = (sobresTotalRes.data ?? []).reduce((s, r) => s + Number(r.monto ?? 0), 0)
   let saldo_actual: number | null = hayTracking ? saldo : null
 
   type DiaData = {
@@ -309,9 +316,6 @@ export async function GET(req: NextRequest) {
     if (tracked) {
       saldoDia = saldo
       saldo_actual = saldo
-
-      // caja_fuerte = sobres acumulados desde que arrancó el seguimiento
-      caja_fuerte += retirosDia.sobres
     }
 
     // El efectivo/retiros del mes se muestran para TODO el mes, tenga o no seguimiento de saldo

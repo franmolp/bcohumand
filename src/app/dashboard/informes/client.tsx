@@ -421,6 +421,7 @@ function TabCaja({ mes }: { mes: string }) {
 
       {dias.map(dia => {
         const hasDisc = dia.tiene_discrepancia || (dia.discrepancia !== null && Math.abs(dia.discrepancia) >= 1) || !!dia.alerta_salida
+        const chequeado = dia.eventos.some(e => e.tipo === 'apertura' && e.discrepancia !== null && e.discrepancia !== undefined)
         const evCfg: Record<Evento['tipo'], { Icon: typeof IconLock; label: string; color: string }> = {
           apertura: { Icon: IconLockOpen, label: 'Apertura', color: 'text-[var(--text)]' },
           cierre: { Icon: IconLock, label: 'Cierre', color: 'text-[var(--text)]' },
@@ -464,11 +465,21 @@ function TabCaja({ mes }: { mes: string }) {
                 )}
               </div>
 
-              {/* Discrepancy */}
-              {hasDisc && dia.discrepancia !== null && (
+              {/* Discrepancy: compara cada apertura de turno contra el cierre inmediato anterior */}
+              {dia.discrepancia !== null && Math.abs(dia.discrepancia) >= 1 ? (
                 <div className="bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
                   <IconAlertCircle size={13} className="text-red-500 shrink-0" />
-                  <p className="text-[12px] text-red-700">Diferencia en apertura: <span className="font-semibold">{fmt$(dia.discrepancia)}</span></p>
+                  <p className="text-[12px] text-red-700">No coincide con el cierre anterior: diferencia de <span className="font-semibold">{fmt$(dia.discrepancia)}</span></p>
+                </div>
+              ) : dia.tiene_discrepancia ? (
+                <div className="bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
+                  <IconAlertCircle size={13} className="text-red-500 shrink-0" />
+                  <p className="text-[12px] text-red-700">El cierre de un turno no coincide con la apertura del siguiente — mirá el log</p>
+                </div>
+              ) : chequeado && (
+                <div className="bg-green-50 border border-green-100 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
+                  <IconCheck size={13} className="text-green-600 shrink-0" />
+                  <p className="text-[12px] text-green-700">Todas las aperturas coinciden con el cierre anterior</p>
                 </div>
               )}
 
