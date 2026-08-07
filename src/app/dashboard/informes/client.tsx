@@ -474,13 +474,15 @@ function TabCaja({ mes }: { mes: string }) {
 
               {/* Salida de Loyverse que no cuadra contra sobres + compras en efectivo */}
               {dia.alerta_salida && (
-                <div className="bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
-                  <IconAlertCircle size={13} className="text-amber-600 shrink-0" />
-                  <p className="text-[12px] text-amber-700">
-                    Loyverse registró <span className="font-semibold">{fmt$(dia.alerta_salida.loyverse)}</span> en salidas,
-                    pero sobre ({fmt$(dia.alerta_salida.sobres)}) + compras en efectivo ({fmt$(dia.alerta_salida.compras)})
-                    dan <span className="font-semibold">{fmt$(dia.alerta_salida.sobres + dia.alerta_salida.compras)}</span> — revisá la diferencia
-                  </p>
+                <div className="bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2 flex items-start gap-1.5">
+                  <IconAlertCircle size={13} className="text-amber-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-[12px] font-semibold text-amber-700">Salida sin explicar en Loyverse</p>
+                    <p className="text-[11px] text-amber-700 mt-0.5">
+                      Loyverse: {fmt$(dia.alerta_salida.loyverse)} · Sobre: {fmt$(dia.alerta_salida.sobres)} · Compras: {fmt$(dia.alerta_salida.compras)}
+                    </p>
+                    <p className="text-[11px] text-amber-600 mt-0.5">Revisá si falta cargar un sobre o una compra.</p>
+                  </div>
                 </div>
               )}
 
@@ -523,24 +525,33 @@ function TabCaja({ mes }: { mes: string }) {
                         const checked = ev.tipo === 'apertura' && ev.discrepancia !== null && ev.discrepancia !== undefined
                         const evDisc = checked && Math.abs(ev.discrepancia!) >= 1
                         const c = evCfg[ev.tipo]
-                        let sub = ev.detalle ?? null
-                        if (ev.tipo === 'cierre' && ev.ventas !== undefined) sub = `vendieron ${fmt$(ev.ventas)}`
+                        const sub = ev.tipo === 'cierre' && ev.ventas !== undefined
+                          ? `Vendieron ${fmt$(ev.ventas)}`
+                          : ev.detalle
                         return (
-                          <div key={i} className={`flex items-center gap-2 py-1.5 ${i > 0 ? 'border-t border-gray-50' : ''} ${evDisc ? 'bg-red-50 -mx-1.5 px-1.5 rounded-lg' : ''}`}>
-                            <c.Icon size={13} className={`shrink-0 ${evDisc ? 'text-red-500' : c.color}`} />
-                            <div className="flex-1 min-w-0 flex items-baseline gap-1.5">
-                              <span className={`text-[12px] font-semibold shrink-0 ${evDisc ? 'text-red-600' : c.color}`}>{c.label}</span>
-                              <span className="text-[10px] text-[var(--text-muted)] shrink-0">{ev.hora}hs</span>
-                              {sub && <span className="text-[11px] text-[var(--text-muted)] truncate">· {sub}</span>}
-                              {ev.contado !== undefined && (
-                                <span className="text-[11px] text-amber-600 truncate">· contado {fmt$(ev.contado)}</span>
-                              )}
+                          <div key={i} className={`py-2 ${i > 0 ? 'border-t border-gray-50' : ''} ${evDisc ? 'bg-red-50 -mx-1.5 px-1.5 rounded-lg' : ''}`}>
+                            <div className="flex items-center gap-1.5">
+                              <c.Icon size={13} className={`shrink-0 ${evDisc ? 'text-red-500' : c.color}`} />
+                              <span className={`text-[12px] font-semibold ${evDisc ? 'text-red-600' : c.color}`}>{c.label}</span>
+                              <span className="text-[10px] text-[var(--text-muted)]">{ev.hora}hs</span>
+                              <div className="flex-1" />
+                              {checked && !evDisc && <IconCheck size={12} className="text-green-500 shrink-0" />}
+                              {evDisc && <IconAlertCircle size={13} className="text-red-500 shrink-0" />}
+                              <span className={`text-[13px] font-semibold shrink-0 ${evDisc ? 'text-red-600' : 'text-[var(--text)]'}`}>{fmt$(ev.monto)}</span>
                             </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              {checked && !evDisc && <IconCheck size={12} className="text-green-500" />}
-                              {evDisc && <IconAlertCircle size={13} className="text-red-500" />}
-                              <span className={`text-[13px] font-semibold ${evDisc ? 'text-red-600' : 'text-[var(--text)]'}`}>{fmt$(ev.monto)}</span>
-                            </div>
+                            {(sub || ev.contado !== undefined || evDisc) && (
+                              <div className="pl-5 mt-1 flex flex-col gap-0.5">
+                                {sub && <p className="text-[11px] text-[var(--text-muted)] leading-snug break-words">{sub}</p>}
+                                {ev.contado !== undefined && (
+                                  <p className="text-[11px] text-amber-600 leading-snug">Conteo del local: {fmt$(ev.contado)}</p>
+                                )}
+                                {evDisc && (
+                                  <p className="text-[11px] font-semibold text-red-600 leading-snug">
+                                    No coincide con el cierre anterior — diferencia de {fmt$(ev.discrepancia!)}
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )
                       })}
