@@ -271,10 +271,22 @@ async function descargarReporte(page, url, label) {
   // Buscar el item CSV en el menú — priorizamos li/button/a que contengan exactamente "CSV"
   const csvItem = page.locator('li, button, a, [role="menuitem"]').filter({ hasText: /^CSV$/ }).first()
   const fallbackItem = page.locator('li:has-text("CSV"), button:has-text("CSV"), a:has-text("CSV"), [role="menuitem"]:has-text("CSV")').first()
-  const itemToClick = (await csvItem.count() > 0) ? csvItem : fallbackItem
+  let itemToClick = (await csvItem.count() > 0) ? csvItem : fallbackItem
+
+  // El menú puede tardar en renderizar (más aún después de haber manipuleado el DOM
+  // para sacar un overlay). Reintentamos un par de veces antes de darnos por vencidos.
+  for (let intento = 0; await itemToClick.count() === 0 && intento < 4; intento++) {
+    await page.waitForTimeout(750)
+    itemToClick = (await csvItem.count() > 0) ? csvItem : fallbackItem
+  }
 
   if (await itemToClick.count() === 0) {
-    await page.screenshot({ path: `/tmp/fresha-${label}-debug.png` })
+    await page.screenshot({ path: `/tmp/fresha-${label}-debug.png`, fullPage: true }).catch(() => {})
+    // Volcamos el texto de cualquier menú/dropdown visible para diagnosticar sin
+    // depender de bajar el screenshot del artifact.
+    const menuText = await page.locator('[role="menu"], [class*="dropdown" i], [class*="Menu" i], [data-react-aria-top-layer]')
+      .allInnerTexts().catch(() => [])
+    console.log(`[${label}] Contenido de menús/overlays visibles al fallar:`, JSON.stringify(menuText))
     throw new Error(
       `[${label}] No se encontró la opción CSV en el menú.\n` +
       `Screenshot guardado en /tmp/fresha-${label}-debug.png`
