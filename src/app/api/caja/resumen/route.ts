@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       configurado: false,
       dias: [],
-      kpis: { efectivo_mes: 0, retiros_mes: 0, saldo_actual: 0, caja_fuerte: 0 },
+      kpis: { efectivo_mes: 0, retiros_mes: 0, sobres_mes: 0, saldo_actual: 0, caja_fuerte: 0 },
     })
   }
 
@@ -198,6 +198,7 @@ export async function GET(req: NextRequest) {
   const allDays = enumerateDays(queryFrom, calcEnd)
   let efectivo_mes = 0
   let retiros_mes = 0
+  let sobres_mes = 0
   const caja_fuerte = (sobresTotalRes.data ?? []).reduce((s, r) => s + Number(r.monto ?? 0), 0)
   let saldo_actual: number | null = hayTracking ? saldo : null
 
@@ -323,6 +324,7 @@ export async function GET(req: NextRequest) {
     if (inMes) {
       efectivo_mes += efectivo
       retiros_mes += retirosDia.total - retirosDia.sobres
+      sobres_mes += retirosDia.sobres
 
       diasDelMes.push({
         fecha: day,
@@ -347,6 +349,6 @@ export async function GET(req: NextRequest) {
     configurado: true,
     config,
     dias: diasDelMes.reverse(), // most recent first
-    kpis: { efectivo_mes, retiros_mes, saldo_actual, caja_fuerte },
+    kpis: { efectivo_mes, retiros_mes, sobres_mes, saldo_actual, caja_fuerte },
   })
 }

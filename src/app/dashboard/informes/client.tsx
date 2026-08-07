@@ -155,7 +155,16 @@ interface CajaResumen {
   configurado: boolean
   config?: CajaConfig
   dias: DiaData[]
-  kpis: { efectivo_mes: number; retiros_mes: number; saldo_actual: number | null; caja_fuerte: number }
+  kpis: { efectivo_mes: number; retiros_mes: number; sobres_mes: number; saldo_actual: number | null; caja_fuerte: number }
+}
+
+const EVENTO_CFG: Record<Evento['tipo'], { Icon: typeof IconLock; label: string; color: string }> = {
+  apertura: { Icon: IconLockOpen, label: 'Apertura', color: 'text-[var(--text)]' },
+  cierre: { Icon: IconLock, label: 'Cierre', color: 'text-[var(--text)]' },
+  retiro: { Icon: IconDollar, label: 'Retiro', color: 'text-amber-600' },
+  sobre: { Icon: IconArchive, label: 'Sobre', color: 'text-purple-600' },
+  ajuste: { Icon: IconEdit, label: 'Ajuste', color: 'text-blue-600' },
+  compra: { Icon: IconShoppingBag, label: 'Compra', color: 'text-slate-500' },
 }
 
 // ─── Tab Caja ─────────────────────────────────────────────────────────────────
@@ -381,14 +390,18 @@ function TabCaja({ mes }: { mes: string }) {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 gap-3">
         <KpiCard label="Efectivo del mes" value={fmt$(kpis.efectivo_mes)} sub="ventas en efectivo" />
-        <KpiCard label="Retiros personales" value={fmt$(kpis.retiros_mes)} sub="lo que te llevaste" />
+        <KpiCard
+          label="Retirado del mes"
+          value={fmt$(kpis.retiros_mes + kpis.sobres_mes)}
+          sub={kpis.sobres_mes > 0 ? `sobre ${fmt$(kpis.sobres_mes)} · retiro ${fmt$(kpis.retiros_mes)}` : 'lo que salió de la caja'}
+        />
         <KpiCard
           label="Saldo en caja"
           value={kpis.saldo_actual === null ? '—' : fmt$(kpis.saldo_actual)}
           color={kpis.saldo_actual !== null && kpis.saldo_actual < 0 ? 'text-red-500' : 'text-green-600'}
           sub="estimado actual"
         />
-        <KpiCard label="Sobres acumulados" value={fmt$(kpis.caja_fuerte)} sub="en bóveda del salón" />
+        <KpiCard label="Caja fuerte" value={fmt$(kpis.caja_fuerte)} sub="total histórico en sobres" />
       </div>
 
       {/* Alert for discrepancies */}
@@ -422,14 +435,6 @@ function TabCaja({ mes }: { mes: string }) {
       {dias.map(dia => {
         const hasDisc = dia.tiene_discrepancia || (dia.discrepancia !== null && Math.abs(dia.discrepancia) >= 1) || !!dia.alerta_salida
         const chequeado = dia.eventos.some(e => e.tipo === 'apertura' && e.discrepancia !== null && e.discrepancia !== undefined)
-        const evCfg: Record<Evento['tipo'], { Icon: typeof IconLock; label: string; color: string }> = {
-          apertura: { Icon: IconLockOpen, label: 'Apertura', color: 'text-[var(--text)]' },
-          cierre: { Icon: IconLock, label: 'Cierre', color: 'text-[var(--text)]' },
-          retiro: { Icon: IconDollar, label: 'Retiro', color: 'text-amber-600' },
-          sobre: { Icon: IconArchive, label: 'Sobre', color: 'text-purple-600' },
-          ajuste: { Icon: IconEdit, label: 'Ajuste', color: 'text-blue-600' },
-          compra: { Icon: IconShoppingBag, label: 'Compra', color: 'text-slate-500' },
-        }
         return (
           <div key={dia.fecha} className={`bg-white rounded-2xl border overflow-hidden ${hasDisc ? 'border-red-200' : 'border-[var(--border)]'}`}>
             {/* Header */}
@@ -454,11 +459,8 @@ function TabCaja({ mes }: { mes: string }) {
                   <span className="text-[var(--text-muted)]">Efectivo </span>
                   <span className="font-semibold">{fmt$(dia.efectivo_vendido)}</span>
                 </span>
-                {dia.retiros > 0 && (
-                  <span className="text-amber-600 font-semibold">Retiro {fmt$(dia.retiros)}</span>
-                )}
-                {dia.sobres > 0 && (
-                  <span className="text-purple-600 font-semibold">Sobre {fmt$(dia.sobres)}</span>
+                {(dia.retiros + dia.sobres) > 0 && (
+                  <span className="text-amber-600 font-semibold">Retirado {fmt$(dia.retiros + dia.sobres)}</span>
                 )}
                 {dia.ajuste && (
                   <span className="text-blue-600 font-semibold">Ajuste → {fmt$(dia.ajuste.saldo_nuevo)}</span>
@@ -535,7 +537,7 @@ function TabCaja({ mes }: { mes: string }) {
                       {dia.eventos.map((ev, i) => {
                         const checked = ev.tipo === 'apertura' && ev.discrepancia !== null && ev.discrepancia !== undefined
                         const evDisc = checked && Math.abs(ev.discrepancia!) >= 1
-                        const c = evCfg[ev.tipo]
+                        const c = EVENTO_CFG[ev.tipo]
                         const sub = ev.tipo === 'cierre' && ev.ventas !== undefined
                           ? `Vendieron ${fmt$(ev.ventas)}`
                           : ev.detalle
