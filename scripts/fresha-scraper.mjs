@@ -228,40 +228,33 @@ async function descargarReporte(page, url, label) {
     )
   }
 
-  // A veces Fresha muestra un panel deslizante (anuncios, tour, etc. — clase
-  // "modalSlide-...", montado en un portal data-react-aria-top-layer) que tapa el
-  // botón "Opciones" e intercepta el click aunque el botón esté visible/habilitado.
-  // Si tiene botón de cerrar lo usamos; si no, lo sacamos directo del DOM — es un
-  // panel informativo de Fresha, no afecta los datos que scrapeamos.
-  const cerrarOverlay = async () => {
-    const overlay = page.locator('[class*="modalSlide" i], [data-react-aria-top-layer] [role="dialog"], [role="dialog"]').first()
-    const count = await overlay.count()
-    if (count === 0) return false
-    console.log(`[${label}] Overlay detectado tapando la UI, intentando cerrarlo`)
-    const closeBtn = overlay.locator('button[aria-label*="close" i], button[aria-label*="cerrar" i], button:has-text("×")').first()
-    if (await closeBtn.count() > 0) await closeBtn.click({ timeout: 3000 }).catch(() => {})
-    await page.keyboard.press('Escape').catch(() => {})
-    await page.waitForTimeout(400)
-    if (await overlay.count() > 0) {
-      console.log(`[${label}] Overlay seguía presente, eliminándolo del DOM`)
-      await overlay.evaluate(el => el.remove()).catch(() => {})
-      await page.waitForTimeout(300)
-    }
-    return true
+  // A veces Fresha muestra un panel/overlay TRANSITORIO (toast, aviso de carga, etc.
+  // — clase "modalSlide-...", o un backdrop data-qa="overlay" dentro del portal
+  // data-react-aria-top-layer) que tapa la UI unos segundos y desaparece solo.
+  // Lo más seguro es esperar a que se vaya, no forzar el click por encima ni tocar
+  // el DOM — eso confundía a React y después el menú de "Opciones" no abría bien.
+  const overlaySelector = '[class*="modalSlide" i], [data-qa="overlay"], [data-react-aria-top-layer] [role="dialog"]'
+  const esperarSinOverlay = async (timeout) => {
+    const overlay = page.locator(overlaySelector).first()
+    if (await overlay.count() === 0) return
+    console.log(`[${label}] Overlay transitorio detectado, esperando a que desaparezca...`)
+    await overlay.waitFor({ state: 'hidden', timeout }).catch(() =>
+      console.warn(`[${label}] El overlay no desapareció en ${timeout}ms, se intenta clickear igual`)
+    )
   }
 
-  await cerrarOverlay()
+  await esperarSinOverlay(15000)
   try {
-    await opcionesBtn.click({ timeout: 10000 })
+    await opcionesBtn.click({ timeout: 15000 })
   } catch (e) {
-    console.warn(`[${label}] Click en "Opciones" falló, reintentando tras cerrar overlay: ${e.message}`)
-    await cerrarOverlay()
+    console.warn(`[${label}] Click en "Opciones" falló, esperando overlay de nuevo: ${e.message}`)
+    await esperarSinOverlay(10000)
     try {
-      await opcionesBtn.click({ timeout: 15000, force: true })
+      await opcionesBtn.click({ timeout: 15000 })
     } catch (e2) {
       await page.screenshot({ path: `/tmp/fresha-${label}-debug.png`, fullPage: true }).catch(() => {})
       throw new Error(
-        `[${label}] No se pudo hacer click en "Opciones" (posible modal/overlay tapando el botón).\n` +
+        `[${label}] No se pudo hacer click en "Opciones" (posible overlay tapando el botón).\n` +
         `Screenshot guardado en /tmp/fresha-${label}-debug.png\n${e2.message}`
       )
     }
