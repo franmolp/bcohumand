@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Spinner, Confirm } from '@/components/ui'
 import { IconCheck, IconX, IconRefresh, IconClock, IconSettings, IconBell, IconTrash } from '@/components/ui/Icons'
 import { fmtFechaLarga } from '@/lib/fecha'
-import { conArticuloDef } from '@/lib/gaps'
+import { conArticulo, conArticuloDef } from '@/lib/gaps'
 
 interface Solicitud {
   id: string
@@ -232,7 +232,7 @@ export default function Aprobaciones({ isAdmin }: { isAdmin: boolean }) {
         open={!!confirmAccion}
         title={confirmAccion?.accion === 'approve' ? '¿Aprobás esta solicitud?' : '¿Rechazás esta solicitud?'}
         message={confirmAccion
-          ? `${confirmAccion.solicitud.empleado_nombre} — ${conArticuloDef(confirmAccion.solicitud.tipo_recurso)} de ${confirmAccion.solicitud.equipo_nombre}, ${fmtFechaLarga(confirmAccion.solicitud.fecha)} de ${confirmAccion.solicitud.hora_inicio.slice(0, 5)} a ${confirmAccion.solicitud.hora_fin.slice(0, 5)}.${confirmAccion.accion === 'approve' ? ' Las demás solicitudes para ese mismo puesto quedarán rechazadas automáticamente.' : ''}`
+          ? `${confirmAccion.solicitud.empleado_nombre} solicitó cubrir ${conArticulo(confirmAccion.solicitud.tipo_recurso)} de ${confirmAccion.solicitud.equipo_nombre} el ${fmtFechaLarga(confirmAccion.solicitud.fecha)}, de ${confirmAccion.solicitud.hora_inicio.slice(0, 5)} a ${confirmAccion.solicitud.hora_fin.slice(0, 5)}.${confirmAccion.accion === 'approve' ? ' Al aprobarla, las demás solicitudes para este mismo puesto se rechazan automáticamente.' : ''}`
           : ''}
         confirmLabel={confirmAccion?.accion === 'approve' ? 'Aprobar' : 'Rechazar'}
         danger={confirmAccion?.accion === 'reject'}
@@ -244,7 +244,7 @@ export default function Aprobaciones({ isAdmin }: { isAdmin: boolean }) {
         open={!!confirmDeshacer}
         title="¿Deshacer esta aprobación?"
         message={confirmDeshacer
-          ? `${confirmDeshacer.empleado_nombre} — ${conArticuloDef(confirmDeshacer.tipo_recurso)} de ${confirmDeshacer.equipo_nombre}, ${fmtFechaLarga(confirmDeshacer.fecha)} de ${confirmDeshacer.hora_inicio.slice(0, 5)} a ${confirmDeshacer.hora_fin.slice(0, 5)}. El puesto vuelve a quedar disponible para que otra persona lo pida.`
+          ? `Le aprobaste ${conArticuloDef(confirmDeshacer.tipo_recurso)} de ${confirmDeshacer.equipo_nombre} a ${confirmDeshacer.empleado_nombre} el ${fmtFechaLarga(confirmDeshacer.fecha)}, de ${confirmDeshacer.hora_inicio.slice(0, 5)} a ${confirmDeshacer.hora_fin.slice(0, 5)}. Si deshacés, el puesto vuelve a quedar disponible para que otra persona lo pida.`
           : ''}
         confirmLabel="Deshacer"
         danger
@@ -256,7 +256,7 @@ export default function Aprobaciones({ isAdmin }: { isAdmin: boolean }) {
         open={!!confirmEliminar}
         title="¿Eliminar esta solicitud?"
         message={confirmEliminar
-          ? `${confirmEliminar.empleado_nombre} — ${conArticuloDef(confirmEliminar.tipo_recurso)} de ${confirmEliminar.equipo_nombre}, ${fmtFechaLarga(confirmEliminar.fecha)} de ${confirmEliminar.hora_inicio.slice(0, 5)} a ${confirmEliminar.hora_fin.slice(0, 5)}. Se borra para siempre, no queda registro.`
+          ? `Se va a eliminar para siempre la solicitud de ${confirmEliminar.empleado_nombre} por ${conArticuloDef(confirmEliminar.tipo_recurso)} de ${confirmEliminar.equipo_nombre} el ${fmtFechaLarga(confirmEliminar.fecha)}, de ${confirmEliminar.hora_inicio.slice(0, 5)} a ${confirmEliminar.hora_fin.slice(0, 5)}. Esta acción no se puede deshacer.`
           : ''}
         confirmLabel="Eliminar"
         danger
