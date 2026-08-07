@@ -67,7 +67,11 @@ export async function getPuestosDisponibles(
   const equipoRow = { id: equipoId, nombre: equipoNombre }
 
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-  const hasta = addDays(today, 13) // semana actual + próxima
+  // Semana actual (lunes a sábado) + la que viene — nunca una tercera semana suelta, sea cual
+  // sea el día de hoy (con +13 días fijos se colaba un par de días extra cuando hoy no es lunes)
+  const dowHoy = new Date(today + 'T12:00:00Z').getUTCDay() // 0=Dom..6=Sáb
+  const sabadoActual = addDays(today, dowHoy === 0 ? -1 : 6 - dowHoy)
+  const hasta = addDays(sabadoActual, 7) // sábado de la semana que viene
 
   const [configRes, miembrosRes, ajustesRes] = await Promise.all([
     supabaseAdmin.from('configuracion').select('valor').eq('clave', 'espacio_trabajo').single(),

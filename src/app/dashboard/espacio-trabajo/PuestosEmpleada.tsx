@@ -161,7 +161,7 @@ export default function PuestosEmpleadaView() {
                       <p className="text-[13px] font-semibold text-[var(--text)]">{titulo}</p>
                       {p.turno && (
                         <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${estilo.bg} ${estilo.text} border ${estilo.border}`}>
-                          {p.turno}
+                          Turno {p.turno}
                         </span>
                       )}
                     </div>
