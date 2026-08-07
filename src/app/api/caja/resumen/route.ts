@@ -188,8 +188,10 @@ export async function GET(req: NextRequest) {
     if (ajuste) {
       saldo = ajuste.saldo_nuevo
     } else {
-      // Ambos tipos (retiro personal y sobre) reducen el saldo de caja física
-      saldo = saldo + efectivo - retirosDia.total
+      // Solo los retiros personales reducen el saldo.
+      // Los sobres ya están descontados en el cash_payments de Loyverse — no se restan dos veces.
+      const retiros_personales = retirosDia.total - retirosDia.sobres
+      saldo = saldo + efectivo - retiros_personales
     }
 
     saldo_actual = saldo
