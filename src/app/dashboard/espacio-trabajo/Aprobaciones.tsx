@@ -226,18 +226,21 @@ function AjustesEquipos() {
   const [equipos, setEquipos] = useState<EquipoConfig[] | null>(null)
   const [seleccionados, setSeleccionados] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [notificando, setNotificando] = useState(false)
   const [toast, setToast] = useState('')
 
   useEffect(() => {
     fetch('/api/puestos-disponibles/config')
-      .then(r => r.json())
-      .then(d => {
+      .then(async r => {
+        const d = await r.json()
+        if (!r.ok) throw new Error(d.error ?? 'Error al cargar equipos')
         const lista: EquipoConfig[] = d.equipos ?? []
         setEquipos(lista)
         setSeleccionados(new Set(lista.filter(e => e.habilitado).map(e => e.id)))
       })
+      .catch(e => setError(e instanceof Error ? e.message : 'Error al cargar equipos'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -306,7 +309,10 @@ function AjustesEquipos() {
               <span className="text-[11px] text-[var(--text-muted)] capitalize">{e.tipo_recurso}</span>
             </label>
           ))}
-          {(equipos ?? []).length === 0 && (
+          {error && (
+            <p className="text-center text-[13px] text-red-500 py-8 px-4">{error}</p>
+          )}
+          {!error && (equipos ?? []).length === 0 && (
             <p className="text-center text-[13px] text-gray-400 py-8">No hay equipos cargados</p>
           )}
         </div>

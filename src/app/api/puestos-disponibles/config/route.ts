@@ -13,19 +13,24 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   if (!esAdmin(session.rol)) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
 
-  const [{ data: equipos }, habilitados] = await Promise.all([
-    supabaseAdmin.from('equipos').select('id, nombre').order('nombre'),
-    getEquiposHabilitadosPuestos(),
-  ])
+  try {
+    const [{ data: equipos, error }, habilitados] = await Promise.all([
+      supabaseAdmin.from('equipos').select('id, nombre').order('nombre'),
+      getEquiposHabilitadosPuestos(),
+    ])
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const lista = (equipos ?? []).map(e => ({
-    id: e.id as number,
-    nombre: e.nombre as string,
-    tipo_recurso: tipoRecurso(e.nombre) ?? 'mesa',
-    habilitado: habilitados.includes(e.id as number),
-  }))
+    const lista = (equipos ?? []).map(e => ({
+      id: e.id as number,
+      nombre: e.nombre as string,
+      tipo_recurso: tipoRecurso(e.nombre) ?? 'mesa',
+      habilitado: habilitados.includes(e.id as number),
+    }))
 
-  return NextResponse.json({ equipos: lista })
+    return NextResponse.json({ equipos: lista })
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Error inesperado' }, { status: 500 })
+  }
 }
 
 export async function PUT(req: NextRequest) {
