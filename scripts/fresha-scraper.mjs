@@ -228,16 +228,26 @@ async function descargarReporte(page, url, label) {
     )
   }
 
-  // A veces Fresha muestra un panel/modal deslizante (anuncios, tour, etc.) que tapa
-  // el botón "Opciones" y bloquea el click. Lo cerramos antes de intentar, y si el
-  // primer intento igual falla por eso, reintentamos una vez más tras cerrarlo de nuevo.
+  // A veces Fresha muestra un panel deslizante (anuncios, tour, etc. — clase
+  // "modalSlide-...", montado en un portal data-react-aria-top-layer) que tapa el
+  // botón "Opciones" e intercepta el click aunque el botón esté visible/habilitado.
+  // Si tiene botón de cerrar lo usamos; si no, lo sacamos directo del DOM — es un
+  // panel informativo de Fresha, no afecta los datos que scrapeamos.
   const cerrarOverlay = async () => {
-    const overlay = page.locator('[class*="modalSlide" i], [class*="Modal" i][class*="overlay" i], [role="dialog"]').first()
-    if (await overlay.count() === 0) return
+    const overlay = page.locator('[class*="modalSlide" i], [data-react-aria-top-layer] [role="dialog"], [role="dialog"]').first()
+    const count = await overlay.count()
+    if (count === 0) return false
+    console.log(`[${label}] Overlay detectado tapando la UI, intentando cerrarlo`)
     const closeBtn = overlay.locator('button[aria-label*="close" i], button[aria-label*="cerrar" i], button:has-text("×")').first()
     if (await closeBtn.count() > 0) await closeBtn.click({ timeout: 3000 }).catch(() => {})
-    else await page.keyboard.press('Escape').catch(() => {})
-    await page.waitForTimeout(500)
+    await page.keyboard.press('Escape').catch(() => {})
+    await page.waitForTimeout(400)
+    if (await overlay.count() > 0) {
+      console.log(`[${label}] Overlay seguía presente, eliminándolo del DOM`)
+      await overlay.evaluate(el => el.remove()).catch(() => {})
+      await page.waitForTimeout(300)
+    }
+    return true
   }
 
   await cerrarOverlay()
@@ -247,7 +257,7 @@ async function descargarReporte(page, url, label) {
     console.warn(`[${label}] Click en "Opciones" falló, reintentando tras cerrar overlay: ${e.message}`)
     await cerrarOverlay()
     try {
-      await opcionesBtn.click({ timeout: 15000 })
+      await opcionesBtn.click({ timeout: 15000, force: true })
     } catch (e2) {
       await page.screenshot({ path: `/tmp/fresha-${label}-debug.png`, fullPage: true }).catch(() => {})
       throw new Error(
