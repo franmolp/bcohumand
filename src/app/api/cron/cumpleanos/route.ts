@@ -11,16 +11,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
-  const today = new Date()
-  const mm   = String(today.getMonth() + 1).padStart(2, '0')
-  const dd   = String(today.getDate()).padStart(2, '0')
-  const mmdd = `${mm}-${dd}`
+  // Fecha en huso horario Argentina, no la del runtime del server (que en Vercel es UTC)
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+  const mmdd = todayStr.slice(5, 10)
 
-  const { data: users } = await supabase
+  const { data: users, error: usersError } = await supabase
     .from('usuarios')
     .select('id, nombre, fecha_nacimiento')
     .eq('estado_cuenta', 'activo')
     .not('fecha_nacimiento', 'is', null)
+
+  if (usersError) return NextResponse.json({ error: usersError.message }, { status: 500 })
 
   const todos = users ?? []
   const cumpleaneros = todos.filter(u => u.fecha_nacimiento?.slice(5, 10) === mmdd)
