@@ -9,6 +9,10 @@ function puedeAprobar(rol: string): boolean {
   return rol === 'admin' || rol === 'Admin' || rol === 'Encargada'
 }
 
+function esAdmin(rol: string): boolean {
+  return rol === 'admin' || rol === 'Admin'
+}
+
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -89,5 +93,20 @@ export async function PUT(
     }).catch(() => {})
   }
 
+  return NextResponse.json({ ok: true })
+}
+
+// Borrado definitivo — solo admin, para limpiar solicitudes de prueba en cualquier estado
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  if (!esAdmin(session.rol)) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
+
+  const { id } = await params
+  const { error } = await supabaseAdmin.from('solicitudes_puesto').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

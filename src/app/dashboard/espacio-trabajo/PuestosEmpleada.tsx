@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Spinner } from '@/components/ui'
+import { Spinner, Confirm } from '@/components/ui'
 import { IconLayoutGrid, IconCalendarCheck, IconX, IconClock } from '@/components/ui/Icons'
 import { fmtFechaLarga } from '@/lib/fecha'
 import { conArticulo } from '@/lib/gaps'
@@ -35,6 +35,12 @@ const TURNO_STYLE = {
   ninguno: { bg: 'bg-gray-100', text: 'text-gray-500', border: 'border-gray-200' },
 } as const
 
+function tituloPuesto(p: Puesto): string {
+  const tipoLabel = p.tipo_recurso === 'box' ? 'Box' : 'Mesa'
+  const tipoPlural = p.tipo_recurso === 'box' ? 'boxes' : 'mesas'
+  return p.cantidad > 1 ? `${p.cantidad} ${tipoPlural} disponibles` : `${tipoLabel} disponible`
+}
+
 type Renderable = { kind: 'divider'; label: string } | { kind: 'item'; puesto: Puesto }
 
 // Separador visual entre "esta semana" y "la próxima" (lunes a sábado) para que la lista larga
@@ -64,6 +70,8 @@ export default function PuestosEmpleadaView() {
   const [loading, setLoading] = useState(true)
   const [enviando, setEnviando] = useState<string | null>(null)
   const [toast, setToast] = useState('')
+  const [confirmSolicitar, setConfirmSolicitar] = useState<Puesto | null>(null)
+  const [confirmCancelar, setConfirmCancelar] = useState<Puesto | null>(null)
 
   const cargar = useCallback(() => {
     setLoading(true); setError('')
@@ -94,7 +102,7 @@ export default function PuestosEmpleadaView() {
       if (!res.ok) { setToast(d.error ?? 'No se pudo solicitar'); return }
       setToast('Solicitud enviada — te avisamos cuando se apruebe')
       cargar()
-    } finally { setEnviando(null) }
+    } finally { setEnviando(null); setConfirmSolicitar(null) }
   }
 
   async function cancelar(id: string, solicitudId: string) {
@@ -103,7 +111,7 @@ export default function PuestosEmpleadaView() {
       await fetch(`/api/puestos-disponibles/${solicitudId}`, { method: 'DELETE' })
       setToast('Solicitud cancelada')
       cargar()
-    } finally { setEnviando(null) }
+    } finally { setEnviando(null); setConfirmCancelar(null) }
   }
 
   const proximos = puestos?.filter(p => p.fecha >= hoy) ?? []
@@ -145,9 +153,7 @@ export default function PuestosEmpleadaView() {
 
             const p = item.puesto
             const solicitando = enviando === p.id
-            const tipoLabel = p.tipo_recurso === 'box' ? 'Box' : 'Mesa'
-            const tipoPlural = p.tipo_recurso === 'box' ? 'boxes' : 'mesas'
-            const titulo = p.cantidad > 1 ? `${p.cantidad} ${tipoPlural} disponibles` : `${tipoLabel} disponible`
+            const titulo = tituloPuesto(p)
             const estilo = TURNO_STYLE[p.turno ?? 'ninguno']
 
             return (
@@ -178,7 +184,7 @@ export default function PuestosEmpleadaView() {
                       Pendiente
                     </span>
                     <button
-                      onClick={() => p.solicitud_id && cancelar(p.id, p.solicitud_id)}
+                      onClick={() => setConfirmCancelar(p)}
                       disabled={solicitando}
                       className="flex items-center gap-1 text-[11px] text-red-400 hover:text-red-600 cursor-pointer disabled:opacity-40">
                       <IconX size={11} /> Cancelar
@@ -186,7 +192,7 @@ export default function PuestosEmpleadaView() {
                   </div>
                 ) : (
                   <button
-                    onClick={() => solicitar(p.id)}
+                    onClick={() => setConfirmSolicitar(p)}
                     disabled={solicitando}
                     className="flex-shrink-0 px-4 py-2 bg-[image:var(--gradient)] text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-50">
                     {solicitando ? '...' : 'Solicitar'}
@@ -203,6 +209,30 @@ export default function PuestosEmpleadaView() {
           {toast}
         </div>
       )}
+
+      <Confirm
+        open={!!confirmSolicitar}
+        title="¿Solicitás cubrir este puesto?"
+        message={confirmSolicitar
+          ? `${tituloPuesto(confirmSolicitar)}${confirmSolicitar.turno ? ` · Turno ${confirmSolicitar.turno}` : ''}, ${fmtFechaLarga(confirmSolicitar.fecha)} de ${confirmSolicitar.hora_inicio} a ${confirmSolicitar.hora_fin}. Un admin todavía tiene que aprobarlo.`
+          : ''}
+        confirmLabel="Solicitar"
+        loading={!!confirmSolicitar && enviando === confirmSolicitar.id}
+        onConfirm={() => confirmSolicitar && solicitar(confirmSolicitar.id)}
+        onClose={() => setConfirmSolicitar(null)}
+      />
+      <Confirm
+        open={!!confirmCancelar}
+        title="¿Cancelás tu solicitud?"
+        message={confirmCancelar
+          ? `${tituloPuesto(confirmCancelar)}${confirmCancelar.turno ? ` · Turno ${confirmCancelar.turno}` : ''}, ${fmtFechaLarga(confirmCancelar.fecha)} de ${confirmCancelar.hora_inicio} a ${confirmCancelar.hora_fin}. El puesto queda libre otra vez para cualquiera.`
+          : ''}
+        confirmLabel="Sí, cancelar"
+        danger
+        loading={!!confirmCancelar && enviando === confirmCancelar.id}
+        onConfirm={() => confirmCancelar?.solicitud_id && cancelar(confirmCancelar.id, confirmCancelar.solicitud_id)}
+        onClose={() => setConfirmCancelar(null)}
+      />
     </div>
   )
 }

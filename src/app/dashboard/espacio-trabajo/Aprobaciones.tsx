@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Spinner } from '@/components/ui'
-import { IconCheck, IconX, IconRefresh, IconClock, IconSettings, IconBell } from '@/components/ui/Icons'
+import { Spinner, Confirm } from '@/components/ui'
+import { IconCheck, IconX, IconRefresh, IconClock, IconSettings, IconBell, IconTrash } from '@/components/ui/Icons'
 import { fmtFechaLarga } from '@/lib/fecha'
+import { conArticuloDef } from '@/lib/gaps'
 
 interface Solicitud {
   id: string
@@ -36,6 +37,9 @@ export default function Aprobaciones({ isAdmin }: { isAdmin: boolean }) {
   const [loading, setLoading] = useState(true)
   const [procesando, setProcesando] = useState<string | null>(null)
   const [pendingCount, setPendingCount] = useState(0)
+  const [confirmAccion, setConfirmAccion] = useState<{ solicitud: Solicitud; accion: 'approve' | 'reject' } | null>(null)
+  const [confirmDeshacer, setConfirmDeshacer] = useState<Solicitud | null>(null)
+  const [confirmEliminar, setConfirmEliminar] = useState<Solicitud | null>(null)
 
   const cargar = useCallback((estado: string) => {
     setLoading(true)
@@ -64,7 +68,7 @@ export default function Aprobaciones({ isAdmin }: { isAdmin: boolean }) {
         body: JSON.stringify({ accion }),
       })
       cargar(subtab)
-    } finally { setProcesando(null) }
+    } finally { setProcesando(null); setConfirmAccion(null) }
   }
 
   async function deshacer(id: string) {
@@ -72,7 +76,15 @@ export default function Aprobaciones({ isAdmin }: { isAdmin: boolean }) {
     try {
       await fetch(`/api/puestos-disponibles/aprobaciones/${id}/deshacer`, { method: 'POST' })
       cargar(subtab)
-    } finally { setProcesando(null) }
+    } finally { setProcesando(null); setConfirmDeshacer(null) }
+  }
+
+  async function eliminar(id: string) {
+    setProcesando(id)
+    try {
+      await fetch(`/api/puestos-disponibles/aprobaciones/${id}`, { method: 'DELETE' })
+      cargar(subtab)
+    } finally { setProcesando(null); setConfirmEliminar(null) }
   }
 
   const grupos = useMemo(() => {
@@ -140,11 +152,17 @@ export default function Aprobaciones({ isAdmin }: { isAdmin: boolean }) {
                           </div>
                         </div>
                         <div className="flex gap-1.5 flex-shrink-0">
-                          <button onClick={() => resolver(s.id, 'reject')} disabled={procesando === s.id}
+                          {isAdmin && (
+                            <button onClick={() => setConfirmEliminar(s)} disabled={procesando === s.id}
+                              className="p-2 border border-gray-200 text-gray-400 rounded-lg cursor-pointer hover:bg-red-50 hover:text-red-500 hover:border-red-200 disabled:opacity-40">
+                              <IconTrash size={14} />
+                            </button>
+                          )}
+                          <button onClick={() => setConfirmAccion({ solicitud: s, accion: 'reject' })} disabled={procesando === s.id}
                             className="p-2 border border-red-200 text-red-500 rounded-lg cursor-pointer hover:bg-red-50 disabled:opacity-40">
                             <IconX size={14} />
                           </button>
-                          <button onClick={() => resolver(s.id, 'approve')} disabled={procesando === s.id}
+                          <button onClick={() => setConfirmAccion({ solicitud: s, accion: 'approve' })} disabled={procesando === s.id}
                             className="p-2 bg-green-500 text-white rounded-lg cursor-pointer hover:bg-green-600 disabled:opacity-40">
                             <IconCheck size={14} />
                           </button>
@@ -169,10 +187,18 @@ export default function Aprobaciones({ isAdmin }: { isAdmin: boolean }) {
                   <p className="text-[12px] text-[var(--text-muted)] capitalize">{s.tipo_recurso} · {s.equipo_nombre}</p>
                   <p className="text-[12px] text-[var(--text-muted)]">{fmtFechaLarga(s.fecha)} · {s.hora_inicio.slice(0, 5)}–{s.hora_fin.slice(0, 5)}</p>
                 </div>
-                <button onClick={() => deshacer(s.id)} disabled={procesando === s.id}
-                  className="flex items-center gap-1.5 px-3 py-2 border border-[var(--border)] text-[var(--text-muted)] hover:text-red-500 hover:border-red-200 rounded-xl text-[12px] font-medium cursor-pointer disabled:opacity-40 flex-shrink-0">
-                  <IconRefresh size={13} /> Deshacer
-                </button>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <button onClick={() => setConfirmDeshacer(s)} disabled={procesando === s.id}
+                    className="flex items-center gap-1.5 px-3 py-2 border border-[var(--border)] text-[var(--text-muted)] hover:text-red-500 hover:border-red-200 rounded-xl text-[12px] font-medium cursor-pointer disabled:opacity-40">
+                    <IconRefresh size={13} /> Deshacer
+                  </button>
+                  {isAdmin && (
+                    <button onClick={() => setConfirmEliminar(s)} disabled={procesando === s.id}
+                      className="p-2 border border-gray-200 text-gray-400 rounded-lg cursor-pointer hover:bg-red-50 hover:text-red-500 hover:border-red-200 disabled:opacity-40">
+                      <IconTrash size={14} />
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -183,16 +209,61 @@ export default function Aprobaciones({ isAdmin }: { isAdmin: boolean }) {
         ) : (
           <div className="space-y-2.5">
             {items.map(s => (
-              <div key={s.id} className="bg-white rounded-2xl border border-[var(--border)] p-4">
-                <p className="text-[13px] font-semibold text-[var(--text)]">{s.empleado_nombre}</p>
-                <p className="text-[12px] text-[var(--text-muted)] capitalize">{s.tipo_recurso} · {s.equipo_nombre}</p>
-                <p className="text-[12px] text-[var(--text-muted)]">{fmtFechaLarga(s.fecha)} · {s.hora_inicio.slice(0, 5)}–{s.hora_fin.slice(0, 5)}</p>
-                {s.motivo && <p className="text-[12px] text-red-500 mt-1 italic">{s.motivo}</p>}
+              <div key={s.id} className="bg-white rounded-2xl border border-[var(--border)] p-4 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-[var(--text)]">{s.empleado_nombre}</p>
+                  <p className="text-[12px] text-[var(--text-muted)] capitalize">{s.tipo_recurso} · {s.equipo_nombre}</p>
+                  <p className="text-[12px] text-[var(--text-muted)]">{fmtFechaLarga(s.fecha)} · {s.hora_inicio.slice(0, 5)}–{s.hora_fin.slice(0, 5)}</p>
+                  {s.motivo && <p className="text-[12px] text-red-500 mt-1 italic">{s.motivo}</p>}
+                </div>
+                {isAdmin && (
+                  <button onClick={() => setConfirmEliminar(s)} disabled={procesando === s.id}
+                    className="p-2 border border-gray-200 text-gray-400 rounded-lg cursor-pointer hover:bg-red-50 hover:text-red-500 hover:border-red-200 disabled:opacity-40 flex-shrink-0">
+                    <IconTrash size={14} />
+                  </button>
+                )}
               </div>
             ))}
           </div>
         )
       )}
+
+      <Confirm
+        open={!!confirmAccion}
+        title={confirmAccion?.accion === 'approve' ? '¿Aprobás esta solicitud?' : '¿Rechazás esta solicitud?'}
+        message={confirmAccion
+          ? `${confirmAccion.solicitud.empleado_nombre} — ${conArticuloDef(confirmAccion.solicitud.tipo_recurso)} de ${confirmAccion.solicitud.equipo_nombre}, ${fmtFechaLarga(confirmAccion.solicitud.fecha)} de ${confirmAccion.solicitud.hora_inicio.slice(0, 5)} a ${confirmAccion.solicitud.hora_fin.slice(0, 5)}.${confirmAccion.accion === 'approve' ? ' Las demás solicitudes para ese mismo puesto quedarán rechazadas automáticamente.' : ''}`
+          : ''}
+        confirmLabel={confirmAccion?.accion === 'approve' ? 'Aprobar' : 'Rechazar'}
+        danger={confirmAccion?.accion === 'reject'}
+        loading={!!confirmAccion && procesando === confirmAccion.solicitud.id}
+        onConfirm={() => confirmAccion && resolver(confirmAccion.solicitud.id, confirmAccion.accion)}
+        onClose={() => setConfirmAccion(null)}
+      />
+      <Confirm
+        open={!!confirmDeshacer}
+        title="¿Deshacer esta aprobación?"
+        message={confirmDeshacer
+          ? `${confirmDeshacer.empleado_nombre} — ${conArticuloDef(confirmDeshacer.tipo_recurso)} de ${confirmDeshacer.equipo_nombre}, ${fmtFechaLarga(confirmDeshacer.fecha)} de ${confirmDeshacer.hora_inicio.slice(0, 5)} a ${confirmDeshacer.hora_fin.slice(0, 5)}. El puesto vuelve a quedar disponible para que otra persona lo pida.`
+          : ''}
+        confirmLabel="Deshacer"
+        danger
+        loading={!!confirmDeshacer && procesando === confirmDeshacer.id}
+        onConfirm={() => confirmDeshacer && deshacer(confirmDeshacer.id)}
+        onClose={() => setConfirmDeshacer(null)}
+      />
+      <Confirm
+        open={!!confirmEliminar}
+        title="¿Eliminar esta solicitud?"
+        message={confirmEliminar
+          ? `${confirmEliminar.empleado_nombre} — ${conArticuloDef(confirmEliminar.tipo_recurso)} de ${confirmEliminar.equipo_nombre}, ${fmtFechaLarga(confirmEliminar.fecha)} de ${confirmEliminar.hora_inicio.slice(0, 5)} a ${confirmEliminar.hora_fin.slice(0, 5)}. Se borra para siempre, no queda registro.`
+          : ''}
+        confirmLabel="Eliminar"
+        danger
+        loading={!!confirmEliminar && procesando === confirmEliminar.id}
+        onConfirm={() => confirmEliminar && eliminar(confirmEliminar.id)}
+        onClose={() => setConfirmEliminar(null)}
+      />
     </div>
   )
 }
