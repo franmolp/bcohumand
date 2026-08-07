@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { tipoRecurso, defaultCapacity, findGapsForDay, toMin, minToStr, overlaps } from '@/lib/gaps'
+import { tipoRecurso, defaultCapacity, findGapsForDay, restarAprobados, decomponerGap, toMin, minToStr } from '@/lib/gaps'
 import { getEquiposHabilitadosPuestos } from '@/lib/puestos'
 import { fmtFechaLarga } from '@/lib/fecha'
 import { crearNotificaciones, getUserIdsByEquipo } from '@/lib/notificaciones'
@@ -70,14 +70,15 @@ async function enviarAvisoSemanal() {
     let masProximo: { fecha: string; inicio: string; fin: string } | null = null
 
     for (const [fecha, shiftsDia] of turnosPorFecha.entries()) {
-      const gaps = findGapsForDay(shiftsDia, capacity)
+      const gapsCrudos = findGapsForDay(shiftsDia, capacity)
       const aprobadosDia = aprobadosPorFecha.get(fecha) ?? []
-      for (const gap of gaps) {
-        const yaAprobado = aprobadosDia.some(a => a.lane === gap.lane && overlaps(gap.start, gap.end, a.start, a.end))
-        if (yaAprobado) continue
-        huecosTotal++
-        if (!masProximo || fecha < masProximo.fecha || (fecha === masProximo.fecha && gap.start < toMin(masProximo.inicio))) {
-          masProximo = { fecha, inicio: minToStr(gap.start), fin: minToStr(gap.end) }
+      const gapsLibres = restarAprobados(gapsCrudos, aprobadosDia)
+      for (const gap of gapsLibres) {
+        for (const pieza of decomponerGap(gap, tipo)) {
+          huecosTotal++
+          if (!masProximo || fecha < masProximo.fecha || (fecha === masProximo.fecha && pieza.start < toMin(masProximo.inicio))) {
+            masProximo = { fecha, inicio: minToStr(pieza.start), fin: minToStr(pieza.end) }
+          }
         }
       }
     }

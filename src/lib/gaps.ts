@@ -117,3 +117,71 @@ export function findGapsForDay<T extends { inicio: string; fin: string }>(
 export function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
   return aStart < bEnd && bStart < aEnd
 }
+
+export interface TurnoCanonico { inicio: number; fin: number; label: 'Mañana' | 'Tarde' }
+
+// Franjas fijas de turno mañana/tarde: manicura tiene un corte de descanso 14:30-15:00,
+// masajes/depilación no.
+export function turnosDeTipo(tipo: 'mesa' | 'box'): TurnoCanonico[] {
+  return tipo === 'box'
+    ? [{ inicio: 9 * 60, fin: 15 * 60, label: 'Mañana' }, { inicio: 15 * 60, fin: 20 * 60, label: 'Tarde' }]
+    : [{ inicio: 9 * 60, fin: 14 * 60 + 30, label: 'Mañana' }, { inicio: 15 * 60, fin: 20 * 60, label: 'Tarde' }]
+}
+
+function restarIntervalo(
+  piezas: { start: number; end: number }[],
+  sub: { start: number; end: number }
+): { start: number; end: number }[] {
+  const siguientes: { start: number; end: number }[] = []
+  for (const p of piezas) {
+    if (sub.end <= p.start || sub.start >= p.end) { siguientes.push(p); continue }
+    if (sub.start > p.start) siguientes.push({ start: p.start, end: sub.start })
+    if (sub.end < p.end) siguientes.push({ start: sub.end, end: p.end })
+  }
+  return siguientes
+}
+
+// Resta intervalos ya aprobados (por carril) de los huecos crudos — puede partir un hueco en dos
+// si el aprobado quedó en el medio, o recortar una punta.
+export function restarAprobados(
+  gaps: { lane: number; start: number; end: number }[],
+  aprobados: { lane: number; start: number; end: number }[],
+  minGapMinutos: number = MIN_GAP_MINUTOS
+): { lane: number; start: number; end: number }[] {
+  const result: { lane: number; start: number; end: number }[] = []
+  for (const gap of gaps) {
+    let piezas = [{ start: gap.start, end: gap.end }]
+    for (const ap of aprobados.filter(a => a.lane === gap.lane)) {
+      piezas = restarIntervalo(piezas, ap)
+    }
+    for (const p of piezas) {
+      if (p.end - p.start >= minGapMinutos) result.push({ lane: gap.lane, start: p.start, end: p.end })
+    }
+  }
+  return result
+}
+
+// Descompone un hueco crudo en los turnos canónicos (mañana/tarde) que entren completos, más lo
+// que sobre (si alcanza el mínimo) sin etiqueta de turno. Así una empleada nunca ve "todo el día
+// disponible" como un solo bloque: si el hueco cubre un turno entero, se lo ofrecemos aparte.
+export function decomponerGap(
+  gap: { start: number; end: number },
+  tipo: 'mesa' | 'box',
+  minGapMinutos: number = MIN_GAP_MINUTOS
+): { start: number; end: number; label: 'Mañana' | 'Tarde' | null }[] {
+  const piezas: { start: number; end: number; label: 'Mañana' | 'Tarde' | null }[] = []
+  let restante = [{ start: gap.start, end: gap.end }]
+
+  for (const turno of turnosDeTipo(tipo)) {
+    const contenedor = restante.find(r => r.start <= turno.inicio && r.end >= turno.fin)
+    if (!contenedor) continue
+    piezas.push({ start: turno.inicio, end: turno.fin, label: turno.label })
+    restante = restarIntervalo(restante, { start: turno.inicio, end: turno.fin })
+  }
+
+  for (const r of restante) {
+    if (r.end - r.start >= minGapMinutos) piezas.push({ start: r.start, end: r.end, label: null })
+  }
+
+  return piezas
+}

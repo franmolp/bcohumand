@@ -12,8 +12,11 @@ interface Puesto {
   hora_inicio: string
   hora_fin: string
   horas: number
+  turno: 'Mañana' | 'Tarde' | null
   tipo_recurso: 'mesa' | 'box'
+  cantidad: number
   mi_solicitud: 'none' | 'pending'
+  solicitud_id: string | null
 }
 
 function todayStr() {
@@ -60,10 +63,10 @@ export default function PuestosEmpleadaView() {
     } finally { setEnviando(null) }
   }
 
-  async function cancelar(rowId: string) {
-    setEnviando(rowId)
+  async function cancelar(id: string, solicitudId: string) {
+    setEnviando(id)
     try {
-      await fetch(`/api/puestos-disponibles/${rowId}`, { method: 'DELETE' })
+      await fetch(`/api/puestos-disponibles/${solicitudId}`, { method: 'DELETE' })
       setToast('Solicitud cancelada')
       cargar()
     } finally { setEnviando(null) }
@@ -98,11 +101,14 @@ export default function PuestosEmpleadaView() {
         <div className="space-y-2.5">
           {proximos.map(p => {
             const solicitando = enviando === p.id
+            const tipoLabel = p.tipo_recurso === 'box' ? 'Box' : 'Mesa'
+            const tipoPlural = p.tipo_recurso === 'box' ? 'boxes' : 'mesas'
+            const titulo = p.cantidad > 1 ? `${p.cantidad} ${tipoPlural} disponibles` : `${tipoLabel} disponible`
             return (
               <div key={p.id} className="bg-white rounded-2xl border border-[var(--border)] p-4 flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[13px] font-semibold text-[var(--text)] capitalize">
-                    {p.tipo_recurso === 'box' ? 'Box' : 'Mesa'} disponible
+                  <p className="text-[13px] font-semibold text-[var(--text)]">
+                    {titulo}{p.turno ? ` · Turno ${p.turno}` : ''}
                   </p>
                   <p className="text-[13px] text-[var(--text)] mt-1">{fmtFechaLarga(p.fecha)}</p>
                   <p className="text-[12px] text-[var(--text-muted)] flex items-center gap-1 mt-0.5">
@@ -116,7 +122,7 @@ export default function PuestosEmpleadaView() {
                       Pendiente
                     </span>
                     <button
-                      onClick={() => cancelar(p.id)}
+                      onClick={() => p.solicitud_id && cancelar(p.id, p.solicitud_id)}
                       disabled={solicitando}
                       className="flex items-center gap-1 text-[11px] text-red-400 hover:text-red-600 cursor-pointer disabled:opacity-40">
                       <IconX size={11} /> Cancelar

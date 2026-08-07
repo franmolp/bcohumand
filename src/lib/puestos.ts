@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { tipoRecurso, defaultCapacity, findGapsForDay, toMin, minToStr, overlaps } from '@/lib/gaps'
+import { tipoRecurso, defaultCapacity, findGapsForDay, toMin, minToStr, overlaps, restarAprobados, decomponerGap } from '@/lib/gaps'
 
 function addDays(date: string, n: number): string {
   const d = new Date(date + 'T12:00:00Z')
@@ -13,8 +13,11 @@ export interface PuestoDisponible {
   hora_inicio: string
   hora_fin: string
   horas: number
+  turno: 'Mañana' | 'Tarde' | null
   tipo_recurso: 'mesa' | 'box'
+  cantidad: number
   mi_solicitud: 'none' | 'pending'
+  solicitud_id: string | null
 }
 
 const CONFIG_KEY_EQUIPOS = 'puestos_equipos'
@@ -71,7 +74,7 @@ export async function getPuestosDisponibles(
     supabaseAdmin.from('usuarios').select('id').eq('equipo_id', equipoRow.id).eq('estado_cuenta', 'activo'),
     supabaseAdmin
       .from('solicitudes_puesto')
-      .select('usuario_id, fecha, hora_inicio, hora_fin, lane, estado')
+      .select('id, usuario_id, fecha, hora_inicio, hora_fin, lane, estado')
       .eq('equipo_id', equipoRow.id)
       .gte('fecha', today)
       .lte('fecha', hasta)
@@ -113,7 +116,7 @@ export async function getPuestosDisponibles(
     misTurnosPorFecha.get(t.fecha)!.push(t)
   }
 
-  type SolicitudExistente = { usuario_id: string; fecha: string; hora_inicio: string; hora_fin: string; lane: number; estado: string }
+  type SolicitudExistente = { id: string; usuario_id: string; fecha: string; hora_inicio: string; hora_fin: string; lane: number; estado: string }
   const solicitudesPorFecha = new Map<string, SolicitudExistente[]>()
   for (const s of (ajustesRes.data ?? []) as SolicitudExistente[]) {
     if (!solicitudesPorFecha.has(s.fecha)) solicitudesPorFecha.set(s.fecha, [])
@@ -123,33 +126,48 @@ export async function getPuestosDisponibles(
   const puestos: PuestoDisponible[] = []
 
   for (const [fecha, shiftsDia] of turnosPorFecha.entries()) {
-    const gaps = findGapsForDay(shiftsDia, capacity)
+    const gapsCrudos = findGapsForDay(shiftsDia, capacity)
     const misTurnosDia = misTurnosPorFecha.get(fecha) ?? []
     const solicitudesDia = solicitudesPorFecha.get(fecha) ?? []
 
-    for (const gap of gaps) {
-      const sePisaConTurnoPropio = misTurnosDia.some(t => overlaps(gap.start, gap.end, toMin(t.inicio), toMin(t.fin)))
-      if (sePisaConTurnoPropio) continue
+    // Resta lo ya aprobado (puede partir un hueco en dos) antes de ofrecer nada
+    const aprobadosDia = solicitudesDia
+      .filter(s => s.estado === 'approved')
+      .map(s => ({ lane: s.lane, start: toMin(s.hora_inicio.slice(0, 5)), end: toMin(s.hora_fin.slice(0, 5)) }))
+    const gapsLibres = restarAprobados(gapsCrudos, aprobadosDia)
 
-      const yaAprobado = solicitudesDia.some(s =>
-        s.estado === 'approved' && s.lane === gap.lane &&
-        overlaps(gap.start, gap.end, toMin(s.hora_inicio.slice(0, 5)), toMin(s.hora_fin.slice(0, 5)))
-      )
-      if (yaAprobado) continue
+    // Descompone en turnos fijos (mañana/tarde) cuando el hueco cubre uno entero, para no
+    // ofrecer "todo el día" como un solo bloque gigante; y fusiona por carril para no mostrar
+    // el mismo horario repetido varias veces cuando hay más de una mesa/box libre a la vez.
+    const grupos = new Map<string, { start: number; end: number; label: 'Mañana' | 'Tarde' | null; lanes: number[] }>()
+    for (const gap of gapsLibres) {
+      for (const pieza of decomponerGap(gap, tipo)) {
+        const sePisaConTurnoPropio = misTurnosDia.some(t => overlaps(pieza.start, pieza.end, toMin(t.inicio), toMin(t.fin)))
+        if (sePisaConTurnoPropio) continue
 
+        const key = `${pieza.start}-${pieza.end}-${pieza.label}`
+        if (!grupos.has(key)) grupos.set(key, { start: pieza.start, end: pieza.end, label: pieza.label, lanes: [] })
+        grupos.get(key)!.lanes.push(gap.lane)
+      }
+    }
+
+    for (const { start, end, label, lanes } of grupos.values()) {
       const miSolicitudPendiente = solicitudesDia.find(s =>
-        s.usuario_id === usuarioId && s.estado === 'pending' && s.lane === gap.lane &&
-        toMin(s.hora_inicio.slice(0, 5)) === gap.start && toMin(s.hora_fin.slice(0, 5)) === gap.end
+        s.usuario_id === usuarioId && s.estado === 'pending' && lanes.includes(s.lane) &&
+        overlaps(start, end, toMin(s.hora_inicio.slice(0, 5)), toMin(s.hora_fin.slice(0, 5)))
       )
 
       puestos.push({
-        id: `${fecha}|${equipoRow.id}|${gap.lane}|${minToStr(gap.start)}|${minToStr(gap.end)}`,
+        id: `${fecha}|${equipoRow.id}|${minToStr(start)}|${minToStr(end)}`,
         fecha,
-        hora_inicio: minToStr(gap.start),
-        hora_fin: minToStr(gap.end),
-        horas: Math.round((gap.end - gap.start) / 60 * 10) / 10,
+        hora_inicio: minToStr(start),
+        hora_fin: minToStr(end),
+        horas: Math.round((end - start) / 60 * 10) / 10,
+        turno: label,
         tipo_recurso: tipo,
+        cantidad: lanes.length,
         mi_solicitud: miSolicitudPendiente ? 'pending' : 'none',
+        solicitud_id: miSolicitudPendiente?.id ?? null,
       })
     }
   }

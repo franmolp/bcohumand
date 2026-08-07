@@ -448,7 +448,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
           <div className="flex-1 min-w-0">
             <p className="text-[14px] font-bold text-white">Sumá horas esta semana</p>
             <p className="text-[12px] text-white/70">
-              Hay {puestosDisponibles.length} {puestosDisponibles[0].tipo_recurso === 'box' ? 'boxes' : 'mesas'} libres
+              Hay {puestosDisponibles.reduce((acc, p) => acc + p.cantidad, 0)} {puestosDisponibles[0].tipo_recurso === 'box' ? 'boxes' : 'mesas'} libres
               {' '}— el más próximo: {fmtFechaLarga(puestosDisponibles[0].fecha)}, {puestosDisponibles[0].hora_inicio}–{puestosDisponibles[0].hora_fin}
             </p>
           </div>
