@@ -412,8 +412,19 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
     : null
 
   // Puestos libres (solo equipos habilitados por el admin) — card sólo aparece si hay algo disponible
+  // en la semana vigente (lunes a sábado). Si hoy es sábado, la semana vigente ya terminó, así que
+  // se muestra la próxima en su lugar.
   const puestosResult = await getPuestosDisponibles(session.id, session.equipo)
-  const puestosDisponibles = !('error' in puestosResult) ? puestosResult.puestos : []
+  const todosPuestos = !('error' in puestosResult) ? puestosResult.puestos : []
+  const dowHoy = today.getDay() // 0=Dom..6=Sáb
+  const diasDesdeLunes = dowHoy === 0 ? 6 : dowHoy - 1
+  const semanaDesde = dowHoy === 6
+    ? new Date(today.getTime() + 2 * 86400000)
+    : new Date(today.getTime() - diasDesdeLunes * 86400000)
+  const semanaHasta = new Date(semanaDesde.getTime() + 5 * 86400000)
+  const semanaDesdeStr = `${semanaDesde.getFullYear()}-${String(semanaDesde.getMonth()+1).padStart(2,'0')}-${String(semanaDesde.getDate()).padStart(2,'0')}`
+  const semanaHastaStr = `${semanaHasta.getFullYear()}-${String(semanaHasta.getMonth()+1).padStart(2,'0')}-${String(semanaHasta.getDate()).padStart(2,'0')}`
+  const puestosDisponibles = todosPuestos.filter(p => p.fecha >= semanaDesdeStr && p.fecha <= semanaHastaStr)
 
   return (
     <div className="py-4 fade-in space-y-5">
