@@ -244,63 +244,69 @@ export async function GET(req: NextRequest) {
     let tieneDiscrepancia = false
     const eventos: Evento[] = []
 
-    if (tracked) {
-      if (turnosDia.length > 0) {
-        // Con datos de Loyverse: la caja avanza turno a turno.
-        // Cada apertura se compara contra el saldo que dejó el evento anterior
-        // (cierre del turno previo, o retiro/sobre/ajuste posterior).
-        // Al cerrar, el saldo pasa a ser lo esperado en caja según Loyverse
-        // (starting_cash + ventas + entradas − salidas), que ya incluye
-        // cualquier "paid_out" que el local haya cargado durante el turno.
-        for (const t of turnosDia) {
-          let disc: number | null = null
+    // El log de turnos/retiros/sobres/compras se arma SIEMPRE que haya datos,
+    // aunque el día sea anterior a fecha_inicio (sin seguimiento de saldo).
+    // La cadena de saldo (que sí necesita un punto de partida) solo avanza
+    // a partir de fecha_inicio.
+    if (turnosDia.length > 0) {
+      // Con datos de Loyverse: la caja avanza turno a turno.
+      // Cada apertura se compara contra el saldo que dejó el evento anterior
+      // (cierre del turno previo, o retiro/sobre/ajuste posterior).
+      // Al cerrar, el saldo pasa a ser lo esperado en caja según Loyverse
+      // (starting_cash + ventas + entradas − salidas), que ya incluye
+      // cualquier "paid_out" que el local haya cargado durante el turno.
+      for (const t of turnosDia) {
+        let disc: number | null = null
+        if (tracked) {
           if (!primerEvento) {
             disc = t.starting_cash - saldo
             if (Math.abs(disc) >= 1) tieneDiscrepancia = true
           }
           if (discrepanciaDia === null) discrepanciaDia = disc
-          eventos.push({ tipo: 'apertura', hora: horaAR(t.opened_at), ts: t.opened_at, monto: t.starting_cash, discrepancia: disc })
           primerEvento = false
-
-          const cierreMonto = t.expected_cash
-          saldo = cierreMonto
-          if (t.closed_at) {
-            const evtCierre: Evento = { tipo: 'cierre', hora: horaAR(t.closed_at), ts: t.closed_at, monto: cierreMonto, ventas: t.cash_payments }
-            if (t.actual_cash && Math.abs(t.actual_cash - t.expected_cash) >= 1) evtCierre.contado = t.actual_cash
-            eventos.push(evtCierre)
-          }
         }
-      } else {
-        // Sin turno de Loyverse ese día: fallback simple con ventas estimadas
-        saldo = saldo + efectivo
+        eventos.push({ tipo: 'apertura', hora: horaAR(t.opened_at), ts: t.opened_at, monto: t.starting_cash, discrepancia: disc })
+
+        const cierreMonto = t.expected_cash
+        if (tracked) saldo = cierreMonto
+        if (t.closed_at) {
+          const evtCierre: Evento = { tipo: 'cierre', hora: horaAR(t.closed_at), ts: t.closed_at, monto: cierreMonto, ventas: t.cash_payments }
+          if (t.actual_cash && Math.abs(t.actual_cash - t.expected_cash) >= 1) evtCierre.contado = t.actual_cash
+          eventos.push(evtCierre)
+        }
       }
+    } else if (tracked) {
+      // Sin turno de Loyverse ese día: fallback simple con ventas estimadas
+      saldo = saldo + efectivo
+    }
 
-      // Retiros y sobres del día, siempre después de procesar los turnos
-      for (const r of retirosDia.items) {
-        if (r.tipo !== 'sobre') saldo -= r.monto
-        eventos.push({
-          tipo: r.tipo === 'sobre' ? 'sobre' : 'retiro',
-          hora: horaAR(r.created_at), ts: r.created_at, monto: r.monto, detalle: r.descripcion, id: r.id,
-        })
-      }
+    // Retiros y sobres del día, siempre después de procesar los turnos
+    for (const r of retirosDia.items) {
+      if (tracked && r.tipo !== 'sobre') saldo -= r.monto
+      eventos.push({
+        tipo: r.tipo === 'sobre' ? 'sobre' : 'retiro',
+        hora: horaAR(r.created_at), ts: r.created_at, monto: r.monto, detalle: r.descripcion, id: r.id,
+      })
+    }
 
-      // Compras en efectivo: no tocan el saldo (ya están netas en expected_cash de Loyverse),
-      // se muestran solo para poder cruzar contra el paid_out del turno
-      for (const c of comprasDia.items) {
-        eventos.push({
-          tipo: 'compra',
-          hora: horaAR(c.created_at), ts: c.created_at, monto: c.monto,
-          detalle: c.proveedor ? `${c.proveedor}${c.detalle ? ' · ' + c.detalle : ''}` : c.detalle,
-        })
-      }
+    // Compras en efectivo: no tocan el saldo (ya están netas en expected_cash de Loyverse),
+    // se muestran solo para poder cruzar contra el paid_out del turno
+    for (const c of comprasDia.items) {
+      eventos.push({
+        tipo: 'compra',
+        hora: horaAR(c.created_at), ts: c.created_at, monto: c.monto,
+        detalle: c.proveedor ? `${c.proveedor}${c.detalle ? ' · ' + c.detalle : ''}` : c.detalle,
+      })
+    }
 
-      if (ajuste) {
-        saldo = ajuste.saldo_nuevo
-        eventos.push({ tipo: 'ajuste', hora: horaAR(ajuste.created_at), ts: ajuste.created_at, monto: ajuste.saldo_nuevo, detalle: ajuste.motivo })
-      }
+    if (ajuste) {
+      if (tracked) saldo = ajuste.saldo_nuevo
+      eventos.push({ tipo: 'ajuste', hora: horaAR(ajuste.created_at), ts: ajuste.created_at, monto: ajuste.saldo_nuevo, detalle: ajuste.motivo })
+    }
 
-      eventos.sort((a, b) => a.ts.localeCompare(b.ts))
+    eventos.sort((a, b) => a.ts.localeCompare(b.ts))
 
+    if (tracked) {
       saldoDia = saldo
       saldo_actual = saldo
 
