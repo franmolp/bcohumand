@@ -42,9 +42,6 @@ export async function fetchAndStoreShifts(from: string, to: string): Promise<{ o
 
   if (!shifts.length) return { ok: 0 }
 
-  await supabaseAdmin.from('loyverse_cierres').delete()
-    .gte('fecha', from).lte('fecha', to)
-
   const records = shifts.map(s => ({
     id: s.id as string,
     fecha: toARDate(s.closed_at as string),
@@ -62,6 +59,15 @@ export async function fetchAndStoreShifts(from: string, to: string): Promise<{ o
     refunds: s.refunds ?? 0,
     discounts: s.discounts ?? 0,
   }))
+
+  // Solo borrar (para evitar duplicados/turnos eliminados en Loyverse) las fechas
+  // que efectivamente trajimos en esta respuesta — nunca todo el rango pedido a
+  // ciegas, para no perder días ya importados si Loyverse devuelve un resultado
+  // parcial (por ejemplo, por paginación o un filtro que devuelva menos de lo pedido).
+  const fechasTraidas = [...new Set(records.map(r => r.fecha))]
+  for (const fecha of fechasTraidas) {
+    await supabaseAdmin.from('loyverse_cierres').delete().eq('fecha', fecha)
+  }
 
   const BATCH = 500
   for (let i = 0; i < records.length; i += BATCH) {
