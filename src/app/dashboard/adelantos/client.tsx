@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import type { SessionUser } from '@/types'
 import {
-  IconDollar, IconPlus, IconX, IconCheck, IconSettings, IconAlertCircle, IconChevronLeft, IconChevronRight, IconTrash,
+  IconDollar, IconPlus, IconX, IconCheck, IconSettings, IconAlertCircle, IconChevronLeft, IconChevronRight, IconTrash, IconClipboard,
 } from '@/components/ui/Icons'
 
 type Adelanto = {
@@ -106,6 +106,9 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
   const [configEdit, setConfigEdit] = useState<Config>(DEFAULT_CONFIG)
   const [configSaving, setConfigSaving] = useState(false)
   const [configMsg, setConfigMsg] = useState('')
+
+  // Admin: exportar mes al portapapeles
+  const [exportado, setExportado] = useState(false)
 
   const loadAdelantos = useCallback(async () => {
     setLoading(true)
@@ -222,6 +225,22 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
       })
       if (res.ok) { setConfig(configEdit); setConfigMsg('Configuración guardada'); setTimeout(() => setConfigMsg(''), 3000) }
     } finally { setConfigSaving(false) }
+  }
+
+  async function exportarMes(lista: Adelanto[]) {
+    const filas = lista
+      .filter(a => a.estado === 'approved')
+      .map(a => {
+        const d = new Date(a.created_at)
+        const fecha = `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`
+        const monto = Math.round(Math.abs(a.monto_aprobado ?? a.monto))
+        return [fecha, a.empleado_nombre, 'Adelanto', monto].join('\t')
+      })
+      .join('\n')
+    if (!filas) return
+    await navigator.clipboard.writeText(filas)
+    setExportado(true)
+    setTimeout(() => setExportado(false), 2000)
   }
 
   // ── Action modal ──
@@ -419,6 +438,18 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
                 <IconChevronRight size={16} />
               </button>
             </div>
+
+            {mesTotal > 0 && (
+              <button
+                onClick={() => exportarMes(sorted)}
+                className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold cursor-pointer transition-colors ${
+                  exportado ? 'bg-green-50 text-green-600 border border-green-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-transparent'
+                }`}
+              >
+                {exportado ? <IconCheck size={15} /> : <IconClipboard size={15} />}
+                {exportado ? 'Copiado — pegalo en Excel' : 'Exportar mes'}
+              </button>
+            )}
 
             {loading ? (
               <div className="py-12 flex justify-center">
