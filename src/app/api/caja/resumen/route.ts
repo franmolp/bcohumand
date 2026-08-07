@@ -58,25 +58,21 @@ export async function GET(req: NextRequest) {
   const mesStart = `${targetMes}-01`
   const mesEnd = new Date(y, m, 0).toLocaleDateString('en-CA')
 
-  // Always calculate from fecha_inicio to today for accurate running saldo
-  const calcFrom = config.fecha_inicio
+  // La cadena de saldo corriente arranca en fecha_inicio (necesita un punto de partida).
+  // Pero el efectivo/retiros del mes son estadísticas independientes: deben cubrir
+  // TODO el mes visualizado, aunque sea anterior a fecha_inicio.
+  const trackFrom = config.fecha_inicio
   const calcEnd = today
+  const queryFrom = mesStart < trackFrom ? mesStart : trackFrom
 
-  // If fecha_inicio is after today, nothing to show
-  if (calcFrom > calcEnd) {
-    return NextResponse.json({
-      configurado: true,
-      config,
-      dias: [],
-      kpis: { efectivo_mes: 0, retiros_mes: 0, saldo_actual: config.saldo_inicial, caja_fuerte: 0 },
-    })
-  }
+  // Si fecha_inicio es futura, igual mostramos el mes (sin saldo tracking)
+  const hayTracking = trackFrom <= calcEnd
 
   const [cierresRes, retirosRes, ajustesRes, pagosRes] = await Promise.all([
     supabaseAdmin
       .from('loyverse_cierres')
       .select('id, fecha, starting_cash, cash_payments, opened_at')
-      .gte('fecha', calcFrom)
+      .gte('fecha', queryFrom)
       .lte('fecha', calcEnd)
       .order('fecha')
       .order('opened_at'),
@@ -84,7 +80,7 @@ export async function GET(req: NextRequest) {
     supabaseAdmin
       .from('retiros_caja')
       .select('id, fecha, monto, descripcion, tipo, created_at')
-      .gte('fecha', calcFrom)
+      .gte('fecha', queryFrom)
       .lte('fecha', calcEnd)
       .order('fecha')
       .order('created_at'),
@@ -92,7 +88,7 @@ export async function GET(req: NextRequest) {
     supabaseAdmin
       .from('caja_ajustes')
       .select('id, fecha, saldo_nuevo, motivo, created_at')
-      .gte('fecha', calcFrom)
+      .gte('fecha', queryFrom)
       .lte('fecha', calcEnd)
       .order('fecha')
       .order('created_at', { ascending: false }),
@@ -100,7 +96,7 @@ export async function GET(req: NextRequest) {
     supabaseAdmin
       .from('loyverse_pagos')
       .select('receipt_date, payment_money')
-      .gte('receipt_date', `${calcFrom}T03:00:00.000Z`)
+      .gte('receipt_date', `${queryFrom}T03:00:00.000Z`)
       .lte('receipt_date', `${addDays(calcEnd, 1)}T02:59:59.999Z`)
       .ilike('payment_name', `%${config.payment_name_efectivo}%`),
   ])
@@ -143,23 +139,23 @@ export async function GET(req: NextRequest) {
     pagosByFecha.set(f, (pagosByFecha.get(f) ?? 0) + Number(p.payment_money ?? 0))
   }
 
-  // Run calculation from fecha_inicio to today
   let saldo = Number(config.saldo_inicial)
-  const allDays = enumerateDays(calcFrom, calcEnd)
+  const allDays = enumerateDays(queryFrom, calcEnd)
   let efectivo_mes = 0
   let retiros_mes = 0
   let caja_fuerte = 0
-  let saldo_actual = saldo
+  let saldo_actual: number | null = hayTracking ? saldo : null
 
   type DiaData = {
     fecha: string
     efectivo_vendido: number
     retiros: number
     sobres: number
-    saldo: number
+    saldo: number | null
     starting_cash: number | null
     discrepancia: number | null
     tiene_cierre_loyverse: boolean
+    tiene_seguimiento: boolean
     ajuste: { saldo_nuevo: number; motivo: string | null } | null
     retiros_list: RetiroItem[]
   }
@@ -170,6 +166,7 @@ export async function GET(req: NextRequest) {
     const cierre = cierresByFecha.get(day) ?? null
     const retirosDia = retirosByFecha.get(day) ?? { total: 0, sobres: 0, items: [] }
     const ajuste = ajustesByFecha.get(day) ?? null
+    const tracked = day >= trackFrom
 
     let efectivo: number
     let starting_cash: number | null = null
@@ -178,42 +175,49 @@ export async function GET(req: NextRequest) {
     if (cierre) {
       efectivo = cierre.cash_payments
       starting_cash = cierre.starting_cash
-      if (day > config.fecha_inicio) {
-        discrepancia = cierre.starting_cash - saldo
-      }
     } else {
       efectivo = pagosByFecha.get(day) ?? 0
     }
 
-    if (ajuste) {
-      saldo = ajuste.saldo_nuevo
-    } else {
-      // Solo los retiros personales reducen el saldo.
-      // Los sobres ya están descontados en el cash_payments de Loyverse — no se restan dos veces.
-      const retiros_personales = retirosDia.total - retirosDia.sobres
-      saldo = saldo + efectivo - retiros_personales
+    let saldoDia: number | null = null
+
+    if (tracked) {
+      if (cierre && day > trackFrom) {
+        discrepancia = cierre.starting_cash - saldo
+      }
+
+      if (ajuste) {
+        saldo = ajuste.saldo_nuevo
+      } else {
+        // Solo los retiros personales reducen el saldo.
+        // Los sobres ya están descontados en el cash_payments de Loyverse — no se restan dos veces.
+        const retiros_personales = retirosDia.total - retirosDia.sobres
+        saldo = saldo + efectivo - retiros_personales
+      }
+
+      saldoDia = saldo
+      saldo_actual = saldo
+
+      // caja_fuerte = sobres acumulados desde que arrancó el seguimiento
+      caja_fuerte += retirosDia.sobres
     }
 
-    saldo_actual = saldo
-
-    // caja_fuerte = sobres acumulados (dinero que fue al sobre/bóveda del salón)
-    caja_fuerte += retirosDia.sobres
-
-    // Only add to result if this day falls in the requested month
+    // El efectivo/retiros del mes se muestran para TODO el mes, tenga o no seguimiento de saldo
     const inMes = day >= mesStart && day <= mesEnd
     if (inMes) {
       efectivo_mes += efectivo
-      retiros_mes += retirosDia.total - retirosDia.sobres  // solo retiros personales en el KPI
+      retiros_mes += retirosDia.total - retirosDia.sobres
 
       diasDelMes.push({
         fecha: day,
         efectivo_vendido: efectivo,
         retiros: retirosDia.total - retirosDia.sobres,
         sobres: retirosDia.sobres,
-        saldo,
+        saldo: saldoDia,
         starting_cash,
         discrepancia,
         tiene_cierre_loyverse: !!cierre,
+        tiene_seguimiento: tracked,
         ajuste: ajuste ?? null,
         retiros_list: retirosDia.items,
       })

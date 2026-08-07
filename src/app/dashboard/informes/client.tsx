@@ -127,10 +127,11 @@ interface DiaData {
   efectivo_vendido: number
   retiros: number
   sobres: number
-  saldo: number
+  saldo: number | null
   starting_cash: number | null
   discrepancia: number | null
   tiene_cierre_loyverse: boolean
+  tiene_seguimiento: boolean
   ajuste: { saldo_nuevo: number; motivo: string | null } | null
   retiros_list: RetiroItem[]
 }
@@ -139,7 +140,7 @@ interface CajaResumen {
   configurado: boolean
   config?: CajaConfig
   dias: DiaData[]
-  kpis: { efectivo_mes: number; retiros_mes: number; saldo_actual: number; caja_fuerte: number }
+  kpis: { efectivo_mes: number; retiros_mes: number; saldo_actual: number | null; caja_fuerte: number }
 }
 
 // ─── Tab Caja ─────────────────────────────────────────────────────────────────
@@ -367,8 +368,8 @@ function TabCaja({ mes }: { mes: string }) {
         <KpiCard label="Retiros personales" value={fmt$(kpis.retiros_mes)} sub="lo que te llevaste" />
         <KpiCard
           label="Saldo en caja"
-          value={fmt$(kpis.saldo_actual)}
-          color={kpis.saldo_actual < 0 ? 'text-red-500' : 'text-green-600'}
+          value={kpis.saldo_actual === null ? '—' : fmt$(kpis.saldo_actual)}
+          color={kpis.saldo_actual !== null && kpis.saldo_actual < 0 ? 'text-red-500' : 'text-green-600'}
           sub="estimado actual"
         />
         <KpiCard label="Sobres acumulados" value={fmt$(kpis.caja_fuerte)} sub="en bóveda del salón" />
@@ -416,8 +417,14 @@ function TabCaja({ mes }: { mes: string }) {
                 <p className="text-[13px] font-semibold text-[var(--text)]">{fmtFecha(dia.fecha)}</p>
               </div>
               <div className="text-right">
-                <p className={`text-[15px] font-bold ${dia.saldo < 0 ? 'text-red-500' : 'text-green-600'}`}>{fmt$(dia.saldo)}</p>
-                <p className="text-[10px] text-[var(--text-muted)]">saldo</p>
+                {dia.tiene_seguimiento ? (
+                  <>
+                    <p className={`text-[15px] font-bold ${dia.saldo! < 0 ? 'text-red-500' : 'text-green-600'}`}>{fmt$(dia.saldo!)}</p>
+                    <p className="text-[10px] text-[var(--text-muted)]">saldo</p>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-[var(--text-muted)] italic">sin seguimiento de saldo</p>
+                )}
               </div>
             </div>
 
@@ -500,7 +507,7 @@ function TabCaja({ mes }: { mes: string }) {
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--primary)] hover:border-[var(--primary)] rounded-xl text-[12px] font-medium transition-colors cursor-pointer">
                   <IconPlus size={13} /> Agregar retiro
                 </button>
-                <button onClick={() => abrirAjuste(dia.fecha, dia.saldo)}
+                <button onClick={() => abrirAjuste(dia.fecha, dia.saldo ?? 0)}
                   className="flex items-center gap-1.5 px-3 py-2 border border-[var(--border)] text-[var(--text-muted)] hover:text-blue-600 hover:border-blue-300 rounded-xl text-[12px] font-medium transition-colors cursor-pointer">
                   <IconEdit size={13} /> Ajustar
                 </button>
