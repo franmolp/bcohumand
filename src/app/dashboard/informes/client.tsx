@@ -7,6 +7,7 @@ import { Spinner } from '@/components/ui'
 import {
   IconBarChart, IconChevronLeft, IconChevronRight, IconDollar, IconCalendarCheck,
   IconUsers, IconReceipt, IconClock, IconX, IconEdit, IconPlus,
+  IconLock, IconLockOpen, IconArchive, IconAlertCircle, IconCheck,
 } from '@/components/ui/Icons'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -147,6 +148,7 @@ interface DiaData {
   ajuste: { saldo_nuevo: number; motivo: string | null } | null
   retiros_list: RetiroItem[]
   eventos: Evento[]
+  alerta_salida: { loyverse: number; cargado: number } | null
 }
 
 interface CajaResumen {
@@ -371,7 +373,7 @@ function TabCaja({ mes }: { mes: string }) {
   }
 
   const { kpis, dias } = resumen
-  const hasDisco = dias.some(d => d.discrepancia !== null && Math.abs(d.discrepancia) >= 1)
+  const hasDisco = dias.some(d => d.tiene_discrepancia || (d.discrepancia !== null && Math.abs(d.discrepancia) >= 1) || d.alerta_salida)
 
   return (
     <div className="fade-in flex flex-col gap-4">
@@ -391,12 +393,9 @@ function TabCaja({ mes }: { mes: string }) {
 
       {/* Alert for discrepancies */}
       {hasDisco && (
-        <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 flex items-start gap-2.5">
-          <span className="text-[16px] mt-0.5">⚠️</span>
-          <div>
-            <p className="text-[13px] font-semibold text-red-700">Diferencias detectadas en apertura de caja</p>
-            <p className="text-[12px] text-red-600 mt-0.5">Revisá los días marcados en rojo. Usá &quot;Ajustar&quot; para corregir el saldo base.</p>
-          </div>
+        <div className="bg-red-50 border border-red-200 rounded-xl px-3.5 py-2.5 flex items-center gap-2">
+          <IconAlertCircle size={15} className="text-red-500 shrink-0" />
+          <p className="text-[12px] text-red-700"><span className="font-semibold">Diferencias en caja este mes.</span> Revisá los días en rojo y usá &quot;Ajustar&quot;.</p>
         </div>
       )}
 
@@ -421,151 +420,133 @@ function TabCaja({ mes }: { mes: string }) {
       )}
 
       {dias.map(dia => {
-        const hasDisc = dia.tiene_discrepancia || (dia.discrepancia !== null && Math.abs(dia.discrepancia) >= 1)
+        const hasDisc = dia.tiene_discrepancia || (dia.discrepancia !== null && Math.abs(dia.discrepancia) >= 1) || !!dia.alerta_salida
+        const evCfg: Record<Evento['tipo'], { Icon: typeof IconLock; label: string; color: string }> = {
+          apertura: { Icon: IconLockOpen, label: 'Apertura', color: 'text-[var(--text)]' },
+          cierre: { Icon: IconLock, label: 'Cierre', color: 'text-[var(--text)]' },
+          retiro: { Icon: IconDollar, label: 'Retiro', color: 'text-amber-600' },
+          sobre: { Icon: IconArchive, label: 'Sobre', color: 'text-purple-600' },
+          ajuste: { Icon: IconEdit, label: 'Ajuste', color: 'text-blue-600' },
+        }
         return (
           <div key={dia.fecha} className={`bg-white rounded-2xl border overflow-hidden ${hasDisc ? 'border-red-200' : 'border-[var(--border)]'}`}>
             {/* Header */}
-            <div className={`px-4 py-3 flex items-center justify-between border-b ${hasDisc ? 'bg-red-50 border-red-100' : 'bg-gray-50/70 border-[var(--border)]'}`}>
-              <div className="flex items-center gap-2">
-                {hasDisc && <span className="text-[13px]">🔴</span>}
+            <div className={`px-4 py-2.5 flex items-center justify-between border-b ${hasDisc ? 'bg-red-50 border-red-100' : 'bg-gray-50/70 border-[var(--border)]'}`}>
+              <div className="flex items-center gap-1.5">
+                {hasDisc && <IconAlertCircle size={13} className="text-red-500" />}
                 <p className="text-[13px] font-semibold text-[var(--text)]">{fmtFecha(dia.fecha)}</p>
               </div>
               <div className="text-right">
                 {dia.tiene_seguimiento ? (
-                  <>
-                    <p className={`text-[15px] font-bold ${dia.saldo! < 0 ? 'text-red-500' : 'text-green-600'}`}>{fmt$(dia.saldo!)}</p>
-                    <p className="text-[10px] text-[var(--text-muted)]">saldo</p>
-                  </>
+                  <p className={`text-[15px] font-bold ${dia.saldo! < 0 ? 'text-red-500' : 'text-green-600'}`}>{fmt$(dia.saldo!)}</p>
                 ) : (
-                  <p className="text-[11px] text-[var(--text-muted)] italic">sin seguimiento de saldo</p>
+                  <p className="text-[11px] text-[var(--text-muted)] italic">sin seguimiento</p>
                 )}
               </div>
             </div>
 
-            <div className="px-4 py-3 flex flex-col gap-2.5">
+            <div className="px-4 py-2.5 flex flex-col gap-2">
               {/* Metrics */}
-              <div className="flex gap-3 flex-wrap">
-                <div className="flex-1 min-w-[80px]">
-                  <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide mb-0.5">
-                    Efectivo {dia.tiene_cierre_loyverse ? '· Loyverse' : '· estimado'}
-                  </p>
-                  <p className="text-[15px] font-semibold text-[var(--text)]">{fmt$(dia.efectivo_vendido)}</p>
-                </div>
+              <div className="flex gap-3 flex-wrap text-[13px]">
+                <span className="text-[var(--text)]">
+                  <span className="text-[var(--text-muted)]">Efectivo </span>
+                  <span className="font-semibold">{fmt$(dia.efectivo_vendido)}</span>
+                </span>
                 {dia.retiros > 0 && (
-                  <div className="flex-1 min-w-[80px]">
-                    <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide mb-0.5">Retiro personal</p>
-                    <p className="text-[15px] font-semibold text-amber-600">{fmt$(dia.retiros)}</p>
-                  </div>
+                  <span className="text-amber-600 font-semibold">Retiro {fmt$(dia.retiros)}</span>
                 )}
                 {dia.sobres > 0 && (
-                  <div className="flex-1 min-w-[80px]">
-                    <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide mb-0.5">Sobre / caja fuerte</p>
-                    <p className="text-[15px] font-semibold text-purple-600">{fmt$(dia.sobres)}</p>
-                  </div>
+                  <span className="text-purple-600 font-semibold">Sobre {fmt$(dia.sobres)}</span>
+                )}
+                {dia.ajuste && (
+                  <span className="text-blue-600 font-semibold">Ajuste → {fmt$(dia.ajuste.saldo_nuevo)}</span>
                 )}
               </div>
 
               {/* Discrepancy */}
               {hasDisc && dia.discrepancia !== null && (
-                <div className="bg-red-50 border border-red-100 rounded-xl px-3 py-2">
-                  <p className="text-[12px] font-semibold text-red-700">
-                    ⚠️ Diferencia en apertura: {fmt$(dia.discrepancia)}
-                  </p>
-                  <p className="text-[11px] text-red-500 mt-0.5">
-                    Loyverse contó {fmt$(dia.starting_cash!)} pero se esperaban {fmt$(dia.starting_cash! - dia.discrepancia)}
-                  </p>
+                <div className="bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
+                  <IconAlertCircle size={13} className="text-red-500 shrink-0" />
+                  <p className="text-[12px] text-red-700">Diferencia en apertura: <span className="font-semibold">{fmt$(dia.discrepancia)}</span></p>
                 </div>
               )}
 
-              {/* Adjustment */}
-              {dia.ajuste && (
-                <div className="bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
-                  <p className="text-[12px] font-semibold text-blue-700">
-                    ✏️ Ajuste manual → {fmt$(dia.ajuste.saldo_nuevo)}
+              {/* Salida de Loyverse sin sobre cargado (o que no coincide) */}
+              {dia.alerta_salida && (
+                <div className="bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
+                  <IconAlertCircle size={13} className="text-amber-600 shrink-0" />
+                  <p className="text-[12px] text-amber-700">
+                    Loyverse registró <span className="font-semibold">{fmt$(dia.alerta_salida.loyverse)}</span> en salidas de caja
+                    {dia.alerta_salida.cargado > 0
+                      ? <> pero cargaste <span className="font-semibold">{fmt$(dia.alerta_salida.cargado)}</span> como sobre — revisá la diferencia</>
+                      : <> y no cargaste ningún sobre — revisá si falta anotarlo</>}
                   </p>
-                  {dia.ajuste.motivo && <p className="text-[11px] text-blue-500 mt-0.5">{dia.ajuste.motivo}</p>}
                 </div>
               )}
 
               {/* Retiro list */}
               {dia.retiros_list.length > 0 && (
-                <div className="border-t border-gray-100 pt-2.5">
-                  <p className="text-[10px] text-[var(--text-muted)] font-medium mb-2 uppercase tracking-wide">Movimientos del día</p>
-                  <div className="flex flex-col gap-1.5">
-                    {dia.retiros_list.map(r => (
-                      <div key={r.id} className="flex items-center gap-2">
-                        <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
-                          <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-md ${r.tipo === 'sobre' ? 'bg-purple-50 text-purple-600' : 'bg-amber-50 text-amber-600'}`}>
-                            {r.tipo === 'sobre' ? '📦 Sobre' : '💸 Retiro'}
-                          </span>
-                          <span className="text-[13px] font-medium text-[var(--text)]">{fmt$(r.monto)}</span>
-                          {r.descripcion && <span className="text-[12px] text-[var(--text-muted)]">· {r.descripcion}</span>}
-                        </div>
-                        <button onClick={() => abrirEditRetiro(r, dia.fecha)}
-                          className="p-1.5 text-gray-300 hover:text-[var(--primary)] rounded-lg transition-colors cursor-pointer">
-                          <IconEdit size={13} />
-                        </button>
-                        <button onClick={() => eliminarRetiro(r.id)} disabled={deletingId === r.id}
-                          className="p-1.5 text-gray-300 hover:text-red-500 rounded-lg transition-colors cursor-pointer disabled:opacity-40">
-                          <IconX size={13} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                <div className="flex flex-col gap-1">
+                  {dia.retiros_list.map(r => (
+                    <div key={r.id} className="flex items-center gap-2 text-[12px]">
+                      {r.tipo === 'sobre'
+                        ? <IconArchive size={13} className="text-purple-600 shrink-0" />
+                        : <IconDollar size={13} className="text-amber-600 shrink-0" />}
+                      <span className={`font-semibold ${r.tipo === 'sobre' ? 'text-purple-600' : 'text-amber-600'}`}>{fmt$(r.monto)}</span>
+                      {r.descripcion && <span className="text-[var(--text-muted)] truncate">{r.descripcion}</span>}
+                      <div className="flex-1" />
+                      <button onClick={() => abrirEditRetiro(r, dia.fecha)}
+                        className="p-1 text-gray-300 hover:text-[var(--primary)] rounded-lg transition-colors cursor-pointer">
+                        <IconEdit size={12} />
+                      </button>
+                      <button onClick={() => eliminarRetiro(r.id)} disabled={deletingId === r.id}
+                        className="p-1 text-gray-300 hover:text-red-500 rounded-lg transition-colors cursor-pointer disabled:opacity-40">
+                        <IconX size={12} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
 
               {/* Log cronológico del día */}
               {dia.eventos.length > 0 && (
-                <div className="border-t border-gray-100 pt-2">
+                <div className="border-t border-gray-100 pt-1.5">
                   <button onClick={() => setLogAbierto(logAbierto === dia.fecha ? null : dia.fecha)}
                     className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--primary)] transition-colors cursor-pointer">
                     <IconClock size={12} />
-                    {logAbierto === dia.fecha ? 'Ocultar log del día' : 'Ver log del día'}
+                    {logAbierto === dia.fecha ? 'Ocultar log' : 'Ver log de turnos'}
                   </button>
 
                   {logAbierto === dia.fecha && (
-                    <div className="mt-2.5 flex flex-col gap-0">
+                    <div className="mt-1.5 flex flex-col">
                       {dia.eventos.map((ev, i) => {
-                        const evDisc = ev.tipo === 'apertura' && ev.discrepancia !== null && ev.discrepancia !== undefined && Math.abs(ev.discrepancia) >= 1
-                        const cfg: Record<Evento['tipo'], { icon: string; label: string; color: string }> = {
-                          apertura: { icon: '🔓', label: 'Apertura de turno', color: 'text-[var(--text)]' },
-                          cierre: { icon: '🔒', label: 'Cierre de turno', color: 'text-[var(--text)]' },
-                          retiro: { icon: '💸', label: 'Retiro personal', color: 'text-amber-600' },
-                          sobre: { icon: '📦', label: 'Sobre / caja fuerte', color: 'text-purple-600' },
-                          ajuste: { icon: '✏️', label: 'Ajuste manual', color: 'text-blue-600' },
-                        }
-                        const c = cfg[ev.tipo]
+                        const checked = ev.tipo === 'apertura' && ev.discrepancia !== null && ev.discrepancia !== undefined
+                        const evDisc = checked && Math.abs(ev.discrepancia!) >= 1
+                        const c = evCfg[ev.tipo]
+                        let sub = ev.detalle ?? null
+                        if (ev.tipo === 'cierre' && ev.ventas !== undefined) sub = `vendieron ${fmt$(ev.ventas)}`
                         return (
-                          <div key={i} className={`flex items-start gap-2.5 py-2 ${i > 0 ? 'border-t border-gray-50' : ''} ${evDisc ? 'bg-red-50/60 -mx-1 px-1 rounded-lg' : ''}`}>
-                            <span className="text-[13px] mt-0.5">{c.icon}</span>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className={`text-[12px] font-semibold ${c.color}`}>{c.label}</span>
-                                <span className="text-[11px] text-[var(--text-muted)]">{ev.hora}hs</span>
-                              </div>
-                              <p className="text-[13px] font-medium text-[var(--text)] mt-0.5">
-                                {fmt$(ev.monto)}
-                                {ev.tipo === 'cierre' && ev.ventas !== undefined && (
-                                  <span className="text-[11px] font-normal text-[var(--text-muted)]"> · vendieron {fmt$(ev.ventas)}</span>
-                                )}
-                              </p>
+                          <div key={i} className={`flex items-center gap-2 py-1.5 ${i > 0 ? 'border-t border-gray-50' : ''} ${evDisc ? 'bg-red-50 -mx-1.5 px-1.5 rounded-lg' : ''}`}>
+                            <c.Icon size={13} className={`shrink-0 ${evDisc ? 'text-red-500' : c.color}`} />
+                            <div className="flex-1 min-w-0 flex items-baseline gap-1.5">
+                              <span className={`text-[12px] font-semibold shrink-0 ${evDisc ? 'text-red-600' : c.color}`}>{c.label}</span>
+                              <span className="text-[10px] text-[var(--text-muted)] shrink-0">{ev.hora}hs</span>
+                              {sub && <span className="text-[11px] text-[var(--text-muted)] truncate">· {sub}</span>}
                               {ev.contado !== undefined && (
-                                <p className="text-[11px] text-amber-600 mt-0.5">Contado por el local: {fmt$(ev.contado)}</p>
+                                <span className="text-[11px] text-amber-600 truncate">· contado {fmt$(ev.contado)}</span>
                               )}
-                              {ev.detalle && <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{ev.detalle}</p>}
-                              {evDisc && ev.discrepancia !== null && ev.discrepancia !== undefined && (
-                                <p className="text-[11px] font-semibold text-red-600 mt-0.5">
-                                  ⚠️ No coincide con el cierre anterior · diferencia {fmt$(ev.discrepancia)}
-                                </p>
-                              )}
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {checked && !evDisc && <IconCheck size={12} className="text-green-500" />}
+                              {evDisc && <IconAlertCircle size={13} className="text-red-500" />}
+                              <span className={`text-[13px] font-semibold ${evDisc ? 'text-red-600' : 'text-[var(--text)]'}`}>{fmt$(ev.monto)}</span>
                             </div>
                           </div>
                         )
                       })}
                       {dia.tiene_seguimiento && (
-                        <div className="flex items-center justify-between pt-2 mt-1 border-t border-gray-100">
-                          <span className="text-[11px] font-medium text-[var(--text-muted)]">Cierre del día / apertura esperada mañana</span>
+                        <div className="flex items-center justify-between pt-1.5 mt-0.5 border-t border-gray-100">
+                          <span className="text-[11px] font-medium text-[var(--text-muted)]">Apertura esperada mañana</span>
                           <span className={`text-[13px] font-bold ${dia.saldo! < 0 ? 'text-red-500' : 'text-green-600'}`}>{fmt$(dia.saldo!)}</span>
                         </div>
                       )}
@@ -575,13 +556,13 @@ function TabCaja({ mes }: { mes: string }) {
               )}
 
               {/* Actions */}
-              <div className="flex gap-2 pt-1">
+              <div className="flex gap-2 pt-0.5">
                 <button onClick={() => abrirModalRetiro(dia.fecha)}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--primary)] hover:border-[var(--primary)] rounded-xl text-[12px] font-medium transition-colors cursor-pointer">
+                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--primary)] hover:border-[var(--primary)] rounded-xl text-[12px] font-medium transition-colors cursor-pointer">
                   <IconPlus size={13} /> Agregar retiro
                 </button>
                 <button onClick={() => abrirAjuste(dia.fecha, dia.saldo ?? 0)}
-                  className="flex items-center gap-1.5 px-3 py-2 border border-[var(--border)] text-[var(--text-muted)] hover:text-blue-600 hover:border-blue-300 rounded-xl text-[12px] font-medium transition-colors cursor-pointer">
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-[var(--border)] text-[var(--text-muted)] hover:text-blue-600 hover:border-blue-300 rounded-xl text-[12px] font-medium transition-colors cursor-pointer">
                   <IconEdit size={13} /> Ajustar
                 </button>
               </div>
@@ -605,13 +586,13 @@ function TabCaja({ mes }: { mes: string }) {
               <div className="flex rounded-xl border border-gray-200 overflow-hidden">
                 <button
                   onClick={() => setRfTipo('retiro')}
-                  className={`flex-1 py-2.5 text-[13px] font-semibold transition-colors cursor-pointer ${rfTipo === 'retiro' ? 'bg-amber-500 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>
-                  💸 Retiro personal
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[13px] font-semibold transition-colors cursor-pointer ${rfTipo === 'retiro' ? 'bg-amber-500 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>
+                  <IconDollar size={14} /> Retiro personal
                 </button>
                 <button
                   onClick={() => setRfTipo('sobre')}
-                  className={`flex-1 py-2.5 text-[13px] font-semibold transition-colors cursor-pointer ${rfTipo === 'sobre' ? 'bg-purple-500 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>
-                  📦 Sobre / caja fuerte
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[13px] font-semibold transition-colors cursor-pointer ${rfTipo === 'sobre' ? 'bg-purple-500 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>
+                  <IconArchive size={14} /> Sobre / caja fuerte
                 </button>
               </div>
               <p className="text-[11px] text-gray-400 -mt-1">
@@ -665,12 +646,12 @@ function TabCaja({ mes }: { mes: string }) {
             <div className="flex flex-col gap-3">
               <div className="flex rounded-xl border border-gray-200 overflow-hidden">
                 <button onClick={() => setErTipo('retiro')}
-                  className={`flex-1 py-2 text-[13px] font-semibold transition-colors cursor-pointer ${erTipo === 'retiro' ? 'bg-amber-500 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>
-                  💸 Retiro personal
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[13px] font-semibold transition-colors cursor-pointer ${erTipo === 'retiro' ? 'bg-amber-500 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>
+                  <IconDollar size={14} /> Retiro personal
                 </button>
                 <button onClick={() => setErTipo('sobre')}
-                  className={`flex-1 py-2 text-[13px] font-semibold transition-colors cursor-pointer ${erTipo === 'sobre' ? 'bg-purple-500 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>
-                  📦 Sobre
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[13px] font-semibold transition-colors cursor-pointer ${erTipo === 'sobre' ? 'bg-purple-500 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}>
+                  <IconArchive size={14} /> Sobre
                 </button>
               </div>
               <div>

@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
   const [cierresRes, retirosRes, ajustesRes, pagosRes] = await Promise.all([
     supabaseAdmin
       .from('loyverse_cierres')
-      .select('id, fecha, opened_at, closed_at, starting_cash, cash_payments, actual_cash, expected_cash')
+      .select('id, fecha, opened_at, closed_at, starting_cash, cash_payments, actual_cash, expected_cash, paid_out')
       .gte('fecha', queryFrom)
       .lte('fecha', calcEnd)
       .order('fecha')
@@ -120,7 +120,7 @@ export async function GET(req: NextRequest) {
   type Turno = {
     opened_at: string; closed_at: string | null
     starting_cash: number; cash_payments: number
-    actual_cash: number; expected_cash: number
+    actual_cash: number; expected_cash: number; paid_out: number
   }
   const turnosByFecha = new Map<string, Turno[]>()
   for (const c of (cierresRes.data ?? [])) {
@@ -133,6 +133,7 @@ export async function GET(req: NextRequest) {
       cash_payments: Number(c.cash_payments ?? 0),
       actual_cash: Number(c.actual_cash ?? 0),
       expected_cash: Number(c.expected_cash ?? 0),
+      paid_out: Number(c.paid_out ?? 0),
     })
   }
 
@@ -186,6 +187,7 @@ export async function GET(req: NextRequest) {
     ajuste: { saldo_nuevo: number; motivo: string | null } | null
     retiros_list: RetiroItem[]
     eventos: Evento[]
+    alerta_salida: { loyverse: number; cargado: number } | null
   }
 
   const diasDelMes: DiaData[] = []
@@ -202,6 +204,17 @@ export async function GET(req: NextRequest) {
       : (pagosByFecha.get(day) ?? 0)
 
     const starting_cash = turnosDia.length > 0 ? turnosDia[0].starting_cash : null
+
+    // Loyverse puede registrar salidas de caja (paid_out) durante el turno —
+    // sobres, pero también compras u otros gastos mezclados. Si lo que Loyverse
+    // registró no coincide con lo que se cargó como "sobre" en la app, avisar.
+    let alerta_salida: { loyverse: number; cargado: number } | null = null
+    if (turnosDia.length > 0) {
+      const paidOutLoyverse = turnosDia.reduce((s, t) => s + t.paid_out, 0)
+      if (paidOutLoyverse >= 1 && Math.abs(paidOutLoyverse - retirosDia.sobres) >= 1) {
+        alerta_salida = { loyverse: paidOutLoyverse, cargado: retirosDia.sobres }
+      }
+    }
 
     let saldoDia: number | null = null
     let discrepanciaDia: number | null = null
@@ -282,6 +295,7 @@ export async function GET(req: NextRequest) {
         ajuste: ajuste ? { saldo_nuevo: ajuste.saldo_nuevo, motivo: ajuste.motivo } : null,
         retiros_list: retirosDia.items,
         eventos,
+        alerta_salida,
       })
     }
   }
