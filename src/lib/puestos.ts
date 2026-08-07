@@ -60,7 +60,7 @@ export async function resolverAccesoPuestos(
 export async function getPuestosDisponibles(
   usuarioId: string,
   equipoUsuario: string
-): Promise<{ tipo_recurso: 'mesa' | 'box'; puestos: PuestoDisponible[] } | { error: string; status: number }> {
+): Promise<{ tipo_recurso: 'mesa' | 'box'; puestos: PuestoDisponible[]; hoy: string } | { error: string; status: number }> {
   const acceso = await resolverAccesoPuestos(equipoUsuario)
   if (!acceso.ok) return { error: acceso.error, status: acceso.status }
   const { equipoId, equipoNombre, tipo } = acceso
@@ -85,7 +85,7 @@ export async function getPuestosDisponibles(
   const capacity = capacidadesOverride[equipoRow.nombre] ?? defaultCapacity(equipoRow.nombre)
 
   const miembroIds = (miembrosRes.data ?? []).map(u => u.id as string)
-  if (miembroIds.length === 0) return { tipo_recurso: tipo, puestos: [] }
+  if (miembroIds.length === 0) return { tipo_recurso: tipo, puestos: [], hoy: today }
 
   const { data: horarios } = await supabaseAdmin
     .from('horarios_base')
@@ -174,5 +174,5 @@ export async function getPuestosDisponibles(
 
   puestos.sort((a, b) => (a.fecha + a.hora_inicio).localeCompare(b.fecha + b.hora_inicio))
 
-  return { tipo_recurso: tipo, puestos }
+  return { tipo_recurso: tipo, puestos, hoy: today }
 }
