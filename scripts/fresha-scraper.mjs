@@ -227,7 +227,35 @@ async function descargarReporte(page, url, label) {
       `Screenshot guardado en /tmp/fresha-${label}-debug.png`
     )
   }
-  await opcionesBtn.click()
+
+  // A veces Fresha muestra un panel/modal deslizante (anuncios, tour, etc.) que tapa
+  // el botón "Opciones" y bloquea el click. Lo cerramos antes de intentar, y si el
+  // primer intento igual falla por eso, reintentamos una vez más tras cerrarlo de nuevo.
+  const cerrarOverlay = async () => {
+    const overlay = page.locator('[class*="modalSlide" i], [class*="Modal" i][class*="overlay" i], [role="dialog"]').first()
+    if (await overlay.count() === 0) return
+    const closeBtn = overlay.locator('button[aria-label*="close" i], button[aria-label*="cerrar" i], button:has-text("×")').first()
+    if (await closeBtn.count() > 0) await closeBtn.click({ timeout: 3000 }).catch(() => {})
+    else await page.keyboard.press('Escape').catch(() => {})
+    await page.waitForTimeout(500)
+  }
+
+  await cerrarOverlay()
+  try {
+    await opcionesBtn.click({ timeout: 10000 })
+  } catch (e) {
+    console.warn(`[${label}] Click en "Opciones" falló, reintentando tras cerrar overlay: ${e.message}`)
+    await cerrarOverlay()
+    try {
+      await opcionesBtn.click({ timeout: 15000 })
+    } catch (e2) {
+      await page.screenshot({ path: `/tmp/fresha-${label}-debug.png`, fullPage: true }).catch(() => {})
+      throw new Error(
+        `[${label}] No se pudo hacer click en "Opciones" (posible modal/overlay tapando el botón).\n` +
+        `Screenshot guardado en /tmp/fresha-${label}-debug.png\n${e2.message}`
+      )
+    }
+  }
   await page.waitForTimeout(800)
 
   // Buscar el item CSV en el menú — priorizamos li/button/a que contengan exactamente "CSV"
