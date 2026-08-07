@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { requireAdmin } from '@/lib/auth'
+import { crearNotificaciones, getAdminIds } from '@/lib/notificaciones'
 
 const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 
-async function convertirMes(year: number, month: number /* 0-indexed */) {
+type ConvertirMesResult =
+  | { ok: false; error: string }
+  | { ok: true; convertidas: number; mes: string; usuariosAfectados?: number }
+
+async function convertirMes(year: number, month: number /* 0-indexed */): Promise<ConvertirMesResult> {
   const mesStr = String(month + 1).padStart(2, '0')
   const inicioMes = `${year}-${mesStr}-01`
   // Usamos < primer día del mes siguiente para cubrir toda la última hora del mes
@@ -24,7 +29,7 @@ async function convertirMes(year: number, month: number /* 0-indexed */) {
 
   if (error) {
     console.error('[convertir-certificados] query error:', error)
-    return { error: error.message }
+    return { ok: false, error: error.message }
   }
 
   if (!solicitudes || solicitudes.length === 0) {
@@ -45,7 +50,7 @@ async function convertirMes(year: number, month: number /* 0-indexed */) {
 
   if (updateError) {
     console.error('[convertir-certificados] update error:', updateError)
-    return { error: updateError.message }
+    return { ok: false, error: updateError.message }
   }
 
   if (usuarioIds.length > 0) {
@@ -74,30 +79,73 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
-  // El día 1 cerramos el mes anterior
-  const now = new Date()
-  const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const result = await convertirMes(prevMonthDate.getFullYear(), prevMonthDate.getMonth())
+  try {
+    // El día 1 cerramos el mes anterior
+    const now = new Date()
+    const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const result = await convertirMes(prevMonthDate.getFullYear(), prevMonthDate.getMonth())
 
-  if (result.error) return NextResponse.json({ error: result.error }, { status: 500 })
+    if (!result.ok) {
+      const adminIds = await getAdminIds().catch(() => [] as string[])
+      if (adminIds.length) {
+        await crearNotificaciones(adminIds, {
+          titulo: 'Error al convertir certificados vencidos',
+          mensaje: `Falló la conversión automática de ausencias sin certificado. Error: ${result.error}`,
+          tipo: 'aviso',
+        }).catch(() => {})
+      }
+      return NextResponse.json({ error: result.error }, { status: 500 })
+    }
 
-  // Regenerar asistencia del mes cerrado
-  const host = request.headers.get('host')
-  const protocol = host?.includes('localhost') ? 'http' : 'https'
-  const mesStr = String(prevMonthDate.getMonth() + 1).padStart(2, '0')
-  const inicioMes = `${prevMonthDate.getFullYear()}-${mesStr}-01`
-  const nextMonth = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 1)
-  const finMes = new Date(nextMonth.getTime() - 86400000)
-  const finMesStr = `${finMes.getFullYear()}-${String(finMes.getMonth() + 1).padStart(2, '0')}-${String(finMes.getDate()).padStart(2, '0')}`
+    // Regenerar asistencia del mes cerrado (no debe tumbar la respuesta si falla)
+    let regenerados: number | null = null
+    try {
+      const host = request.headers.get('host')
+      const protocol = host?.includes('localhost') ? 'http' : 'https'
+      const mesStr = String(prevMonthDate.getMonth() + 1).padStart(2, '0')
+      const inicioMes = `${prevMonthDate.getFullYear()}-${mesStr}-01`
+      const nextMonth = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 1)
+      const finMes = new Date(nextMonth.getTime() - 86400000)
+      const finMesStr = `${finMes.getFullYear()}-${String(finMes.getMonth() + 1).padStart(2, '0')}-${String(finMes.getDate()).padStart(2, '0')}`
 
-  const regenRes = await fetch(`${protocol}://${host}/api/asistencia/regenerar`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.CRON_SECRET}` },
-    body: JSON.stringify({ fechaInicio: inicioMes, fechaFin: finMesStr }),
-  })
-  const regenData = await regenRes.json().catch(() => ({}))
+      const regenRes = await fetch(`${protocol}://${host}/api/asistencia/regenerar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.CRON_SECRET}` },
+        body: JSON.stringify({ fechaInicio: inicioMes, fechaFin: finMesStr }),
+      })
+      const regenData = await regenRes.json().catch(() => ({}))
+      regenerados = regenData.procesados ?? null
+    } catch (e) {
+      console.error('[convertir-certificados] regenerar asistencia falló:', e)
+    }
 
-  return NextResponse.json({ ...result, regenerados: regenData.procesados ?? null })
+    // Avisar a los admins del resultado (aunque sean 0 conversiones), para que
+    // una falla silenciosa del cron no pase desapercibida hasta el mes siguiente.
+    const adminIds = await getAdminIds().catch(() => [] as string[])
+    if (adminIds.length) {
+      await crearNotificaciones(adminIds, {
+        titulo: 'Cierre de certificados médicos',
+        mensaje: result.convertidas > 0
+          ? `${result.convertidas} ausencia${result.convertidas !== 1 ? 's' : ''} de ${result.mes} sin certificado convertida${result.convertidas !== 1 ? 's' : ''} a injustificada.`
+          : `Sin ausencias sin certificado para convertir en ${result.mes}.`,
+        tipo: 'aviso',
+      }).catch(() => {})
+    }
+
+    return NextResponse.json({ ...result, regenerados })
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[convertir-certificados]', msg)
+    const adminIds = await getAdminIds().catch(() => [] as string[])
+    if (adminIds.length) {
+      await crearNotificaciones(adminIds, {
+        titulo: 'Error al convertir certificados vencidos',
+        mensaje: `Falló la conversión automática de ausencias sin certificado. Error: ${msg}`,
+        tipo: 'aviso',
+      }).catch(() => {})
+    }
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
 }
 
 // Trigger manual — solo admin (para ejecutar desde el panel)
@@ -118,7 +166,7 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await convertirMes(year, month)
-    if (result.error) return NextResponse.json({ error: result.error }, { status: 500 })
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 500 })
     return NextResponse.json(result)
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Error al ejecutar conversión'

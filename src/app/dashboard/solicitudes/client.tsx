@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Button, Spinner, Modal, Toast, Confirm } from '@/components/ui'
-import { IconPlus, IconCheck, IconX, IconTrash, IconCalendar, IconEdit, IconAlertCircle, IconPaperclip, IconFileText, IconUpload, IconClock, IconSettings } from '@/components/ui/Icons'
+import { IconPlus, IconCheck, IconX, IconTrash, IconCalendar, IconEdit, IconAlertCircle, IconPaperclip, IconFileText, IconUpload, IconClock, IconSettings, IconRefresh } from '@/components/ui/Icons'
 import type { SessionUser, Solicitud } from '@/types'
 import { compressImage } from '@/lib/compress-image'
 import FileViewer from '@/components/FileViewer'
@@ -661,6 +661,8 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
   const [configForm, setConfigForm] = useState(DEFAULT_CONFIG)
   const [configSaving, setConfigSaving] = useState(false)
 
+  const [convirtiendo, setConvirtiendo] = useState(false)
+
   // ─── Carga ───
   const load = useCallback(async () => {
     setLoading(true)
@@ -720,6 +722,26 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
     const d = await res.json()
     setConfigSaving(false)
     if (res.ok) { setConfig(d); setConfigModal(false); setToast('Ajustes guardados') }
+  }
+
+  // ─── Convertir manualmente ausencias por salud sin certificado (mes anterior) ───
+  // Corre automáticamente por cron el día 1 de cada mes; este botón permite
+  // reintentarlo a mano si el cron falló o no corrió.
+  async function convertirCertificados() {
+    setConvirtiendo(true)
+    try {
+      const res = await fetch('/api/cron/convertir-certificados', { method: 'POST' })
+      const d = await res.json()
+      if (!res.ok) { setToast(d.error ?? 'Error al convertir'); return }
+      setToast(d.convertidas > 0
+        ? `${d.convertidas} ausencia${d.convertidas !== 1 ? 's' : ''} de ${d.mes} convertida${d.convertidas !== 1 ? 's' : ''} a injustificada`
+        : `Sin ausencias sin certificado en ${d.mes}`)
+      load()
+    } catch {
+      setToast('Error de conexión')
+    } finally {
+      setConvirtiendo(false)
+    }
   }
 
   // ─── Guardar nueva / edición ───
@@ -983,6 +1005,16 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {isAdmin && (
+            <button
+              onClick={convertirCertificados}
+              disabled={convirtiendo}
+              className="p-2 text-gray-400 hover:text-[var(--primary)] hover:bg-[var(--primary-light)] rounded-xl transition-colors cursor-pointer disabled:opacity-40"
+              title="Convertir ausencias por salud sin certificado del mes anterior a injustificadas (por si el cron automático del día 1 falló)"
+            >
+              <IconRefresh size={17} className={convirtiendo ? 'animate-spin' : ''} />
+            </button>
+          )}
           {isAdminOrHR && (
             <button
               onClick={() => { setConfigForm(config); setConfigModal(true) }}
