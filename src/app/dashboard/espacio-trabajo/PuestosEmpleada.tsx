@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Spinner, Confirm } from '@/components/ui'
 import { IconLayoutGrid, IconCalendarCheck, IconX, IconClock } from '@/components/ui/Icons'
 import { fmtFechaLarga } from '@/lib/fecha'
-import { conArticulo, deArticulo } from '@/lib/gaps'
+import { conArticulo } from '@/lib/gaps'
 
 interface Puesto {
   id: string
@@ -214,7 +214,7 @@ export default function PuestosEmpleadaView() {
         open={!!confirmSolicitar}
         title="¿Solicitás cubrir este puesto?"
         message={confirmSolicitar
-          ? `Vas a solicitar ${conArticulo(confirmSolicitar.tipo_recurso)}${confirmSolicitar.turno ? ` (Turno ${confirmSolicitar.turno})` : ''} del ${fmtFechaLarga(confirmSolicitar.fecha)}, de ${confirmSolicitar.hora_inicio} a ${confirmSolicitar.hora_fin}. Un admin todavía tiene que aprobarlo.`
+          ? `Vas a solicitar ${conArticulo(confirmSolicitar.tipo_recurso)} el ${fmtFechaLarga(confirmSolicitar.fecha)}, de ${confirmSolicitar.hora_inicio} a ${confirmSolicitar.hora_fin}. Un admin todavía tiene que aprobarlo.`
           : ''}
         confirmLabel="Solicitar"
         loading={!!confirmSolicitar && enviando === confirmSolicitar.id}
@@ -225,7 +225,7 @@ export default function PuestosEmpleadaView() {
         open={!!confirmCancelar}
         title="¿Cancelás tu solicitud?"
         message={confirmCancelar
-          ? `Vas a cancelar tu solicitud ${deArticulo(confirmCancelar.tipo_recurso)}${confirmCancelar.turno ? ` (Turno ${confirmCancelar.turno})` : ''} del ${fmtFechaLarga(confirmCancelar.fecha)}, de ${confirmCancelar.hora_inicio} a ${confirmCancelar.hora_fin}. El puesto queda libre otra vez para cualquiera.`
+          ? `Vas a cancelar tu solicitud del ${fmtFechaLarga(confirmCancelar.fecha)}, de ${confirmCancelar.hora_inicio} a ${confirmCancelar.hora_fin}. El puesto quedará libre otra vez.`
           : ''}
         confirmLabel="Sí, cancelar"
         danger
