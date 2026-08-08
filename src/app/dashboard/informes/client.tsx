@@ -556,7 +556,12 @@ function TabCaja({ mes }: { mes: string }) {
                               <div className="pl-5 mt-1 flex flex-col gap-0.5">
                                 {sub && <p className="text-[11px] text-[var(--text-muted)] leading-snug break-words">{sub}</p>}
                                 {ev.contado !== undefined && (
-                                  <p className="text-[11px] text-amber-600 leading-snug">Conteo del local: {fmt$(ev.contado)}</p>
+                                  <>
+                                    <p className="text-[11px] text-amber-600 leading-snug">Conteo del local: {fmt$(ev.contado)}</p>
+                                    <p className="text-[11px] font-semibold text-red-600 leading-snug">
+                                      {ev.contado - ev.monto < 0 ? 'Faltante' : 'Sobante'} de {fmt$(Math.abs(ev.contado - ev.monto))}
+                                    </p>
+                                  </>
                                 )}
                                 {evDisc && (
                                   <p className="text-[11px] font-semibold text-red-600 leading-snug">

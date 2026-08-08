@@ -260,9 +260,11 @@ export async function GET(req: NextRequest) {
       // Con datos de Loyverse: la caja avanza turno a turno.
       // Cada apertura se compara contra el saldo que dejó el evento anterior
       // (cierre del turno previo, o retiro/sobre/ajuste posterior).
-      // Al cerrar, el saldo pasa a ser lo esperado en caja según Loyverse
-      // (starting_cash + ventas + entradas − salidas), que ya incluye
-      // cualquier "paid_out" que el local haya cargado durante el turno.
+      // Lo que importa comparar es lo que REALMENTE quedó en caja (el conteo
+      // físico del local, "actual_cash"), no lo esperado en teoría según
+      // Loyverse ("expected_cash" = starting_cash + ventas + entradas −
+      // salidas). Si el turno no tiene conteo físico cargado, se usa lo
+      // esperado como mejor aproximación disponible.
       for (const t of turnosDia) {
         let disc: number | null = null
         if (tracked) {
@@ -276,7 +278,8 @@ export async function GET(req: NextRequest) {
         eventos.push({ tipo: 'apertura', hora: horaAR(t.opened_at), ts: t.opened_at, monto: t.starting_cash, discrepancia: disc })
 
         const cierreMonto = t.expected_cash
-        if (tracked) saldo = cierreMonto
+        const cierreReal = t.actual_cash ? t.actual_cash : cierreMonto
+        if (tracked) saldo = cierreReal
         if (t.closed_at) {
           const evtCierre: Evento = { tipo: 'cierre', hora: horaAR(t.closed_at), ts: t.closed_at, monto: cierreMonto, ventas: t.cash_payments }
           if (t.actual_cash && Math.abs(t.actual_cash - t.expected_cash) >= 1) evtCierre.contado = t.actual_cash
