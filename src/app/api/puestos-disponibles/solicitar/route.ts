@@ -27,6 +27,10 @@ export async function POST(req: NextRequest) {
 
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
   if (fecha < today) return NextResponse.json({ error: 'Esa fecha ya pasó' }, { status: 400 })
+  if (fecha === today) {
+    const horaAhora = new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit' })
+    if (start <= toMin(horaAhora)) return NextResponse.json({ error: 'Ese horario ya pasó' }, { status: 400 })
+  }
 
   if (acceso.equipoId !== equipoId) {
     return NextResponse.json({ error: 'Ese puesto no pertenece a tu equipo' }, { status: 403 })

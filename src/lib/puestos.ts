@@ -67,6 +67,9 @@ export async function getPuestosDisponibles(
   const equipoRow = { id: equipoId, nombre: equipoNombre }
 
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+  // Hora actual en Argentina, para no ofrecer huecos de hoy cuya hora de inicio ya pasó
+  const horaAhora = new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit' })
+  const nowMin = toMin(horaAhora)
   // Semana actual (lunes a sábado) + la que viene — nunca una tercera semana suelta, sea cual
   // sea el día de hoy (con +13 días fijos se colaba un par de días extra cuando hoy no es lunes)
   const dowHoy = new Date(today + 'T12:00:00Z').getUTCDay() // 0=Dom..6=Sáb
@@ -156,6 +159,9 @@ export async function getPuestosDisponibles(
     }
 
     for (const { start, end, label, lanes } of grupos.values()) {
+      // Si es hoy y la hora de inicio ya pasó, no lo ofrecemos más
+      if (fecha === today && start <= nowMin) continue
+
       const miSolicitudPendiente = solicitudesDia.find(s =>
         s.usuario_id === usuarioId && s.estado === 'pending' && lanes.includes(s.lane) &&
         overlaps(start, end, toMin(s.hora_inicio.slice(0, 5)), toMin(s.hora_fin.slice(0, 5)))
