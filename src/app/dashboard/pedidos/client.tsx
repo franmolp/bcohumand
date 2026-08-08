@@ -1001,14 +1001,15 @@ type EnvioItem = {
 }
 type EnvioGroup = { fecha: string; proveedor_id: number | null; proveedor_nombre: string; items: EnvioItem[] }
 
-function TabEnviados({ cicloActivo, isAdmin }: { cicloActivo: Ciclo | null; isAdmin: boolean }) {
+function TabEnviados({ cicloActivo, isAdmin, onRefresh }: { cicloActivo: Ciclo | null; isAdmin: boolean; onRefresh: () => void }) {
   const [grupos, setGrupos] = useState<EnvioGroup[]>([])
   const [loading, setLoading] = useState(true)
-  const [procesando, setProcesando] = useState<string | null>(null)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [recibirItem, setRecibirItem] = useState<EnvioItem | null>(null)
   const [recibirCantidad, setRecibirCantidad] = useState('')
-  const [recibirGuardando, setRecibirGuardando] = useState(false)
+  // Marcas locales sin guardar todavía: id de ítem -> cantidad recibida (0 = no llegó)
+  const [borrador, setBorrador] = useState<Record<string, number>>({})
+  const [guardandoPedido, setGuardandoPedido] = useState(false)
 
   function showToast(msg: string, type: 'success' | 'error' = 'success') {
     setToast({ msg, type }); setTimeout(() => setToast(null), 3000)
@@ -1025,74 +1026,69 @@ function TabEnviados({ cicloActivo, isAdmin }: { cicloActivo: Ciclo | null; isAd
 
   useEffect(() => { cargar() }, [cargar])
 
-  async function confirmarRecepcion() {
+  function confirmarRecepcion() {
     if (!recibirItem) return
     const recibidos = Number(recibirCantidad)
     if (isNaN(recibidos) || recibidos < 0) return
-    setRecibirGuardando(true)
-
-    // Update stock via delta (only if something actually arrived)
-    if (recibidos > 0 && (recibirItem.variante_id || recibirItem.producto_id)) {
-      const url = recibirItem.variante_id
-        ? `/api/pedidos/variantes/${recibirItem.variante_id}`
-        : `/api/pedidos/productos/${recibirItem.producto_id}`
-      await fetch(url, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stock_delta: recibidos }),
-      })
-    }
-
-    // Mark item as recibido (with actual received quantity)
-    await fetch(`/api/pedidos/ciclos/${recibirItem.ciclo_id}/items/${recibirItem.id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ estado: recibidos > 0 ? 'recibido' : 'faltante', cantidad: recibidos > 0 ? recibidos : recibirItem.cantidad }),
-    })
-
-    // Si no llegó nada: volver a la lista activa como pendiente urgente
-    if (recibidos === 0 && cicloActivo) {
-      await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          producto_id: recibirItem.producto_id ?? undefined,
-          variante_id: recibirItem.variante_id ?? undefined,
-          nombre_libre: recibirItem.producto_id ? undefined : recibirItem.nombre,
-          cantidad: recibirItem.cantidad, unidad: recibirItem.unidad,
-          notas: 'No llegó en el pedido anterior', urgente: true,
-        }),
-      })
-    }
-
-    setRecibirGuardando(false)
+    setBorrador(b => ({ ...b, [recibirItem.id]: recibidos }))
     setRecibirItem(null)
-    showToast(recibidos > 0 ? `Stock actualizado +${recibidos} ${recibirItem.unidad}` : 'No llegó — vuelto a la lista')
-    cargar()
   }
 
-  async function marcarFaltante(item: EnvioItem) {
-    setProcesando(item.id)
-    // 1. Mark the sent item as 'faltante'
-    await fetch(`/api/pedidos/ciclos/${item.ciclo_id}/items/${item.id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ estado: 'faltante' }),
-    })
-    // 2. Re-add to active cycle if one exists
-    if (cicloActivo) {
-      await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          producto_id: item.producto_id ?? undefined,
-          variante_id: item.variante_id ?? undefined,
-          nombre_libre: item.producto_id ? undefined : item.nombre,
-          cantidad: item.cantidad,
-          unidad: item.unidad,
-          notas: item.notas,
-          urgente: item.urgente,
-        }),
+  function marcarFaltante(item: EnvioItem) {
+    setBorrador(b => ({ ...b, [item.id]: 0 }))
+  }
+
+  function deshacerMarca(itemId: string) {
+    setBorrador(b => { const next = { ...b }; delete next[itemId]; return next })
+  }
+
+  async function guardarPedido() {
+    const pendientes = Object.entries(borrador)
+    if (!pendientes.length) return
+    setGuardandoPedido(true)
+
+    const itemsById = new Map<string, EnvioItem>()
+    grupos.forEach(g => g.items.forEach(i => itemsById.set(i.id, i)))
+
+    for (const [itemId, recibidos] of pendientes) {
+      const item = itemsById.get(itemId)
+      if (!item) continue
+
+      if (recibidos > 0 && (item.variante_id || item.producto_id)) {
+        const url = item.variante_id
+          ? `/api/pedidos/variantes/${item.variante_id}`
+          : `/api/pedidos/productos/${item.producto_id}`
+        await fetch(url, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stock_delta: recibidos }),
+        })
+      }
+
+      await fetch(`/api/pedidos/ciclos/${item.ciclo_id}/items/${item.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estado: recibidos > 0 ? 'recibido' : 'faltante', cantidad: recibidos > 0 ? recibidos : item.cantidad }),
       })
+
+      // Si no llegó nada: volver a la lista activa como pendiente urgente
+      if (recibidos === 0 && cicloActivo) {
+        await fetch(`/api/pedidos/ciclos/${cicloActivo.id}/items`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            producto_id: item.producto_id ?? undefined,
+            variante_id: item.variante_id ?? undefined,
+            nombre_libre: item.producto_id ? undefined : item.nombre,
+            cantidad: item.cantidad, unidad: item.unidad,
+            notas: 'No llegó en el pedido anterior', urgente: true,
+          }),
+        })
+      }
     }
-    setProcesando(null)
-    showToast('Ítem vuelto a la lista activa')
+
+    setGuardandoPedido(false)
+    setBorrador({})
+    showToast(`Pedido guardado — ${pendientes.length} ítem${pendientes.length !== 1 ? 's' : ''} actualizado${pendientes.length !== 1 ? 's' : ''}`)
     cargar()
+    onRefresh()
   }
 
   function formatFechaEnvio(iso: string) {
@@ -1102,6 +1098,8 @@ function TabEnviados({ cicloActivo, isAdmin }: { cicloActivo: Ciclo | null; isAd
   }
 
   if (loading) return <Spinner />
+
+  const cantMarcados = Object.keys(borrador).length
 
   return (
     <div>
@@ -1114,7 +1112,7 @@ function TabEnviados({ cicloActivo, isAdmin }: { cicloActivo: Ciclo | null; isAd
         footer={
           <>
             <Button variant="secondary" className="flex-1" onClick={() => setRecibirItem(null)}>Cancelar</Button>
-            <Button className="flex-1" onClick={confirmarRecepcion} loading={recibirGuardando}
+            <Button className="flex-1" onClick={confirmarRecepcion}
               disabled={recibirCantidad === '' || Number(recibirCantidad) < 0}>
               Confirmar
             </Button>
@@ -1149,6 +1147,18 @@ function TabEnviados({ cicloActivo, isAdmin }: { cicloActivo: Ciclo | null; isAd
         </div>
       </Modal>
 
+      {cantMarcados > 0 && (
+        <div className="sticky top-0 z-10 mb-4 flex items-center justify-between gap-3 bg-white border border-[var(--primary)]/30 rounded-2xl px-4 py-3 shadow-md">
+          <p className="text-[13px] font-medium text-[var(--text)]">
+            {cantMarcados} ítem{cantMarcados !== 1 ? 's' : ''} marcado{cantMarcados !== 1 ? 's' : ''}, sin guardar
+          </p>
+          <div className="flex gap-2 flex-shrink-0">
+            <Button variant="secondary" size="sm" onClick={() => setBorrador({})} disabled={guardandoPedido}>Descartar</Button>
+            <Button size="sm" onClick={guardarPedido} loading={guardandoPedido}>Guardar pedido</Button>
+          </div>
+        </div>
+      )}
+
       {!grupos.length && <p className="text-center text-[13px] text-gray-400 py-12">No hay pedidos enviados</p>}
       <div className="space-y-5">
         {grupos.map(g => {
@@ -1161,42 +1171,57 @@ function TabEnviados({ cicloActivo, isAdmin }: { cicloActivo: Ciclo | null; isAd
                 <span className="text-[11px] text-[var(--text-muted)]">{formatFechaEnvio(g.fecha)}</span>
               </div>
               <div className="divide-y divide-gray-50 px-4">
-                {g.items.map(item => (
-                  <div key={item.id} className={`py-2.5 flex items-center gap-2 ${item.estado === 'faltante' || item.estado === 'recibido' ? 'opacity-60' : ''}`}>
-                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.urgente ? 'bg-red-500' : 'bg-gray-300'}`} />
-                    <div className="flex-1 min-w-0">
-                      <span className={`text-[13px] font-medium ${item.estado === 'faltante' ? 'line-through text-orange-600' : ''}`}>
-                        {item.nombre}
-                        {item.marca && item.marca !== 'Sin marca' && (
-                          <span className="text-[11px] font-normal text-[var(--text-muted)] ml-1">· {item.marca}</span>
+                {g.items.map(item => {
+                  const marcado = borrador[item.id]
+                  const yaMarcado = marcado !== undefined
+                  return (
+                    <div key={item.id} className={`py-2.5 flex items-center gap-2 ${item.estado === 'faltante' || item.estado === 'recibido' || yaMarcado ? 'opacity-60' : ''}`}>
+                      <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.urgente ? 'bg-red-500' : 'bg-gray-300'}`} />
+                      <div className="flex-1 min-w-0">
+                        <span className={`text-[13px] font-medium ${item.estado === 'faltante' || (yaMarcado && marcado === 0) ? 'line-through text-orange-600' : ''}`}>
+                          {item.nombre}
+                          {item.marca && item.marca !== 'Sin marca' && (
+                            <span className="text-[11px] font-normal text-[var(--text-muted)] ml-1">· {item.marca}</span>
+                          )}
+                        </span>
+                        <span className="text-[12px] text-[var(--text-muted)] ml-2">{fmtCantidad(item.cantidad, item.unidad)}</span>
+                        {item.estado === 'faltante' && (
+                          <span className="ml-2 text-[10px] font-bold text-orange-500 uppercase">no llegó</span>
                         )}
-                      </span>
-                      <span className="text-[12px] text-[var(--text-muted)] ml-2">{fmtCantidad(item.cantidad, item.unidad)}</span>
-                      {item.estado === 'faltante' && (
-                        <span className="ml-2 text-[10px] font-bold text-orange-500 uppercase">no llegó</span>
+                        {item.estado === 'recibido' && (
+                          <span className="ml-2 text-[10px] font-bold text-green-600 uppercase">recibido</span>
+                        )}
+                        {yaMarcado && item.estado === 'ordenado' && (
+                          <span className={`ml-2 text-[10px] font-bold uppercase ${marcado > 0 ? 'text-green-600' : 'text-orange-500'}`}>
+                            {marcado > 0 ? `recibido: ${marcado}` : 'no llegó'}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-[var(--text-muted)]">{item.usuario}</span>
+                      {item.estado === 'ordenado' && !yaMarcado && (
+                        <>
+                          <button
+                            onClick={() => { setRecibirItem(item); setRecibirCantidad(item.cantidad.toString()) }}
+                            className="flex-shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 cursor-pointer transition-colors">
+                            Recibir
+                          </button>
+                          <button
+                            onClick={() => marcarFaltante(item)}
+                            className="flex-shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 cursor-pointer transition-colors">
+                            No llegó
+                          </button>
+                        </>
                       )}
-                      {item.estado === 'recibido' && (
-                        <span className="ml-2 text-[10px] font-bold text-green-600 uppercase">recibido</span>
+                      {item.estado === 'ordenado' && yaMarcado && (
+                        <button
+                          onClick={() => deshacerMarca(item.id)}
+                          className="flex-shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 cursor-pointer transition-colors">
+                          Deshacer
+                        </button>
                       )}
                     </div>
-                    <span className="text-[11px] text-[var(--text-muted)]">{item.usuario}</span>
-                    {item.estado === 'ordenado' && (
-                      <>
-                        <button
-                          onClick={() => { setRecibirItem(item); setRecibirCantidad(item.cantidad.toString()) }}
-                          className="flex-shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 cursor-pointer transition-colors">
-                          Recibir
-                        </button>
-                        <button
-                          onClick={() => marcarFaltante(item)}
-                          disabled={procesando === item.id}
-                          className="flex-shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 cursor-pointer transition-colors disabled:opacity-50">
-                          {procesando === item.id ? '...' : 'No llegó'}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )
@@ -2528,7 +2553,7 @@ export default function PedidosClient({ session, myCats, puedeExportar, puedeEli
               myId={session.id}
             />
           )}
-          {tab === 'enviados' && <TabEnviados cicloActivo={cicloActivo} isAdmin={isAdmin} />}
+          {tab === 'enviados' && <TabEnviados cicloActivo={cicloActivo} isAdmin={isAdmin} onRefresh={cargarProductos} />}
           {tab === 'exportar' && puedeExportar && <TabExportar cicloActivo={cicloActivo} onCiclosChange={cargarCiclos} />}
 {tab === 'ajustes' && isAdmin && <TabAjustes ciclos={ciclos} onRefreshCiclos={cargarCiclos} />}
         </>
