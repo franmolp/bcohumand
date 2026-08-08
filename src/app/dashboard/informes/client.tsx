@@ -124,7 +124,7 @@ interface RetiroItem {
 }
 
 interface Evento {
-  tipo: 'apertura' | 'cierre' | 'retiro' | 'sobre' | 'ajuste' | 'compra'
+  tipo: 'apertura' | 'cierre' | 'retiro' | 'sobre' | 'ajuste' | 'compra' | 'pago_in' | 'pago_out'
   hora: string
   monto: number
   ventas?: number
@@ -132,6 +132,7 @@ interface Evento {
   discrepancia?: number | null
   detalle?: string | null
   id?: string
+  explicado?: boolean
 }
 
 interface DiaData {
@@ -149,6 +150,7 @@ interface DiaData {
   retiros_list: RetiroItem[]
   eventos: Evento[]
   alerta_salida: { loyverse: number; sobres: number; compras: number } | null
+  salidas_sin_explicar: number
 }
 
 interface CajaResumen {
@@ -165,6 +167,8 @@ const EVENTO_CFG: Record<Evento['tipo'], { Icon: typeof IconLock; label: string;
   sobre: { Icon: IconArchive, label: 'Sobre', color: 'text-purple-600' },
   ajuste: { Icon: IconEdit, label: 'Ajuste', color: 'text-blue-600' },
   compra: { Icon: IconShoppingBag, label: 'Compra', color: 'text-slate-500' },
+  pago_in: { Icon: IconDollar, label: 'Entrada de caja', color: 'text-green-600' },
+  pago_out: { Icon: IconDollar, label: 'Salida de caja', color: 'text-slate-500' },
 }
 
 // ─── Tab Caja ─────────────────────────────────────────────────────────────────
@@ -382,7 +386,7 @@ function TabCaja({ mes }: { mes: string }) {
   }
 
   const { kpis, dias } = resumen
-  const hasDisco = dias.some(d => d.tiene_discrepancia || (d.discrepancia !== null && Math.abs(d.discrepancia) >= 1) || d.alerta_salida)
+  const hasDisco = dias.some(d => d.tiene_discrepancia || (d.discrepancia !== null && Math.abs(d.discrepancia) >= 1) || d.alerta_salida || d.salidas_sin_explicar > 0)
 
   return (
     <div className="fade-in flex flex-col gap-4">
@@ -433,7 +437,7 @@ function TabCaja({ mes }: { mes: string }) {
       )}
 
       {dias.map(dia => {
-        const hasDisc = dia.tiene_discrepancia || (dia.discrepancia !== null && Math.abs(dia.discrepancia) >= 1) || !!dia.alerta_salida
+        const hasDisc = dia.tiene_discrepancia || (dia.discrepancia !== null && Math.abs(dia.discrepancia) >= 1) || !!dia.alerta_salida || dia.salidas_sin_explicar > 0
         const chequeado = dia.eventos.some(e => e.tipo === 'apertura' && e.discrepancia !== null && e.discrepancia !== undefined)
         return (
           <div key={dia.fecha} className={`bg-white rounded-2xl border overflow-hidden ${hasDisc ? 'border-red-200' : 'border-[var(--border)]'}`}>
@@ -485,7 +489,8 @@ function TabCaja({ mes }: { mes: string }) {
                 </div>
               )}
 
-              {/* Salida de Loyverse que no cuadra contra sobres + compras en efectivo */}
+              {/* Salida de Loyverse que no cuadra contra sobres + compras en efectivo — fallback
+                  para turnos importados antes de tener el detalle de movimientos por Loyverse */}
               {dia.alerta_salida && (
                 <div className="bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2 flex items-start gap-1.5">
                   <IconAlertCircle size={13} className="text-amber-600 shrink-0 mt-0.5" />
@@ -496,6 +501,16 @@ function TabCaja({ mes }: { mes: string }) {
                     </p>
                     <p className="text-[11px] text-amber-600 mt-0.5">Revisá si falta cargar un sobre o una compra.</p>
                   </div>
+                </div>
+              )}
+
+              {/* Salidas individuales de Loyverse que no matchean con ningún sobre/compra cargado */}
+              {dia.salidas_sin_explicar > 0 && (
+                <div className="bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
+                  <IconAlertCircle size={13} className="text-amber-600 shrink-0" />
+                  <p className="text-[12px] text-amber-700">
+                    {dia.salidas_sin_explicar} salida{dia.salidas_sin_explicar !== 1 ? 's' : ''} de caja sin sobre ni compra que la{dia.salidas_sin_explicar !== 1 ? 's' : ''} explique — mirá el log
+                  </p>
                 </div>
               )}
 
@@ -537,6 +552,8 @@ function TabCaja({ mes }: { mes: string }) {
                       {dia.eventos.map((ev, i) => {
                         const checked = ev.tipo === 'apertura' && ev.discrepancia !== null && ev.discrepancia !== undefined
                         const evDisc = checked && Math.abs(ev.discrepancia!) >= 1
+                        const pagoOutExplicado = ev.tipo === 'pago_out' && ev.explicado === true
+                        const pagoOutSinExplicar = ev.tipo === 'pago_out' && ev.explicado === false
                         const c = EVENTO_CFG[ev.tipo]
                         const sub = ev.tipo === 'cierre' && ev.ventas !== undefined
                           ? `Vendieron ${fmt$(ev.ventas)}`
@@ -544,15 +561,16 @@ function TabCaja({ mes }: { mes: string }) {
                         return (
                           <div key={i} className={`py-2 ${i > 0 ? 'border-t border-gray-50' : ''} ${evDisc ? 'bg-red-50 -mx-1.5 px-1.5 rounded-lg' : ''}`}>
                             <div className="flex items-center gap-1.5">
-                              <c.Icon size={13} className={`shrink-0 ${evDisc ? 'text-red-500' : c.color}`} />
-                              <span className={`text-[12px] font-semibold ${evDisc ? 'text-red-600' : c.color}`}>{c.label}</span>
+                              <c.Icon size={13} className={`shrink-0 ${evDisc ? 'text-red-500' : pagoOutSinExplicar ? 'text-amber-500' : c.color}`} />
+                              <span className={`text-[12px] font-semibold ${evDisc ? 'text-red-600' : pagoOutSinExplicar ? 'text-amber-600' : c.color}`}>{c.label}</span>
                               <span className="text-[10px] text-[var(--text-muted)]">{ev.hora}hs</span>
                               <div className="flex-1" />
-                              {checked && !evDisc && <IconCheck size={12} className="text-green-500 shrink-0" />}
+                              {((checked && !evDisc) || pagoOutExplicado) && <IconCheck size={12} className="text-green-500 shrink-0" />}
                               {evDisc && <IconAlertCircle size={13} className="text-red-500 shrink-0" />}
+                              {pagoOutSinExplicar && <IconAlertCircle size={13} className="text-amber-500 shrink-0" />}
                               <span className={`text-[13px] font-semibold shrink-0 ${evDisc ? 'text-red-600' : 'text-[var(--text)]'}`}>{fmt$(ev.monto)}</span>
                             </div>
-                            {(sub || ev.contado !== undefined || evDisc) && (
+                            {(sub || ev.contado !== undefined || evDisc || pagoOutSinExplicar) && (
                               <div className="pl-5 mt-1 flex flex-col gap-0.5">
                                 {sub && <p className="text-[11px] text-[var(--text-muted)] leading-snug break-words">{sub}</p>}
                                 {ev.contado !== undefined && (
@@ -567,6 +585,9 @@ function TabCaja({ mes }: { mes: string }) {
                                   <p className="text-[11px] font-semibold text-red-600 leading-snug">
                                     No coincide con el cierre anterior — diferencia de {fmt$(ev.discrepancia!)}
                                   </p>
+                                )}
+                                {pagoOutSinExplicar && (
+                                  <p className="text-[11px] font-semibold text-amber-600 leading-snug">Sin sobre ni compra que la explique</p>
                                 )}
                               </div>
                             )}

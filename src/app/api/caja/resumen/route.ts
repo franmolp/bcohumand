@@ -32,7 +32,7 @@ interface CajaConfig {
 }
 
 type Evento = {
-  tipo: 'apertura' | 'cierre' | 'retiro' | 'sobre' | 'ajuste' | 'compra'
+  tipo: 'apertura' | 'cierre' | 'retiro' | 'sobre' | 'ajuste' | 'compra' | 'pago_in' | 'pago_out'
   hora: string
   ts: string
   monto: number
@@ -41,6 +41,7 @@ type Evento = {
   discrepancia?: number | null
   detalle?: string | null
   id?: string
+  explicado?: boolean
 }
 
 export async function GET(req: NextRequest) {
@@ -83,7 +84,7 @@ export async function GET(req: NextRequest) {
   const queryFrom = mesStart < trackFrom ? mesStart : trackFrom
   const hayTracking = trackFrom <= calcEnd
 
-  const [cierresRes, retirosRes, ajustesRes, pagosRes, comprasRes, sobresTotalRes] = await Promise.all([
+  const [cierresRes, retirosRes, ajustesRes, pagosRes, comprasRes, sobresTotalRes, movimientosRes] = await Promise.all([
     supabaseAdmin
       .from('loyverse_cierres')
       .select('id, fecha, opened_at, closed_at, starting_cash, cash_payments, actual_cash, expected_cash, paid_out')
@@ -131,6 +132,15 @@ export async function GET(req: NextRequest) {
       .from('retiros_caja')
       .select('monto')
       .eq('tipo', 'sobre'),
+
+    // Movimientos individuales de caja (pay-in/pay-out) de Loyverse, para cruzar
+    // cada salida uno a uno contra sobres y compras en vez de comparar el total del turno
+    supabaseAdmin
+      .from('loyverse_movimientos_caja')
+      .select('fecha, tipo, monto, comentario, movimiento_en')
+      .gte('fecha', queryFrom)
+      .lte('fecha', calcEnd)
+      .order('movimiento_en'),
   ])
 
   // Turnos (shifts de Loyverse) agrupados por fecha, ordenados por apertura
@@ -193,6 +203,20 @@ export async function GET(req: NextRequest) {
     entry.items.push({ id: c.id, monto: Number(c.monto ?? 0), detalle: c.detalle, proveedor: c.proveedor_nombre, created_at: c.created_at })
   }
 
+  // Movimientos de caja de Loyverse (pay-in/pay-out), indexados por fecha
+  type MovimientoCaja = { tipo: string; monto: number; comentario: string | null; movimiento_en: string }
+  const movimientosByFecha = new Map<string, MovimientoCaja[]>()
+  for (const mv of (movimientosRes.data ?? [])) {
+    const f = mv.fecha as string
+    if (!movimientosByFecha.has(f)) movimientosByFecha.set(f, [])
+    movimientosByFecha.get(f)!.push({
+      tipo: mv.tipo as string,
+      monto: Number(mv.monto ?? 0),
+      comentario: mv.comentario,
+      movimiento_en: mv.movimiento_en as string,
+    })
+  }
+
   let saldo = Number(config.saldo_inicial)
   let primerEvento = true // no se chequea discrepancia contra el saldo_inicial en la primera apertura
   const allDays = enumerateDays(queryFrom, calcEnd)
@@ -217,6 +241,7 @@ export async function GET(req: NextRequest) {
     retiros_list: RetiroItem[]
     eventos: Evento[]
     alerta_salida: { loyverse: number; sobres: number; compras: number } | null
+    salidas_sin_explicar: number
   }
 
   const diasDelMes: DiaData[] = []
@@ -234,12 +259,29 @@ export async function GET(req: NextRequest) {
       : (pagosByFecha.get(day) ?? 0)
 
     const starting_cash = turnosDia.length > 0 ? turnosDia[0].starting_cash : null
+    const movimientosDia = movimientosByFecha.get(day) ?? []
 
     // Toda salida de caja (paid_out en Loyverse) es, en teoría, un sobre o una
-    // compra pagada en efectivo — no debería haber nada más. Si lo que Loyverse
-    // registró no coincide con sobres + compras en efectivo cargadas, avisar.
+    // compra pagada en efectivo — no debería haber nada más.
     let alerta_salida: { loyverse: number; sobres: number; compras: number } | null = null
-    if (turnosDia.length > 0) {
+    let salidas_sin_explicar = 0
+    // Candidatos que "explican" una salida de caja: sobres + compras en efectivo del día.
+    // Se van marcando usados a medida que un pago_out los matchea, para no reusar el
+    // mismo sobre/compra como excusa de dos salidas distintas.
+    const candidatosSalida: { monto: number; usado: boolean }[] = [
+      ...retirosDia.items.filter(r => r.tipo === 'sobre').map(r => ({ monto: r.monto, usado: false })),
+      ...comprasDia.items.map(c => ({ monto: c.monto, usado: false })),
+    ]
+    const movimientosConEstado = movimientosDia.map(mv => {
+      if (mv.tipo !== 'PAY_OUT') return { ...mv, explicado: undefined as boolean | undefined }
+      const match = candidatosSalida.find(c => !c.usado && Math.abs(c.monto - mv.monto) < 1)
+      if (match) match.usado = true
+      else salidas_sin_explicar++
+      return { ...mv, explicado: !!match }
+    })
+    if (movimientosDia.length === 0 && turnosDia.length > 0) {
+      // Fallback para turnos importados antes de tener el detalle de movimientos:
+      // comparar el total del turno contra sobres + compras del día.
       const paidOutLoyverse = turnosDia.reduce((s, t) => s + t.paid_out, 0)
       const explicado = retirosDia.sobres + comprasDia.total
       if (paidOutLoyverse >= 1 && Math.abs(paidOutLoyverse - explicado) >= 1) {
@@ -310,6 +352,17 @@ export async function GET(req: NextRequest) {
       })
     }
 
+    // Movimientos de caja (pay-in/pay-out) de Loyverse: no tocan el saldo (ya están
+    // netos en expected_cash/actual_cash del turno), se muestran para reconciliar
+    // cada salida contra sobres/compras — con tilde verde si matchea, sin marca si no.
+    for (const mv of movimientosConEstado) {
+      eventos.push({
+        tipo: mv.tipo === 'PAY_IN' ? 'pago_in' : 'pago_out',
+        hora: horaAR(mv.movimiento_en), ts: mv.movimiento_en, monto: mv.monto,
+        detalle: mv.comentario, explicado: mv.explicado,
+      })
+    }
+
     if (ajuste) {
       if (tracked) saldo = ajuste.saldo_nuevo
       eventos.push({ tipo: 'ajuste', hora: horaAR(ajuste.created_at), ts: ajuste.created_at, monto: ajuste.saldo_nuevo, detalle: ajuste.motivo })
@@ -344,6 +397,7 @@ export async function GET(req: NextRequest) {
         retiros_list: retirosDia.items,
         eventos,
         alerta_salida,
+        salidas_sin_explicar,
       })
     }
   }

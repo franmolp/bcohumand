@@ -60,6 +60,22 @@ export async function fetchAndStoreShifts(from: string, to: string): Promise<{ o
     discounts: s.discounts ?? 0,
   }))
 
+  // Movimientos individuales (pay-in/pay-out) de cada turno, para poder cruzarlos
+  // uno a uno contra sobres y compras en vez de comparar solo el total del turno.
+  const movimientos = shifts.flatMap(s => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mvs: any[] = s.cash_movements ?? []
+    return mvs.map(mv => ({
+      shift_id: s.id as string,
+      fecha: toARDate(s.closed_at as string),
+      tipo: mv.type as string,
+      monto: mv.money_amount ?? 0,
+      comentario: mv.comment ?? null,
+      employee_id: mv.employee_id ?? null,
+      movimiento_en: mv.created_at,
+    }))
+  })
+
   // Solo borrar (para evitar duplicados/turnos eliminados en Loyverse) las fechas
   // que efectivamente trajimos en esta respuesta — nunca todo el rango pedido a
   // ciegas, para no perder días ya importados si Loyverse devuelve un resultado
@@ -67,12 +83,16 @@ export async function fetchAndStoreShifts(from: string, to: string): Promise<{ o
   const fechasTraidas = [...new Set(records.map(r => r.fecha))]
   for (const fecha of fechasTraidas) {
     await supabaseAdmin.from('loyverse_cierres').delete().eq('fecha', fecha)
+    await supabaseAdmin.from('loyverse_movimientos_caja').delete().eq('fecha', fecha)
   }
 
   const BATCH = 500
   for (let i = 0; i < records.length; i += BATCH) {
     await supabaseAdmin.from('loyverse_cierres')
       .upsert(records.slice(i, i + BATCH), { onConflict: 'id' })
+  }
+  for (let i = 0; i < movimientos.length; i += BATCH) {
+    await supabaseAdmin.from('loyverse_movimientos_caja').insert(movimientos.slice(i, i + BATCH))
   }
 
   return { ok: records.length }
