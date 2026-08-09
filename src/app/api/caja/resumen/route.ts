@@ -277,6 +277,7 @@ export async function GET(req: NextRequest) {
     eventos: Evento[]
     alerta_salida: { loyverse: number; sobres: number; compras: number } | null
     salidas_sin_explicar: number
+    diferencia_conteo: number
   }
 
   const diasDelMes: DiaData[] = []
@@ -339,6 +340,7 @@ export async function GET(req: NextRequest) {
     let saldoDia: number | null = null
     let discrepanciaDia: number | null = null
     let tieneDiscrepancia = false
+    let diferenciaConteoDia = 0 // suma de (contado - esperado) de todos los cierres del día
     const eventos: Evento[] = []
 
     // El log de turnos/retiros/sobres/compras se arma SIEMPRE que haya datos,
@@ -371,7 +373,10 @@ export async function GET(req: NextRequest) {
         if (tracked) saldo = cierreReal
         if (t.closed_at) {
           const evtCierre: Evento = { tipo: 'cierre', hora: horaAR(t.closed_at), ts: t.closed_at, monto: cierreMonto, ventas: t.cash_payments }
-          if (t.actual_cash && Math.abs(t.actual_cash - t.expected_cash) >= 1) evtCierre.contado = t.actual_cash
+          if (t.actual_cash && Math.abs(t.actual_cash - t.expected_cash) >= 1) {
+            evtCierre.contado = t.actual_cash
+            diferenciaConteoDia += t.actual_cash - t.expected_cash
+          }
           eventos.push(evtCierre)
         }
       }
@@ -451,6 +456,7 @@ export async function GET(req: NextRequest) {
         eventos,
         alerta_salida,
         salidas_sin_explicar,
+        diferencia_conteo: diferenciaConteoDia,
       })
     }
   }

@@ -151,6 +151,7 @@ interface DiaData {
   eventos: Evento[]
   alerta_salida: { loyverse: number; sobres: number; compras: number } | null
   salidas_sin_explicar: number
+  diferencia_conteo: number
 }
 
 interface CajaResumen {
@@ -482,6 +483,11 @@ function TabCaja({ mes }: { mes: string }) {
                 )}
                 {dia.ajuste && (
                   <span className="text-blue-600 font-semibold">Ajuste → {fmt$(dia.ajuste.saldo_nuevo)}</span>
+                )}
+                {dia.diferencia_conteo !== 0 && (
+                  <span className={`font-semibold ${dia.diferencia_conteo < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {dia.diferencia_conteo < 0 ? 'Faltante' : 'Sobrante'} {fmt$(Math.abs(dia.diferencia_conteo))}
+                  </span>
                 )}
               </div>
 
