@@ -210,13 +210,15 @@ function TabCaja({ mes }: { mes: string }) {
   const [erTipo, setErTipo] = useState<'retiro' | 'sobre'>('retiro')
   const [erSaving, setErSaving] = useState(false)
 
-  function cargar() {
-    setCargando(true); setError(null)
+  // silent=true: refresco de fondo (polling) — actualiza los datos sin mostrar el
+  // spinner de pantalla completa ni pisar el log que la persona tenga abierto
+  function cargar(silent = false) {
+    if (!silent) { setCargando(true); setError(null) }
     fetch(`/api/caja/resumen?mes=${mes}`)
       .then(r => r.json())
-      .then(d => { if (d.error) setError(d.error); else setResumen(d) })
-      .catch(() => setError('Error al cargar'))
-      .finally(() => setCargando(false))
+      .then(d => { if (d.error) { if (!silent) setError(d.error) } else setResumen(d) })
+      .catch(() => { if (!silent) setError('Error al cargar') })
+      .finally(() => { if (!silent) setCargando(false) })
   }
 
   async function reimportarCierres() {
@@ -241,6 +243,15 @@ function TabCaja({ mes }: { mes: string }) {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { cargar() }, [mes])
+
+  // Refresco periódico en segundo plano: si alguien carga una compra/retiro desde
+  // otra pestaña o dispositivo mientras esta pantalla queda abierta, se termina
+  // viendo solo (no hace falta salir y volver a la pestaña para que aparezca)
+  useEffect(() => {
+    const interval = setInterval(() => { cargar(true) }, 15000)
+    return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mes])
 
   function abrirModalRetiro(fecha: string) {
     setRfFecha(fecha); setRfMonto(''); setRfDesc(''); setRfTipo('retiro'); setRfError('')
@@ -577,7 +588,7 @@ function TabCaja({ mes }: { mes: string }) {
                                   <>
                                     <p className="text-[11px] text-amber-600 leading-snug">Conteo del local: {fmt$(ev.contado)}</p>
                                     <p className="text-[11px] font-semibold text-red-600 leading-snug">
-                                      {ev.contado - ev.monto < 0 ? 'Faltante' : 'Sobante'} de {fmt$(Math.abs(ev.contado - ev.monto))}
+                                      {ev.contado - ev.monto < 0 ? 'Faltante' : 'Sobrante'} de {fmt$(Math.abs(ev.contado - ev.monto))}
                                     </p>
                                   </>
                                 )}

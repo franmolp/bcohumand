@@ -25,6 +25,26 @@ function enumerateDays(from: string, to: string): string[] {
   return days
 }
 
+function normalizarTexto(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+}
+
+// El monto solo no alcanza para dar por explicada una salida — dos cosas distintas
+// pueden costar lo mismo el mismo día. Si el comentario de Loyverse y la descripción
+// del sobre/compra tienen texto, exigimos que se relacionen (una contenga a la otra,
+// o compartan alguna palabra de 4+ letras). Si a alguno de los dos lados le falta
+// texto para comparar, no se descarta el match por eso — el monto sigue siendo la
+// única señal disponible en ese caso.
+function textosRelacionados(a: string, b: string): boolean {
+  const na = normalizarTexto(a)
+  const nb = normalizarTexto(b)
+  if (!na || !nb) return true
+  if (na.includes(nb) || nb.includes(na)) return true
+  const wordsA = na.split(/\s+/).filter(w => w.length >= 4)
+  const wordsB = new Set(nb.split(/\s+/).filter(w => w.length >= 4))
+  return wordsA.some(w => wordsB.has(w))
+}
+
 interface CajaConfig {
   saldo_inicial: number
   fecha_inicio: string
@@ -268,13 +288,15 @@ export async function GET(req: NextRequest) {
     // Candidatos que "explican" una salida de caja: sobres + compras en efectivo del día.
     // Se van marcando usados a medida que un pago_out los matchea, para no reusar el
     // mismo sobre/compra como excusa de dos salidas distintas.
-    const candidatosSalida: { monto: number; usado: boolean }[] = [
-      ...retirosDia.items.filter(r => r.tipo === 'sobre').map(r => ({ monto: r.monto, usado: false })),
-      ...comprasDia.items.map(c => ({ monto: c.monto, usado: false })),
+    const candidatosSalida: { monto: number; usado: boolean; texto: string }[] = [
+      ...retirosDia.items.filter(r => r.tipo === 'sobre').map(r => ({ monto: r.monto, usado: false, texto: r.descripcion ?? '' })),
+      ...comprasDia.items.map(c => ({ monto: c.monto, usado: false, texto: `${c.proveedor ?? ''} ${c.detalle ?? ''}`.trim() })),
     ]
     const movimientosConEstado = movimientosDia.map(mv => {
       if (mv.tipo !== 'PAY_OUT') return { ...mv, explicado: undefined as boolean | undefined }
-      const match = candidatosSalida.find(c => !c.usado && Math.abs(c.monto - mv.monto) < 1)
+      const match = candidatosSalida.find(c =>
+        !c.usado && Math.abs(c.monto - mv.monto) < 1 && textosRelacionados(mv.comentario ?? '', c.texto)
+      )
       if (match) match.usado = true
       else salidas_sin_explicar++
       return { ...mv, explicado: !!match }
