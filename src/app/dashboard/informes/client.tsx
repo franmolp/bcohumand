@@ -397,7 +397,10 @@ function TabCaja({ mes }: { mes: string }) {
   }
 
   const { kpis, dias } = resumen
-  const hasDisco = dias.some(d => d.tiene_discrepancia || (d.discrepancia !== null && Math.abs(d.discrepancia) >= 1) || d.alerta_salida || d.salidas_sin_explicar > 0)
+  // El rojo/alarma es solo para cuando una apertura no coincide con el cierre
+  // anterior — una salida de caja sin sobre/compra asociado queda como aviso
+  // ámbar propio (banner + ítem del log), sin escalar el día entero a rojo.
+  const hasDisco = dias.some(d => d.tiene_discrepancia || (d.discrepancia !== null && Math.abs(d.discrepancia) >= 1))
 
   return (
     <div className="fade-in flex flex-col gap-4">
@@ -448,7 +451,7 @@ function TabCaja({ mes }: { mes: string }) {
       )}
 
       {dias.map(dia => {
-        const hasDisc = dia.tiene_discrepancia || (dia.discrepancia !== null && Math.abs(dia.discrepancia) >= 1) || !!dia.alerta_salida || dia.salidas_sin_explicar > 0
+        const hasDisc = dia.tiene_discrepancia || (dia.discrepancia !== null && Math.abs(dia.discrepancia) >= 1)
         const chequeado = dia.eventos.some(e => e.tipo === 'apertura' && e.discrepancia !== null && e.discrepancia !== undefined)
         return (
           <div key={dia.fecha} className={`bg-white rounded-2xl border overflow-hidden ${hasDisc ? 'border-red-200' : 'border-[var(--border)]'}`}>
