@@ -287,19 +287,29 @@ export async function GET(req: NextRequest) {
     let salidas_sin_explicar = 0
     // Candidatos que "explican" una salida de caja: sobres + compras en efectivo del día.
     // Se van marcando usados a medida que un pago_out los matchea, para no reusar el
-    // mismo sobre/compra como excusa de dos salidas distintas.
-    const candidatosSalida: { monto: number; usado: boolean; texto: string }[] = [
-      ...retirosDia.items.filter(r => r.tipo === 'sobre').map(r => ({ monto: r.monto, usado: false, texto: r.descripcion ?? '' })),
-      ...comprasDia.items.map(c => ({ monto: c.monto, usado: false, texto: `${c.proveedor ?? ''} ${c.detalle ?? ''}`.trim() })),
+    // mismo sobre/compra como excusa de dos salidas distintas — y para poder fusionar
+    // el sobre/compra matcheado en un único evento de log en vez de mostrarlo dos veces
+    // (una cuando se cargó en Loyverse, otra cuando se cargó en Humand).
+    type CandidatoSalida = { monto: number; usado: boolean; texto: string; kind: 'sobre' | 'compra'; refId: string | number }
+    const candidatosSalida: CandidatoSalida[] = [
+      ...retirosDia.items.filter(r => r.tipo === 'sobre').map(r => ({ monto: r.monto, usado: false, texto: r.descripcion ?? '', kind: 'sobre' as const, refId: r.id })),
+      ...comprasDia.items.map(c => ({ monto: c.monto, usado: false, texto: `${c.proveedor ?? ''} ${c.detalle ?? ''}`.trim(), kind: 'compra' as const, refId: c.id })),
     ]
+    const sobresFusionados = new Set<string>()
+    const comprasFusionadas = new Set<number>()
     const movimientosConEstado = movimientosDia.map(mv => {
-      if (mv.tipo !== 'PAY_OUT') return { ...mv, explicado: undefined as boolean | undefined }
+      if (mv.tipo !== 'PAY_OUT') return { ...mv, explicado: undefined as boolean | undefined, matchTexto: undefined as string | undefined }
       const match = candidatosSalida.find(c =>
         !c.usado && Math.abs(c.monto - mv.monto) < 1 && textosRelacionados(mv.comentario ?? '', c.texto)
       )
-      if (match) match.usado = true
-      else salidas_sin_explicar++
-      return { ...mv, explicado: !!match }
+      if (match) {
+        match.usado = true
+        if (match.kind === 'sobre') sobresFusionados.add(match.refId as string)
+        else comprasFusionadas.add(match.refId as number)
+      } else {
+        salidas_sin_explicar++
+      }
+      return { ...mv, explicado: !!match, matchTexto: match?.texto }
     })
     if (movimientosDia.length === 0 && turnosDia.length > 0) {
       // Fallback para turnos importados antes de tener el detalle de movimientos:
@@ -355,18 +365,22 @@ export async function GET(req: NextRequest) {
       saldo = saldo + efectivo
     }
 
-    // Retiros y sobres del día, siempre después de procesar los turnos
+    // Retiros y sobres del día, siempre después de procesar los turnos.
+    // Los sobres que ya quedaron fusionados en un pago_out (mismo monto y
+    // descripción relacionada) no se listan aparte, para no duplicar el log.
     for (const r of retirosDia.items) {
       if (tracked && r.tipo !== 'sobre') saldo -= r.monto
+      if (r.tipo === 'sobre' && sobresFusionados.has(r.id)) continue
       eventos.push({
         tipo: r.tipo === 'sobre' ? 'sobre' : 'retiro',
         hora: horaAR(r.created_at), ts: r.created_at, monto: r.monto, detalle: r.descripcion, id: r.id,
       })
     }
 
-    // Compras en efectivo: no tocan el saldo (ya están netas en expected_cash de Loyverse),
-    // se muestran solo para poder cruzar contra el paid_out del turno
+    // Compras en efectivo: no tocan el saldo (ya están netas en expected_cash de Loyverse).
+    // Las que ya quedaron fusionadas en un pago_out no se listan aparte.
     for (const c of comprasDia.items) {
+      if (comprasFusionadas.has(c.id)) continue
       eventos.push({
         tipo: 'compra',
         hora: horaAR(c.created_at), ts: c.created_at, monto: c.monto,
@@ -375,13 +389,15 @@ export async function GET(req: NextRequest) {
     }
 
     // Movimientos de caja (pay-in/pay-out) de Loyverse: no tocan el saldo (ya están
-    // netos en expected_cash/actual_cash del turno), se muestran para reconciliar
-    // cada salida contra sobres/compras — con tilde verde si matchea, sin marca si no.
+    // netos en expected_cash/actual_cash del turno). Si un pago_out matcheó con un
+    // sobre/compra, se muestra la info de ese sobre/compra fusionada acá (con tilde
+    // verde) en vez de listarlos como dos eventos separados.
     for (const mv of movimientosConEstado) {
       eventos.push({
         tipo: mv.tipo === 'PAY_IN' ? 'pago_in' : 'pago_out',
         hora: horaAR(mv.movimiento_en), ts: mv.movimiento_en, monto: mv.monto,
-        detalle: mv.comentario, explicado: mv.explicado,
+        detalle: mv.explicado && mv.matchTexto ? mv.matchTexto : mv.comentario,
+        explicado: mv.explicado,
       })
     }
 
