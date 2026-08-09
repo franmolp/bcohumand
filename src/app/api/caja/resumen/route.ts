@@ -72,7 +72,7 @@ type Evento = {
   ts: string
   monto: number
   ventas?: number
-  contado?: number
+  esperado?: number
   discrepancia?: number | null
   detalle?: string | null
   id?: string
@@ -372,9 +372,11 @@ export async function GET(req: NextRequest) {
         const cierreReal = t.actual_cash ? t.actual_cash : cierreMonto
         if (tracked) saldo = cierreReal
         if (t.closed_at) {
-          const evtCierre: Evento = { tipo: 'cierre', hora: horaAR(t.closed_at), ts: t.closed_at, monto: cierreMonto, ventas: t.cash_payments }
+          // monto = lo que realmente contaron (lo mismo que se arrastra a la apertura
+          // siguiente); esperado (si difiere) queda como dato secundario con la diferencia
+          const evtCierre: Evento = { tipo: 'cierre', hora: horaAR(t.closed_at), ts: t.closed_at, monto: cierreReal, ventas: t.cash_payments }
           if (t.actual_cash && Math.abs(t.actual_cash - t.expected_cash) >= 1) {
-            evtCierre.contado = t.actual_cash
+            evtCierre.esperado = cierreMonto
             diferenciaConteoDia += t.actual_cash - t.expected_cash
           }
           eventos.push(evtCierre)

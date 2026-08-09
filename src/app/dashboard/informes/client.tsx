@@ -128,7 +128,7 @@ interface Evento {
   hora: string
   monto: number
   ventas?: number
-  contado?: number
+  esperado?: number
   discrepancia?: number | null
   detalle?: string | null
   id?: string
@@ -590,14 +590,14 @@ function TabCaja({ mes }: { mes: string }) {
                               {pagoOutSinExplicar && <IconAlertCircle size={13} className="text-amber-500 shrink-0" />}
                               <span className={`text-[13px] font-semibold shrink-0 ${evDisc ? 'text-red-600' : 'text-[var(--text)]'}`}>{fmt$(ev.monto)}</span>
                             </div>
-                            {(sub || ev.contado !== undefined || evDisc) && (
+                            {(sub || ev.esperado !== undefined || evDisc) && (
                               <div className="pl-5 mt-1 flex flex-col gap-0.5">
                                 {sub && <p className="text-[11px] text-[var(--text-muted)] leading-snug break-words">{sub}</p>}
-                                {ev.contado !== undefined && (
+                                {ev.esperado !== undefined && (
                                   <>
-                                    <p className="text-[11px] text-amber-600 leading-snug">Conteo del local: {fmt$(ev.contado)}</p>
+                                    <p className="text-[11px] text-[var(--text-muted)] leading-snug">Debía haber: {fmt$(ev.esperado)}</p>
                                     <p className="text-[11px] font-semibold text-red-600 leading-snug">
-                                      {ev.contado - ev.monto < 0 ? 'Faltante' : 'Sobrante'} de {fmt$(Math.abs(ev.contado - ev.monto))}
+                                      {ev.monto - ev.esperado < 0 ? 'Faltante' : 'Sobrante'} de {fmt$(Math.abs(ev.monto - ev.esperado))}
                                     </p>
                                   </>
                                 )}
