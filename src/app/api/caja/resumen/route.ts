@@ -289,10 +289,13 @@ export async function GET(req: NextRequest) {
     const ajuste = ajustesByFecha.get(day) ?? null
     const tracked = day >= trackFrom
 
-    // Efectivo del día = ventas en efectivo (informativo, no confundir con lo que queda físico en caja)
-    const efectivo = turnosDia.length > 0
-      ? turnosDia.reduce((s, t) => s + t.cash_payments, 0)
-      : (pagosByFecha.get(day) ?? 0)
+    // Efectivo del día = ventas en efectivo (informativo, no confundir con lo que queda físico en caja).
+    // Se calcula siempre desde loyverse_pagos (venta por venta, por fecha real de la venta) —
+    // el mismo criterio que usa el tab Resumen — para que ambas pantallas muestren el mismo
+    // número. Antes, en días con turno, se usaba el "cash_payments" agregado que Loyverse
+    // calcula por turno y atribuye al día del CIERRE (no de la venta), lo que podía correr
+    // ventas de un día a otro cuando un turno cruzaba la medianoche.
+    const efectivo = pagosByFecha.get(day) ?? 0
 
     const starting_cash = turnosDia.length > 0 ? turnosDia[0].starting_cash : null
     const movimientosDia = movimientosByFecha.get(day) ?? []
