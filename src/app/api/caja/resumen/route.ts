@@ -25,24 +25,39 @@ function enumerateDays(from: string, to: string): string[] {
   return days
 }
 
+// Minúsculas, sin acentos, y cualquier signo (paréntesis, guiones, viñetas) se
+// vuelve espacio — para que "Rocío (transferencia)" tokenice igual que "rocio transferencia"
 function normalizarTexto(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+// Palabras de 4+ letras, más pares de palabras consecutivas pegadas — así "Max
+// clean" (dos palabras en el comentario de Loyverse) matchea contra "Maxclean"
+// (una sola palabra en el proveedor cargado en Compras), sin importar el espacio.
+function tokensRelacionables(s: string): Set<string> {
+  const words = s.split(' ').filter(Boolean)
+  const tokens = new Set<string>()
+  for (const w of words) if (w.length >= 4) tokens.add(w)
+  for (let i = 0; i < words.length - 1; i++) {
+    const combo = words[i] + words[i + 1]
+    if (combo.length >= 4) tokens.add(combo)
+  }
+  return tokens
 }
 
 // El monto solo no alcanza para dar por explicada una salida — dos cosas distintas
 // pueden costar lo mismo el mismo día. Si el comentario de Loyverse y la descripción
-// del sobre/compra tienen texto, exigimos que se relacionen (una contenga a la otra,
-// o compartan alguna palabra de 4+ letras). Si a alguno de los dos lados le falta
-// texto para comparar, no se descarta el match por eso — el monto sigue siendo la
-// única señal disponible en ese caso.
+// del sobre/compra tienen texto, exigimos que se relacionen. Si a alguno de los dos
+// lados le falta texto para comparar, no se descarta el match por eso — el monto
+// sigue siendo la única señal disponible en ese caso.
 function textosRelacionados(a: string, b: string): boolean {
   const na = normalizarTexto(a)
   const nb = normalizarTexto(b)
   if (!na || !nb) return true
   if (na.includes(nb) || nb.includes(na)) return true
-  const wordsA = na.split(/\s+/).filter(w => w.length >= 4)
-  const wordsB = new Set(nb.split(/\s+/).filter(w => w.length >= 4))
-  return wordsA.some(w => wordsB.has(w))
+  const tokensB = tokensRelacionables(nb)
+  for (const t of tokensRelacionables(na)) if (tokensB.has(t)) return true
+  return false
 }
 
 interface CajaConfig {

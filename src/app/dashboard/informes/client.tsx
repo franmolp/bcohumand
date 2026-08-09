@@ -581,7 +581,7 @@ function TabCaja({ mes }: { mes: string }) {
                               {pagoOutSinExplicar && <IconAlertCircle size={13} className="text-amber-500 shrink-0" />}
                               <span className={`text-[13px] font-semibold shrink-0 ${evDisc ? 'text-red-600' : 'text-[var(--text)]'}`}>{fmt$(ev.monto)}</span>
                             </div>
-                            {(sub || ev.contado !== undefined || evDisc || pagoOutSinExplicar) && (
+                            {(sub || ev.contado !== undefined || evDisc) && (
                               <div className="pl-5 mt-1 flex flex-col gap-0.5">
                                 {sub && <p className="text-[11px] text-[var(--text-muted)] leading-snug break-words">{sub}</p>}
                                 {ev.contado !== undefined && (
@@ -596,9 +596,6 @@ function TabCaja({ mes }: { mes: string }) {
                                   <p className="text-[11px] font-semibold text-red-600 leading-snug">
                                     No coincide con el cierre anterior — diferencia de {fmt$(ev.discrepancia!)}
                                   </p>
-                                )}
-                                {pagoOutSinExplicar && (
-                                  <p className="text-[11px] font-semibold text-amber-600 leading-snug">Sin sobre ni compra que la explique</p>
                                 )}
                               </div>
                             )}
