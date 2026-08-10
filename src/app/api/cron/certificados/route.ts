@@ -2,14 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-export async function GET(request: NextRequest) {
-  const secret = request.nextUrl.searchParams.get('secret')
-  const authHeader = request.headers.get('authorization')
-  const bearerSecret = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
-  if (secret !== process.env.CRON_SECRET && bearerSecret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
-
+export async function ejecutarCertificados() {
   const now = new Date()
   const year = now.getFullYear()
   const month = now.getMonth() // 0-indexed
@@ -32,14 +25,14 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     console.error('[cron certificados] query error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    throw new Error(error.message)
   }
 
   // Deduplicate por usuario
   const usuarioIds = [...new Set((solicitudes ?? []).map(s => s.usuario_id).filter(Boolean))]
 
   if (!usuarioIds.length) {
-    return NextResponse.json({ ok: true, enviadas: 0, mensaje: 'Sin ausencias pendientes de certificado' })
+    return { ok: true, enviadas: 0, mensaje: 'Sin ausencias pendientes de certificado' }
   }
 
   const { error: insertError } = await supabaseAdmin.from('notificaciones').insert(
@@ -54,7 +47,7 @@ export async function GET(request: NextRequest) {
 
   if (insertError) {
     console.error('[cron certificados] insert error:', insertError)
-    return NextResponse.json({ error: insertError.message }, { status: 500 })
+    throw new Error(insertError.message)
   }
 
   // Notificar al admin
@@ -74,5 +67,20 @@ export async function GET(request: NextRequest) {
   }
 
   console.log(`[cron certificados] enviadas: ${usuarioIds.length}`)
-  return NextResponse.json({ ok: true, enviadas: usuarioIds.length })
+  return { ok: true, enviadas: usuarioIds.length }
+}
+
+// Ruta standalone (debug/manual) — el cron de Vercel llama a /api/cron/diario
+export async function GET(request: NextRequest) {
+  const secret = request.nextUrl.searchParams.get('secret')
+  const authHeader = request.headers.get('authorization')
+  const bearerSecret = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+  if (secret !== process.env.CRON_SECRET && bearerSecret !== process.env.CRON_SECRET) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  }
+  try {
+    return NextResponse.json(await ejecutarCertificados())
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Error' }, { status: 500 })
+  }
 }

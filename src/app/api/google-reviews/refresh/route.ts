@@ -18,17 +18,16 @@ async function fetchDataId(key: string): Promise<string | null> {
   return (data.local_results?.[0]?.data_id as string) ?? null
 }
 
-export async function GET() {
-
+export async function ejecutarGoogleReviewsRefresh() {
   const key = process.env.SERPAPI_KEY
-  if (!key) return NextResponse.json({ error: 'no_key' }, { status: 500 })
+  if (!key) throw new Error('no_key')
 
   const dataId = await fetchDataId(key)
-  if (!dataId) return NextResponse.json({ error: 'no_place' }, { status: 500 })
+  if (!dataId) throw new Error('no_place')
 
   const url = `https://serpapi.com/search.json?engine=google_maps_reviews&data_id=${dataId}&hl=es&sort_by=newestFirst&api_key=${key}`
   const res = await fetch(url)
-  if (!res.ok) return NextResponse.json({ error: 'serpapi_error' }, { status: 500 })
+  if (!res.ok) throw new Error('serpapi_error')
 
   const data = await res.json()
   const raw: SerpReview[] = data.reviews ?? data.reviews_results?.reviews ?? []
@@ -42,12 +41,21 @@ export async function GET() {
       date: r.date ?? '',
     }))
 
-  if (reviews.length === 0) return NextResponse.json({ updated: 0 })
+  if (reviews.length === 0) return { updated: 0 }
 
   // Reemplaza todas las reseñas con el snapshot fresco
   await supabaseAdmin.from('google_reviews').delete().gt('id', 0)
   const { error } = await supabaseAdmin.from('google_reviews').insert(reviews)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ updated: reviews.length })
+  if (error) throw new Error(error.message)
+  return { updated: reviews.length }
+}
+
+// Ruta standalone (debug/manual) — el cron de Vercel llama a /api/cron/diario
+export async function GET() {
+  try {
+    return NextResponse.json(await ejecutarGoogleReviewsRefresh())
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Error' }, { status: 500 })
+  }
 }

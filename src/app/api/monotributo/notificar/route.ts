@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-async function notificar(req: NextRequest, isCron: boolean) {
+export async function notificar(req: NextRequest, isCron: boolean) {
   const tz = 'America/Argentina/Buenos_Aires'
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: tz })
   const [year, month, day] = todayStr.split('-').map(Number)

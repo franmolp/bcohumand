@@ -17,14 +17,7 @@ function hoyDiaARG(): number {
   return new Date(dateStr + 'T12:00:00').getDay()
 }
 
-export async function GET(request: NextRequest) {
-  const secret = request.nextUrl.searchParams.get('secret')
-  const authHeader = request.headers.get('authorization')
-  const bearerSecret = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
-  if (secret !== process.env.CRON_SECRET && bearerSecret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
-
+export async function ejecutarPedidosRecordatorio() {
   const hoyDia = hoyDiaARG()
 
   const { data: config } = await supabaseAdmin
@@ -64,5 +57,20 @@ export async function GET(request: NextRequest) {
     enviadas += userIds.length
   }
 
-  return NextResponse.json({ ok: true, enviadas })
+  return { ok: true, enviadas }
+}
+
+// Ruta standalone (debug/manual) — el cron de Vercel llama a /api/cron/diario
+export async function GET(request: NextRequest) {
+  const secret = request.nextUrl.searchParams.get('secret')
+  const authHeader = request.headers.get('authorization')
+  const bearerSecret = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+  if (secret !== process.env.CRON_SECRET && bearerSecret !== process.env.CRON_SECRET) {
+    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  }
+  try {
+    return NextResponse.json(await ejecutarPedidosRecordatorio())
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Error' }, { status: 500 })
+  }
 }

@@ -5,32 +5,16 @@
       "schedule": "30 23 * * *"
     },
     {
-      "path": "/api/cron/cumpleanos",
-      "schedule": "0 10 * * *"
-    },
-    {
-      "path": "/api/cron/certificados",
-      "schedule": "0 9 28 * *"
-    },
-    {
-      "path": "/api/monotributo/notificar",
-      "schedule": "0 9 26-31 * *"
+      "path": "/api/cron/diario",
+      "schedule": "0 9 * * *"
     },
     {
       "path": "/api/cron/convertir-certificados",
       "schedule": "0 0 1 * *"
     },
     {
-      "path": "/api/google-reviews/refresh",
-      "schedule": "0 9 * * *"
-    },
-    {
       "path": "/api/cron/reconocimientos",
       "schedule": "0 12 15 * *"
-    },
-    {
-      "path": "/api/cron/pedidos-recordatorio",
-      "schedule": "0 9 * * *"
     },
     {
       "path": "/api/cron/puestos-disponibles-semana",
