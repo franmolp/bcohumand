@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { toMin, overlaps } from '@/lib/gaps'
 
 export const dynamic = 'force-dynamic'
 
@@ -116,17 +117,34 @@ export async function GET(req: NextRequest) {
   // Solicitudes de puesto aprobadas: se ocupa el equipo/lane del recurso solicitado
   // (no el equipo real de quien pidió el puesto), para que aparezca en la sección
   // correcta de Ocupación y deje de contarse como hueco libre en Disponibles.
-  const turnosSolicitudes = solicitudesAprobadas.map(s => {
-    const user = userMap.get(s.usuario_id as string)
-    return {
-      usuario_id: s.usuario_id as string,
-      nombre: user?.nombre ?? '—',
-      equipo: s.equipo_nombre as string,
-      fecha: s.fecha as string,
-      inicio: normalizeTime(s.hora_inicio as string),
-      fin: normalizeTime(s.hora_fin as string),
-    }
-  })
+  // Es solo un overlay TEMPORAL: si ya bajó de Fresha un turno real de esa misma
+  // persona ese día que se pisa con el horario pedido, se asume que Fresha ya
+  // formalizó el cambio y se deja de mostrar el sintético para no duplicar la mesa.
+  const turnosRealesPorUsuarioFecha = new Map<string, { inicio: number; fin: number }[]>()
+  for (const t of turnosFresha) {
+    const key = `${t.usuario_id}|${t.fecha}`
+    if (!turnosRealesPorUsuarioFecha.has(key)) turnosRealesPorUsuarioFecha.set(key, [])
+    turnosRealesPorUsuarioFecha.get(key)!.push({ inicio: toMin(t.inicio), fin: toMin(t.fin) })
+  }
+
+  const turnosSolicitudes = solicitudesAprobadas
+    .filter(s => {
+      const reales = turnosRealesPorUsuarioFecha.get(`${s.usuario_id}|${s.fecha}`) ?? []
+      const inicio = toMin(normalizeTime(s.hora_inicio as string))
+      const fin = toMin(normalizeTime(s.hora_fin as string))
+      return !reales.some(r => overlaps(inicio, fin, r.inicio, r.fin))
+    })
+    .map(s => {
+      const user = userMap.get(s.usuario_id as string)
+      return {
+        usuario_id: s.usuario_id as string,
+        nombre: user?.nombre ?? '—',
+        equipo: s.equipo_nombre as string,
+        fecha: s.fecha as string,
+        inicio: normalizeTime(s.hora_inicio as string),
+        fin: normalizeTime(s.hora_fin as string),
+      }
+    })
 
   const turnos = [...turnosFresha, ...turnosSolicitudes]
 
