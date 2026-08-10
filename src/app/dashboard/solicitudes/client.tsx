@@ -964,10 +964,13 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
         return true
       })
 
-  // Pendientes: orden de creación (quién pidió primero).
-  // Archivadas: más recientes primero (ayer → atrás).
-  // Resto: fecha_inicio ascendente.
+  // Vista empleado: siempre la más reciente primero.
+  // Vista admin/HR — Pendientes: orden de creación (quién pidió primero).
+  // Archivadas: más recientes primero (ayer → atrás). Resto: fecha_inicio ascendente.
   const displayList = [...filtered].sort((a, b) => {
+    if (!isAdminOrHR) {
+      return (b.fecha_inicio || '').localeCompare(a.fecha_inicio || '')
+    }
     if (estadoFilter === 'pending') {
       return (a.fecha_creacion || '').localeCompare(b.fecha_creacion || '')
     }
