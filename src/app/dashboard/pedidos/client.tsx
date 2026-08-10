@@ -60,6 +60,11 @@ interface AuditoriaEntry {
   created_at: string; usuario_nombre: string
 }
 
+interface LogEntry {
+  id: string; tipo: 'stock' | 'item'; mensaje: string
+  usuario_nombre: string; created_at: string
+}
+
 interface Ciclo {
   id: string; nombre: string; fecha_apertura: string; fecha_cierre: string
   estado: 'abierto' | 'cerrado' | 'enviado'
@@ -2197,6 +2202,43 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, canDelete
   )
 }
 
+// ─── Tab: Logs ───────────────────────────────────────────────────────────────
+
+function TabLogs() {
+  const [logs, setLogs] = useState<LogEntry[] | null>(null)
+
+  useEffect(() => {
+    fetch('/api/pedidos/logs')
+      .then(r => r.json())
+      .then(d => setLogs(Array.isArray(d) ? d : []))
+      .catch(() => setLogs([]))
+  }, [])
+
+  if (logs === null) return <Spinner />
+
+  if (logs.length === 0) {
+    return <p className="text-center text-[13px] text-[var(--text-muted)] py-8">Todavía no hay movimientos registrados</p>
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-[var(--border)] divide-y divide-[var(--border)] overflow-hidden">
+      {logs.map(l => (
+        <div key={l.id} className="px-4 py-3 flex items-start gap-2.5">
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${l.tipo === 'stock' ? 'bg-blue-50 text-blue-500' : 'bg-amber-50 text-amber-500'}`}>
+            <IconClock size={13} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] text-[var(--text)] leading-snug">
+              <span className="font-semibold">{l.usuario_nombre}</span> {l.mensaje}
+            </p>
+            <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{formatCerradoEn(l.created_at)} · {formatRelativo(l.created_at)}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── Tab: Ajustes ────────────────────────────────────────────────────────────
 
 type CatConfig = { notif: boolean; dia_cierre: number }
@@ -2476,9 +2518,10 @@ export default function PedidosClient({ session, myCats, puedeExportar, puedeEli
   session: SessionUser; myCats: string[]; puedeExportar: boolean; puedeEliminar: boolean
 }) {
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+  const isEncargada = session.rol === 'encargada' || session.rol === 'Encargada'
   const canDelete = isAdmin || puedeEliminar
 
-  type Tab = 'inventario' | 'lista' | 'enviados' | 'exportar' | 'ajustes'
+  type Tab = 'inventario' | 'lista' | 'enviados' | 'exportar' | 'logs' | 'ajustes'
   const [tab, setTab] = useState<Tab>('inventario')
   const [ciclos, setCiclos] = useState<Ciclo[]>([])
   const [productos, setProductos] = useState<Producto[]>([])
@@ -2512,6 +2555,7 @@ export default function PedidosClient({ session, myCats, puedeExportar, puedeEli
     { key: 'lista',      label: 'A pedir' },
     ...(puedeExportar ? [{ key: 'exportar' as Tab, label: 'Exportar' }] : []),
     { key: 'enviados',   label: 'Ya pedido' },
+    ...((isAdmin || isEncargada) ? [{ key: 'logs' as Tab, label: 'Logs' }] : []),
     ...(isAdmin ? [{ key: 'ajustes' as Tab, label: 'Ajustes' }] : []),
   ]
 
@@ -2563,6 +2607,7 @@ export default function PedidosClient({ session, myCats, puedeExportar, puedeEli
           )}
           {tab === 'enviados' && <TabEnviados cicloActivo={cicloActivo} isAdmin={isAdmin} onRefresh={cargarProductos} />}
           {tab === 'exportar' && puedeExportar && <TabExportar cicloActivo={cicloActivo} onCiclosChange={cargarCiclos} />}
+          {tab === 'logs' && (isAdmin || isEncargada) && <TabLogs />}
 {tab === 'ajustes' && isAdmin && <TabAjustes ciclos={ciclos} onRefreshCiclos={cargarCiclos} />}
         </>
       )}
