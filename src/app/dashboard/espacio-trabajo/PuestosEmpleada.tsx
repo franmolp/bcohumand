@@ -5,6 +5,7 @@ import { Spinner, Confirm } from '@/components/ui'
 import { IconLayoutGrid, IconCalendarCheck, IconX, IconClock } from '@/components/ui/Icons'
 import { fmtFechaLarga } from '@/lib/fecha'
 import { conArticulo } from '@/lib/gaps'
+import MisHorarios from './MisHorarios'
 
 interface Puesto {
   id: string
@@ -63,6 +64,7 @@ function conDivisoresDeSemana(puestos: Puesto[], hoy: string): Renderable[] {
 }
 
 export default function PuestosEmpleadaView() {
+  const [tab, setTab] = useState<'pedir' | 'horarios'>('pedir')
   const [puestos, setPuestos] = useState<Puesto[] | null>(null)
   const [recurso, setRecurso] = useState<'mesa' | 'box'>('mesa')
   const [hoy, setHoy] = useState(todayStr())
@@ -124,12 +126,27 @@ export default function PuestosEmpleadaView() {
           <IconLayoutGrid size={17} className="text-white" />
         </div>
         <div>
-          <h1 className="text-[17px] font-bold text-[var(--text)] leading-tight">Puestos disponibles</h1>
-          <p className="text-[12px] text-[var(--text-muted)]">Pedí cubrir {conArticulo(recurso)} libre esta semana o la próxima, y sumá horas de trabajo</p>
+          <h1 className="text-[17px] font-bold text-[var(--text)] leading-tight">Espacio de trabajo</h1>
+          <p className="text-[12px] text-[var(--text-muted)]">
+            {tab === 'pedir' ? `Pedí cubrir ${conArticulo(recurso)} libre esta semana o la próxima, y sumá horas de trabajo` : 'Tus turnos de esta semana y la próxima'}
+          </p>
         </div>
       </div>
 
-      {loading ? (
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
+        <button onClick={() => setTab('pedir')}
+          className={`flex-1 py-2 text-[13px] font-medium rounded-[10px] cursor-pointer transition-all ${tab === 'pedir' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+          Pedir horarios
+        </button>
+        <button onClick={() => setTab('horarios')}
+          className={`flex-1 py-2 text-[13px] font-medium rounded-[10px] cursor-pointer transition-all ${tab === 'horarios' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+          Mis horarios
+        </button>
+      </div>
+
+      {tab === 'horarios' && <MisHorarios />}
+
+      {tab === 'pedir' && (loading ? (
         <div className="py-16"><Spinner /></div>
       ) : error ? (
         <div className="py-10 text-center text-sm text-red-500">{error}</div>
@@ -202,7 +219,7 @@ export default function PuestosEmpleadaView() {
             )
           })}
         </div>
-      )}
+      ))}
 
       {toast && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[13px] px-4 py-2.5 rounded-xl shadow-lg z-50">
