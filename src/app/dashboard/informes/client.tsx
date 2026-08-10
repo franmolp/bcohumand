@@ -193,7 +193,6 @@ function TabCaja({ mes }: { mes: string }) {
   const [afSaving, setAfSaving] = useState(false)
   const [afError, setAfError] = useState('')
 
-  const [modalConfig, setModalConfig] = useState(false)
   const [cfSaldoInicial, setCfSaldoInicial] = useState('')
   const [cfFechaInicio, setCfFechaInicio] = useState(todayAR())
   const [cfPaymentName, setCfPaymentName] = useState('Efectivo')
@@ -334,16 +333,8 @@ function TabCaja({ mes }: { mes: string }) {
       })
       const d = await res.json()
       if (!res.ok) { setCfError(d.error ?? 'Error al guardar'); return }
-      setModalConfig(false); cargar()
+      cargar()
     } finally { setCfSaving(false) }
-  }
-
-  function abrirConfig() {
-    const cfg = resumen?.config
-    setCfSaldoInicial(cfg ? String(cfg.saldo_inicial) : '')
-    setCfFechaInicio(cfg?.fecha_inicio ?? todayAR())
-    setCfPaymentName(cfg?.payment_name_efectivo ?? 'Efectivo')
-    setCfError(''); setModalConfig(true)
   }
 
   if (cargando) return <div className="flex justify-center py-16"><Spinner /></div>
@@ -431,19 +422,13 @@ function TabCaja({ mes }: { mes: string }) {
         </div>
       )}
 
-      {/* Config edit + reimport */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <button onClick={reimportarCierres} disabled={reimportando}
-            className="flex items-center gap-1.5 text-[12px] text-[var(--text-muted)] hover:text-green-600 transition-colors cursor-pointer disabled:opacity-40">
-            <IconReceipt size={13} /> {reimportando ? 'Importando…' : 'Reimportar Loyverse'}
-          </button>
-          {reimportMsg && <span className="text-[11px] text-green-600">{reimportMsg}</span>}
-        </div>
-        <button onClick={abrirConfig}
-          className="flex items-center gap-1.5 text-[12px] text-[var(--text-muted)] hover:text-[var(--primary)] transition-colors cursor-pointer">
-          <IconEdit size={13} /> Configuración
+      {/* Reimport */}
+      <div className="flex items-center gap-2">
+        <button onClick={reimportarCierres} disabled={reimportando}
+          className="flex items-center gap-1.5 text-[12px] text-[var(--text-muted)] hover:text-green-600 transition-colors cursor-pointer disabled:opacity-40">
+          <IconReceipt size={13} /> {reimportando ? 'Importando…' : 'Reimportar Loyverse'}
         </button>
+        {reimportMsg && <span className="text-[11px] text-green-600">{reimportMsg}</span>}
       </div>
 
       {/* Day cards */}
@@ -790,49 +775,6 @@ function TabCaja({ mes }: { mes: string }) {
         document.body
       )}
 
-      {/* Modal: Configuración */}
-      {modalConfig && createPortal(
-        <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center" onClick={() => setModalConfig(false)}>
-          <div className="absolute inset-0 bg-black/40" />
-          <div className="relative bg-white w-full lg:max-w-md rounded-t-3xl lg:rounded-2xl shadow-2xl p-5 pb-8 lg:pb-5" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-center mb-3 lg:hidden"><div className="w-9 h-1 bg-gray-300 rounded-full" /></div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[16px] font-bold text-[var(--text)]">Configuración de caja</h3>
-              <button onClick={() => setModalConfig(false)} className="p-1.5 rounded-full text-gray-400 hover:bg-gray-100 cursor-pointer"><IconX size={16} /></button>
-            </div>
-            <div className="flex flex-col gap-3">
-              <div>
-                <p className="text-[12px] font-medium text-gray-500 mb-1.5">Saldo inicial</p>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[14px] text-gray-400">$</span>
-                  <input type="number" min="0" value={cfSaldoInicial} onChange={e => setCfSaldoInicial(e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl pl-7 pr-3 py-2.5 text-[14px] focus:outline-none focus:border-[var(--primary)]" />
-                </div>
-              </div>
-              <div>
-                <p className="text-[12px] font-medium text-gray-500 mb-1.5">Fecha de inicio</p>
-                <input type="date" value={cfFechaInicio} max={todayAR()} onChange={e => setCfFechaInicio(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[var(--primary)]" />
-              </div>
-              <div>
-                <p className="text-[12px] font-medium text-gray-500 mb-1.5">Medio de pago efectivo en Loyverse</p>
-                <input type="text" value={cfPaymentName} onChange={e => setCfPaymentName(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[var(--primary)]" />
-              </div>
-              {cfError && <p className="text-red-500 text-[12px]">{cfError}</p>}
-              <div className="flex gap-2 pt-1">
-                <button onClick={() => setModalConfig(false)}
-                  className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-[13px] cursor-pointer hover:bg-gray-50">Cancelar</button>
-                <button onClick={guardarConfig} disabled={cfSaving}
-                  className="flex-1 py-2.5 bg-[image:var(--gradient)] text-white rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-40">
-                  {cfSaving ? 'Guardando…' : 'Guardar'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
     </div>
   )
 }
