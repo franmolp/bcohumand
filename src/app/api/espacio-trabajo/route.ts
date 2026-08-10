@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Load config and schedules in parallel
-  const [configRes, horariosRes] = await Promise.all([
+  const [configRes, horariosRes, solicitudesRes] = await Promise.all([
     supabase.from('configuracion').select('clave, valor').in('clave', ['espacio_trabajo', 'ultima_importacion_turnos', 'ultima_importacion_fichadas']),
     supabaseAdmin
       .from('horarios_base')
@@ -41,6 +41,14 @@ export async function GET(req: NextRequest) {
       .gte('fecha', fechaInicio)
       .lte('fecha', fechaFin)
       .limit(5000),
+    // Solicitudes de puesto ya aprobadas: se muestran como ocupación aunque Fresha
+    // todavía no haya bajado el cambio, para que el puesto deje de figurar libre.
+    supabaseAdmin
+      .from('solicitudes_puesto')
+      .select('usuario_id, equipo_nombre, fecha, hora_inicio, hora_fin')
+      .eq('estado', 'approved')
+      .gte('fecha', fechaInicio)
+      .lte('fecha', fechaFin),
   ])
 
   const configMap = new Map((configRes.data ?? []).map((c: { clave: string; valor: unknown }) => [c.clave, c.valor]))
@@ -52,12 +60,17 @@ export async function GET(req: NextRequest) {
   const ultimaFichadas = ultimaFichadasData?.fecha ?? null
 
   const horarios = horariosRes.data ?? []
-  if (horarios.length === 0) {
+  const solicitudesAprobadas = solicitudesRes.data ?? []
+
+  if (horarios.length === 0 && solicitudesAprobadas.length === 0) {
     return NextResponse.json({ turnos: [], ultimaImportacion, ultimaFichadas, capacidades: {} })
   }
 
   // Two separate queries — avoid FK join which can fail silently
-  const userIds = [...new Set(horarios.map((h: { usuario_id: string }) => h.usuario_id))]
+  const userIds = [...new Set([
+    ...horarios.map((h: { usuario_id: string }) => h.usuario_id),
+    ...solicitudesAprobadas.map(s => s.usuario_id as string),
+  ])]
 
   const { data: usuarios } = await supabase
     .from('usuarios')
@@ -84,11 +97,12 @@ export async function GET(req: NextRequest) {
     },
   ]))
 
+  // Normalize time to HH:MM (Postgres may return HH:MM:SS)
+  const normalizeTime = (t: string) => t ? t.slice(0, 5) : t
+
   // Build turnos list
-  const turnos = horarios.map((h: { usuario_id: string; fecha: string; inicio_base: string; fin_base: string }) => {
+  const turnosFresha = horarios.map((h: { usuario_id: string; fecha: string; inicio_base: string; fin_base: string }) => {
     const user = userMap.get(h.usuario_id)
-    // Normalize time to HH:MM (Postgres may return HH:MM:SS)
-    const normalizeTime = (t: string) => t ? t.slice(0, 5) : t
     return {
       usuario_id: h.usuario_id,
       nombre: user?.nombre ?? '—',
@@ -98,6 +112,23 @@ export async function GET(req: NextRequest) {
       fin: normalizeTime(h.fin_base),
     }
   })
+
+  // Solicitudes de puesto aprobadas: se ocupa el equipo/lane del recurso solicitado
+  // (no el equipo real de quien pidió el puesto), para que aparezca en la sección
+  // correcta de Ocupación y deje de contarse como hueco libre en Disponibles.
+  const turnosSolicitudes = solicitudesAprobadas.map(s => {
+    const user = userMap.get(s.usuario_id as string)
+    return {
+      usuario_id: s.usuario_id as string,
+      nombre: user?.nombre ?? '—',
+      equipo: s.equipo_nombre as string,
+      fecha: s.fecha as string,
+      inicio: normalizeTime(s.hora_inicio as string),
+      fin: normalizeTime(s.hora_fin as string),
+    }
+  })
+
+  const turnos = [...turnosFresha, ...turnosSolicitudes]
 
   // Build capacidades map: equipo_nombre → capacity
   const equipoNames = [...new Set(turnos.map(t => t.equipo).filter(Boolean))]

@@ -24,7 +24,7 @@ interface Solicitud {
 
 type SubtabKey = 'pending' | 'approved' | 'rejected' | 'ajustes'
 
-export default function Aprobaciones({ isAdmin }: { isAdmin: boolean }) {
+export default function Aprobaciones({ isAdmin, onChange }: { isAdmin: boolean; onChange?: () => void }) {
   const SUBTABS: { key: SubtabKey; label: string }[] = [
     { key: 'pending', label: 'Pendientes' },
     { key: 'approved', label: 'Aprobadas' },
@@ -67,6 +67,7 @@ export default function Aprobaciones({ isAdmin }: { isAdmin: boolean }) {
         body: JSON.stringify({ accion }),
       })
       cargar(subtab)
+      onChange?.()
     } finally { setProcesando(null); setConfirmAccion(null) }
   }
 
@@ -75,6 +76,7 @@ export default function Aprobaciones({ isAdmin }: { isAdmin: boolean }) {
     try {
       await fetch(`/api/puestos-disponibles/aprobaciones/${id}/deshacer`, { method: 'POST' })
       cargar(subtab)
+      onChange?.()
     } finally { setProcesando(null); setConfirmDeshacer(null) }
   }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import type { SessionUser } from '@/types'
 import { Spinner } from '@/components/ui'
 import { IconLayoutGrid, IconChevronLeft, IconChevronRight, IconClock } from '@/components/ui/Icons'
@@ -276,7 +276,7 @@ function GanttSection({ equipo, capacity, shifts, selectedDate }: {
                         style={{ left: `${(h * 60 - GANTT_START) / GANTT_SPAN * 100}%` }} />
                     ))}
                     {laneShifts.map(shift => (
-                      <div key={shift.usuario_id}
+                      <div key={`${shift.usuario_id}-${shift.inicio}-${shift.fin}`}
                         className="absolute top-1.5 bottom-1.5 rounded-lg flex items-center px-2 overflow-hidden cursor-default"
                         style={{
                           left: `${startPct(shift.inicio)}%`,
@@ -469,13 +469,15 @@ export default function EspacioTrabajoClient({ user, isAdminOrEncargada }: { use
   // Loaded week's dates
   const dates = useMemo(() => getWeekDates(weekYear, weekNum), [weekYear, weekNum])
 
-  useEffect(() => {
+  const cargarApiData = useCallback(() => {
     setLoading(true); setError(null)
     fetch(`/api/espacio-trabajo?fechaInicio=${dates[0]}&fechaFin=${dates[5]}`)
       .then(r => r.json())
       .then(d => { setApiData(d); setLoading(false) })
       .catch(() => { setError('No se pudieron cargar los datos'); setLoading(false) })
   }, [dates])
+
+  useEffect(() => { cargarApiData() }, [cargarApiData])
 
   function prevWeek() {
     let w = weekNum - 1, y = weekYear
@@ -607,7 +609,7 @@ export default function EspacioTrabajoClient({ user, isAdminOrEncargada }: { use
 
       {/* Content */}
       {tab === 'aprobaciones' && isAdminOrEncargada ? (
-        <Aprobaciones isAdmin={user.rol === 'admin' || user.rol === 'Admin'} />
+        <Aprobaciones isAdmin={user.rol === 'admin' || user.rol === 'Admin'} onChange={cargarApiData} />
       ) : loading ? (
         <div className="py-16"><Spinner /></div>
       ) : error ? (
