@@ -1489,7 +1489,8 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, canDelete
         fetch('/api/pedidos/stock-auditoria', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ producto_id: prodId, stock_anterior: stockAnterior, stock_nuevo: body.stock_actual }),
-        }).catch(() => {})
+        }).then(r => { if (!r.ok) showToast('No se pudo guardar el log de stock', 'error') })
+          .catch(() => showToast('No se pudo guardar el log de stock', 'error'))
       }
 
       if (thenAddVariante && (editando || newProd)) {
@@ -1518,43 +1519,50 @@ function TabInventario({ productos, proveedores, cicloActivo, isAdmin, canDelete
 
     setStockGuardando(s => new Set([...s, id]))
 
-    if (isVariante) {
-      await fetch(`/api/pedidos/variantes/${id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stock_actual: n }),
-      })
-      setVariantesMap(m => {
-        const next = { ...m }
-        for (const pid in next) next[pid] = next[pid].map(v => v.id === id ? { ...v, stock_actual: n } : v)
-        return next
-      })
-    } else {
-      await fetch(`/api/pedidos/productos/${id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stock_actual: n }),
-      })
-      onRefresh()
+    try {
+      if (isVariante) {
+        const res = await fetch(`/api/pedidos/variantes/${id}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stock_actual: n }),
+        })
+        if (!res.ok) { showToast('No se pudo actualizar el stock', 'error'); return }
+        setVariantesMap(m => {
+          const next = { ...m }
+          for (const pid in next) next[pid] = next[pid].map(v => v.id === id ? { ...v, stock_actual: n } : v)
+          return next
+        })
+      } else {
+        const res = await fetch(`/api/pedidos/productos/${id}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stock_actual: n }),
+        })
+        if (!res.ok) { showToast('No se pudo actualizar el stock', 'error'); return }
+        onRefresh()
+      }
+
+      const [historialRes, auditoriaRes] = await Promise.all([
+        fetch('/api/pedidos/stock-historial', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(isVariante ? { variante_id: id, stock: n } : { producto_id: id, stock: n }),
+        }),
+        fetch('/api/pedidos/stock-auditoria', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(isVariante
+            ? { variante_id: id, stock_anterior: stockAnterior, stock_nuevo: n }
+            : { producto_id: id, stock_anterior: stockAnterior, stock_nuevo: n }
+          ),
+        }),
+      ])
+      if (!historialRes.ok || !auditoriaRes.ok) showToast('El stock se guardó pero el log falló', 'error')
+
+      // Reset caches to force reload
+      setHistorialMap(m => { const next = { ...m }; delete next[id]; return next })
+      setStockLogMap(m => { const next = { ...m }; delete next[id]; return next })
+    } catch {
+      showToast('No se pudo actualizar el stock', 'error')
+    } finally {
+      setStockGuardando(s => { const n2 = new Set(s); n2.delete(id); return n2 })
     }
-
-    await Promise.all([
-      fetch('/api/pedidos/stock-historial', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(isVariante ? { variante_id: id, stock: n } : { producto_id: id, stock: n }),
-      }),
-      fetch('/api/pedidos/stock-auditoria', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(isVariante
-          ? { variante_id: id, stock_anterior: stockAnterior, stock_nuevo: n }
-          : { producto_id: id, stock_anterior: stockAnterior, stock_nuevo: n }
-        ),
-      }),
-    ])
-
-    // Reset caches to force reload
-    setHistorialMap(m => { const next = { ...m }; delete next[id]; return next })
-    setStockLogMap(m => { const next = { ...m }; delete next[id]; return next })
-
-    setStockGuardando(s => { const n2 = new Set(s); n2.delete(id); return n2 })
   }
 
   async function toggleStockLog(id: string, isVariante: boolean) {
