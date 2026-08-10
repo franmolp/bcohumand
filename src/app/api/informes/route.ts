@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
     supabaseAdmin
       .from('configuracion')
       .select('clave, valor')
-      .in('clave', ['ultima_importacion_loyverse', 'ultima_importacion_citas_fresha']),
+      .in('clave', ['ultima_importacion_loyverse', 'ultima_importacion_citas_fresha', 'caja_config']),
   ])
 
   // Map: shortNorm(nombre) → usuario_id  (para cruzar Loyverse con empleadas)
@@ -149,15 +149,27 @@ export async function GET(request: NextRequest) {
     : null
   const gastos = (comprasData ?? []).reduce((s, c) => s + (c.monto || 0), 0)
 
-  // Ventas por medio de pago (un row por recibo × método, sin combinar)
+  // Ventas por medio de pago. Se agrupa sin importar mayúsculas/espacios (para no
+  // separar "Efectivo" de "efectivo " en dos filas), y todo lo que matchea el nombre
+  // de efectivo configurado en Caja (mismo criterio ilike que usa /api/caja/resumen)
+  // se consolida bajo una sola fila — así el número de "Efectivo" acá es exactamente
+  // el mismo que "Efectivo del mes" en la pestaña Caja.
+  const cajaConfigRow = (tsConfig ?? []).find((c: { clave: string }) => c.clave === 'caja_config')
+  const efectivoLabel = ((cajaConfigRow?.valor as { payment_name_efectivo?: string } | undefined)?.payment_name_efectivo || 'Efectivo').trim()
+  const efectivoNeedle = efectivoLabel.toLowerCase()
+
   const pagoMap = new Map<string, number>()
+  const pagoLabel = new Map<string, string>()
   for (const p of pagos) {
-    const tipo = p.payment_name || 'Otro'
-    pagoMap.set(tipo, (pagoMap.get(tipo) ?? 0) + (p.payment_money || 0))
+    const raw = (p.payment_name || 'Otro').trim()
+    const esEfectivo = raw.toLowerCase().includes(efectivoNeedle)
+    const key = esEfectivo ? '__efectivo__' : raw.toLowerCase()
+    if (!pagoLabel.has(key)) pagoLabel.set(key, esEfectivo ? efectivoLabel : raw)
+    pagoMap.set(key, (pagoMap.get(key) ?? 0) + (p.payment_money || 0))
   }
   const pagosPorTipo = [...pagoMap.entries()]
     .filter(([, total]) => Math.abs(total) > 0)
-    .map(([tipo, total]) => ({ tipo, total: Math.round(total) }))
+    .map(([key, total]) => ({ tipo: pagoLabel.get(key) ?? key, total: Math.round(total) }))
     .sort((a, b) => b.total - a.total)
 
   // Normaliza nombres de ítems para emparejar canjes con su servicio base.
