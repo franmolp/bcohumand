@@ -14,9 +14,8 @@ export default async function EspacioTrabajoPage() {
 
   if (isGestion) return <EspacioTrabajoClient user={session} isAdminOrEncargada={isAdmin || isEncargada} />
 
-  // Solo equipos habilitados por el admin: vista simplificada para solicitar puestos libres
+  // Todas las empleadas ven al menos "Mis horarios". Las de equipos habilitados
+  // por el admin para pedir puestos libres ven además esa pestaña (la principal).
   const acceso = await resolverAccesoPuestos(session.equipo)
-  if (acceso.ok) return <PuestosEmpleadaView />
-
-  redirect('/dashboard')
+  return <PuestosEmpleadaView soloHorarios={!acceso.ok} />
 }

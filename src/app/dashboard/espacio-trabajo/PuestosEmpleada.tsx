@@ -63,8 +63,8 @@ function conDivisoresDeSemana(puestos: Puesto[], hoy: string): Renderable[] {
   return out
 }
 
-export default function PuestosEmpleadaView() {
-  const [tab, setTab] = useState<'pedir' | 'horarios'>('pedir')
+export default function PuestosEmpleadaView({ soloHorarios = false }: { soloHorarios?: boolean }) {
+  const [tab, setTab] = useState<'pedir' | 'horarios'>(soloHorarios ? 'horarios' : 'pedir')
   const [puestos, setPuestos] = useState<Puesto[] | null>(null)
   const [recurso, setRecurso] = useState<'mesa' | 'box'>('mesa')
   const [hoy, setHoy] = useState(todayStr())
@@ -84,7 +84,7 @@ export default function PuestosEmpleadaView() {
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { cargar() }, [cargar])
+  useEffect(() => { if (!soloHorarios) cargar() }, [cargar, soloHorarios])
 
   useEffect(() => {
     if (!toast) return
@@ -133,16 +133,18 @@ export default function PuestosEmpleadaView() {
         </div>
       </div>
 
-      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
-        <button onClick={() => setTab('pedir')}
-          className={`flex-1 py-2 text-[13px] font-medium rounded-[10px] cursor-pointer transition-all ${tab === 'pedir' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
-          Pedir horarios
-        </button>
-        <button onClick={() => setTab('horarios')}
-          className={`flex-1 py-2 text-[13px] font-medium rounded-[10px] cursor-pointer transition-all ${tab === 'horarios' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
-          Mis horarios
-        </button>
-      </div>
+      {!soloHorarios && (
+        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
+          <button onClick={() => setTab('pedir')}
+            className={`flex-1 py-2 text-[13px] font-medium rounded-[10px] cursor-pointer transition-all ${tab === 'pedir' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+            Pedir horarios
+          </button>
+          <button onClick={() => setTab('horarios')}
+            className={`flex-1 py-2 text-[13px] font-medium rounded-[10px] cursor-pointer transition-all ${tab === 'horarios' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+            Mis horarios
+          </button>
+        </div>
+      )}
 
       {tab === 'horarios' && <MisHorarios />}
 

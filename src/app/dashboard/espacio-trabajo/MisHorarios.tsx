@@ -60,7 +60,7 @@ export default function MisHorarios() {
                   {dia}{esHoy ? ' · Hoy' : ''}
                 </p>
                 {d.turnos.length === 0 ? (
-                  <p className="text-[12px] text-[var(--text-muted)] mt-0.5">Libre</p>
+                  <p className="text-[12px] text-[var(--text-muted)] mt-0.5">Sin turnos</p>
                 ) : (
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {d.turnos.map((t, ti) => (
@@ -70,7 +70,7 @@ export default function MisHorarios() {
                           : 'bg-gray-50 text-[var(--text-sub)] border-gray-100'
                       }`}>
                         <IconClock size={11} />
-                        {t.inicio}–{t.fin}{t.equipo ? ` · ${t.equipo}` : ''}
+                        {t.inicio}–{t.fin}
                         {t.origen === 'aprobado' && ' (extra)'}
                       </span>
                     ))}
