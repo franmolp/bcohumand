@@ -22,7 +22,14 @@ export async function GET() {
   const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
   const dow = new Date(hoy + 'T12:00:00Z').getUTCDay() // 0=Dom..6=Sáb
   const lunesEstaSemana = addDays(hoy, dow === 0 ? -6 : 1 - dow)
-  const sabadoProxima = addDays(lunesEstaSemana, 12)
+
+  // Lunes a sábado, esta semana y la próxima — el domingo se salta siempre
+  // (la peluquería no abre ese día, no se muestra ni aunque haya datos).
+  const fechasSemana: string[] = []
+  for (let semana = 0; semana < 2; semana++) {
+    for (let d = 0; d < 6; d++) fechasSemana.push(addDays(lunesEstaSemana, semana * 7 + d))
+  }
+  const sabadoProxima = fechasSemana[fechasSemana.length - 1]
 
   const [horariosRes, solicitudesRes] = await Promise.all([
     supabaseAdmin
@@ -46,7 +53,7 @@ export async function GET() {
   const normalizeTime = (t: string) => t ? t.slice(0, 5) : t
 
   const porDia = new Map<string, Turno[]>()
-  for (let i = 0; i <= 12; i++) porDia.set(addDays(lunesEstaSemana, i), [])
+  for (const fecha of fechasSemana) porDia.set(fecha, [])
 
   for (const h of horariosRes.data ?? []) {
     const lista = porDia.get(h.fecha)
