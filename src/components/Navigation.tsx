@@ -5,8 +5,9 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { SessionUser } from '@/types'
-import { IconHome, IconUsers, IconClipboard, IconLogout, IconBell, IconShoppingBag, IconWall, IconDollar, IconSettings, IconX, IconMore, IconCalendar, IconReceipt, IconShield, IconCamera, IconCalendarCheck, IconWrench, IconStar, IconLayoutGrid, IconBarChart, IconTrophy, IconBottle } from '@/components/ui/Icons'
+import { IconHome, IconUsers, IconClipboard, IconLogout, IconBell, IconShoppingBag, IconWall, IconDollar, IconSettings, IconX, IconMore, IconCalendar, IconReceipt, IconShield, IconCamera, IconCalendarCheck, IconWrench, IconStar, IconLayoutGrid, IconBarChart, IconTrophy, IconBottle, IconEye } from '@/components/ui/Icons'
 import PhotoCropModal from '@/components/PhotoCropModal'
+import ImpersonarModal from '@/components/ImpersonarModal'
 
 const allNav = [
   { href: '/dashboard',              label: 'Inicio',         icon: IconHome,        mobile: true },
@@ -37,6 +38,10 @@ export default function Navigation({ user, hasPedidosAccess = false, hasPuestosA
   const isHR = user.rol === 'HR'
   const isAdminOrHR = isAdmin || isHR
   const isEncargada = user.rol === 'Encargada'
+  const isPrueba = user.usuario === 'prueba'
+  const isImpersonando = !!user.impersonadoPor
+  const [showImpersonar, setShowImpersonar] = useState(false)
+  const [saliendoImpersonar, setSaliendoImpersonar] = useState(false)
   const [drawer, setDrawer] = useState(false)
   const [unread, setUnread] = useState(0)
   const [modulos, setModulos] = useState<Record<string, number>>({})
@@ -68,6 +73,16 @@ export default function Navigation({ user, hasPedidosAccess = false, hasPuestosA
   const initials = user.nombre.split(' ').map(n => n[0]).join('').slice(0, 2)
 
   async function logout() { await fetch('/api/auth/logout', { method: 'POST' }); router.push('/login') }
+
+  async function salirImpersonacion() {
+    setSaliendoImpersonar(true)
+    try {
+      await fetch('/api/auth/impersonar/salir', { method: 'POST' })
+      window.location.href = '/dashboard'
+    } catch {
+      setSaliendoImpersonar(false)
+    }
+  }
 
   // Load photo from cache then server
   useEffect(() => {
@@ -206,12 +221,35 @@ export default function Navigation({ user, hasPedidosAccess = false, hasPuestosA
       )}
 
       {/* ─── DESKTOP: Top header ─── */}
-      <header className="hidden lg:flex fixed top-0 left-0 right-0 h-14 bg-[image:var(--gradient)] z-40 items-center justify-between px-6 shadow-sm">
-        <div className="flex items-center gap-2.5">
-          <span className="bg-white/15 text-white text-[10px] font-bold px-2 py-0.5 rounded backdrop-blur">BCO</span>
-          <span className="text-[15px] font-bold text-white tracking-tight">HUMAND</span>
-        </div>
+      <header className={`hidden lg:flex fixed top-0 left-0 right-0 h-14 z-40 items-center justify-between px-6 shadow-sm ${isImpersonando ? 'bg-amber-500' : 'bg-[image:var(--gradient)]'}`}>
+        {isImpersonando ? (
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="text-white text-[15px] flex-shrink-0">🧪</span>
+            <span className="text-[13px] font-semibold text-white truncate">Viendo como {user.nombre}</span>
+            <button onClick={() => setShowImpersonar(true)}
+              className="text-[12px] font-medium text-white/90 hover:text-white underline underline-offset-2 cursor-pointer flex-shrink-0">
+              Cambiar
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2.5">
+            <span className="bg-white/15 text-white text-[10px] font-bold px-2 py-0.5 rounded backdrop-blur">BCO</span>
+            <span className="text-[15px] font-bold text-white tracking-tight">HUMAND</span>
+          </div>
+        )}
         <div className="flex items-center gap-4">
+          {isImpersonando && (
+            <button onClick={salirImpersonacion} disabled={saliendoImpersonar}
+              className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white text-[12px] font-semibold px-3 py-1.5 rounded-lg cursor-pointer transition-colors disabled:opacity-50">
+              <IconLogout size={13} /> {saliendoImpersonar ? 'Volviendo…' : 'Volver a Prueba'}
+            </button>
+          )}
+          {isPrueba && !isImpersonando && (
+            <button onClick={() => setShowImpersonar(true)}
+              className="flex items-center gap-1.5 text-white/80 hover:text-white transition-colors cursor-pointer" title="Ver como empleado">
+              <IconEye size={18} />
+            </button>
+          )}
           <Link href="/dashboard/notificaciones" className="relative text-white/70 hover:text-white transition-colors">
             <IconBell size={19} />
             {unread > 0 && (
@@ -263,13 +301,31 @@ export default function Navigation({ user, hasPedidosAccess = false, hasPuestosA
       </aside>
 
       {/* ─── MOBILE: Top bar ─── */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 bg-[image:var(--gradient)] z-40 px-4 flex items-center justify-between"
+      <header className={`lg:hidden fixed top-0 left-0 right-0 z-40 px-4 flex items-center justify-between ${isImpersonando ? 'bg-amber-500' : 'bg-[image:var(--gradient)]'}`}
         style={{ height: 'calc(48px + env(safe-area-inset-top, 0px))', paddingTop: 'env(safe-area-inset-top, 0px)', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}>
-        <div className="flex items-center gap-2">
-          <span className="bg-white/15 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">BCO</span>
-          <span className="text-[13px] font-bold text-white">HUMAND</span>
-        </div>
-        <div className="flex items-center gap-3">
+        {isImpersonando ? (
+          <button onClick={() => setShowImpersonar(true)} className="flex items-center gap-1.5 min-w-0 cursor-pointer">
+            <span className="text-white text-[13px] flex-shrink-0">🧪</span>
+            <span className="text-[12px] font-semibold text-white truncate">{user.nombre}</span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="bg-white/15 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">BCO</span>
+            <span className="text-[13px] font-bold text-white">HUMAND</span>
+          </div>
+        )}
+        <div className="flex items-center gap-1">
+          {isImpersonando && (
+            <button onClick={salirImpersonacion} disabled={saliendoImpersonar}
+              className="text-white/90 hover:text-white p-2 -mr-1 flex items-center justify-center cursor-pointer disabled:opacity-50" title="Volver a Prueba">
+              <IconLogout size={17} />
+            </button>
+          )}
+          {isPrueba && !isImpersonando && (
+            <button onClick={() => setShowImpersonar(true)} className="text-white/80 hover:text-white p-2 -mr-1 flex items-center justify-center cursor-pointer" title="Ver como empleado">
+              <IconEye size={18} />
+            </button>
+          )}
           <Link href="/dashboard/notificaciones" className="text-white/70 p-2 -mr-1 flex items-center justify-center">
             <span className="relative inline-flex items-center justify-center">
               <IconBell size={18} />
@@ -354,6 +410,25 @@ export default function Navigation({ user, hasPedidosAccess = false, hasPuestosA
                   </Link>
                 )
               })}
+              {(isPrueba || isImpersonando) && <hr className="my-2 border-gray-100" />}
+              {isPrueba && !isImpersonando && (
+                <button onClick={() => { setDrawer(false); setShowImpersonar(true) }}
+                  className="flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-[15px] text-[var(--text)] w-full active:bg-gray-50 cursor-pointer">
+                  <IconEye size={20} className="text-gray-400" /> Ver como empleado
+                </button>
+              )}
+              {isImpersonando && (
+                <>
+                  <button onClick={() => { setDrawer(false); setShowImpersonar(true) }}
+                    className="flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-[15px] text-[var(--text)] w-full active:bg-gray-50 cursor-pointer">
+                    <IconEye size={20} className="text-gray-400" /> Cambiar de empleado
+                  </button>
+                  <button onClick={salirImpersonacion} disabled={saliendoImpersonar}
+                    className="flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-[15px] text-amber-600 w-full active:bg-amber-50 cursor-pointer disabled:opacity-50">
+                    <IconLogout size={20} /> {saliendoImpersonar ? 'Volviendo…' : 'Volver a Prueba'}
+                  </button>
+                </>
+              )}
               <hr className="my-2 border-gray-100" />
               <button onClick={logout} className="flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-[15px] text-red-500 w-full active:bg-red-50 cursor-pointer">
                 <IconLogout size={20} /> Cerrar sesión
@@ -412,6 +487,10 @@ export default function Navigation({ user, hasPedidosAccess = false, hasPuestosA
           onSaved={handlePhotoSaved}
           onDeleted={handlePhotoDeleted}
         />
+      )}
+
+      {showImpersonar && (
+        <ImpersonarModal onClose={() => setShowImpersonar(false)} />
       )}
     </>
   )

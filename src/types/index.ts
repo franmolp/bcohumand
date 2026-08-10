@@ -31,6 +31,9 @@ export interface SessionUser {
   email: string
   rol: string
   equipo: string
+  // Presente solo cuando la cuenta "prueba" está viendo la app como otro
+  // empleado — guarda el id de la cuenta prueba original para poder volver.
+  impersonadoPor?: string
 }
 
 export interface AsistenciaProcesada {
