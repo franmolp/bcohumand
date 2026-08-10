@@ -134,8 +134,19 @@ export async function getPuestosDisponibles(
 
   for (const [fecha, shiftsDia] of turnosPorFecha.entries()) {
     const gapsCrudos = findGapsForDay(shiftsDia, capacity)
-    const misTurnosDia = misTurnosPorFecha.get(fecha) ?? []
     const solicitudesDia = solicitudesPorFecha.get(fecha) ?? []
+
+    // "Turnos propios" para no ofrecer huecos que se pisen: los reales de Fresha
+    // más los puestos que ya me aprobaron ese mismo día — si no, después de que
+    // me aprueban una mesa sigo viendo como libre otra mesa en el mismo horario.
+    // Las pendientes NO se suman acá: siguen mostrándose (con botón "Cancelar")
+    // vía miSolicitudPendiente más abajo.
+    const misTurnosDia = [
+      ...(misTurnosPorFecha.get(fecha) ?? []),
+      ...solicitudesDia
+        .filter(s => s.usuario_id === usuarioId && s.estado === 'approved')
+        .map(s => ({ inicio: s.hora_inicio.slice(0, 5), fin: s.hora_fin.slice(0, 5) })),
+    ]
 
     // Resta lo ya aprobado (puede partir un hueco en dos) antes de ofrecer nada
     const aprobadosDia = solicitudesDia
