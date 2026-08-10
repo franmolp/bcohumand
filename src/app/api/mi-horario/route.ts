@@ -31,7 +31,7 @@ export async function GET() {
   }
   const sabadoProxima = fechasSemana[fechasSemana.length - 1]
 
-  const [horariosRes, solicitudesRes] = await Promise.all([
+  const [horariosRes, solicitudesRes, ausenciasRes] = await Promise.all([
     supabaseAdmin
       .from('horarios_base')
       .select('fecha, inicio_base, fin_base')
@@ -45,10 +45,21 @@ export async function GET() {
       .eq('estado', 'approved')
       .gte('fecha', lunesEstaSemana)
       .lte('fecha', sabadoProxima),
+    // Vacaciones / días / ausencias aprobadas que caen en el rango — para marcar
+    // esos días en vez de mostrarlos como "Sin turnos" sin más explicación.
+    supabaseAdmin
+      .from('solicitudes')
+      .select('tipo, fecha_inicio, fecha_fin')
+      .eq('usuario_id', session.id)
+      .eq('estado', 'approved')
+      .in('tipo', ['Vacaciones', 'Solicitud de Días', 'Ausencia por Salud', 'Feriado/Local cerrado'])
+      .lte('fecha_inicio', sabadoProxima)
+      .gte('fecha_inicio', addDays(lunesEstaSemana, -60)),
   ])
 
   if (horariosRes.error) return NextResponse.json({ error: horariosRes.error.message }, { status: 500 })
   if (solicitudesRes.error) return NextResponse.json({ error: solicitudesRes.error.message }, { status: 500 })
+  if (ausenciasRes.error) return NextResponse.json({ error: ausenciasRes.error.message }, { status: 500 })
 
   const normalizeTime = (t: string) => t ? t.slice(0, 5) : t
 
@@ -70,9 +81,23 @@ export async function GET() {
     if (lista) lista.push({ inicio: normalizeTime(s.hora_inicio), fin: normalizeTime(s.hora_fin), origen: 'aprobado', equipo: s.equipo_nombre })
   }
 
+  const ausenciaPorDia = new Map<string, string>()
+  for (const a of ausenciasRes.data ?? []) {
+    const fin = a.fecha_fin || a.fecha_inicio
+    for (const fecha of fechasSemana) {
+      if (fecha >= a.fecha_inicio && fecha <= fin && !ausenciaPorDia.has(fecha)) {
+        ausenciaPorDia.set(fecha, a.tipo)
+      }
+    }
+  }
+
   const dias = [...porDia.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([fecha, turnos]) => ({ fecha, turnos: turnos.sort((a, b) => a.inicio.localeCompare(b.inicio)) }))
+    .map(([fecha, turnos]) => ({
+      fecha,
+      turnos: turnos.sort((a, b) => a.inicio.localeCompare(b.inicio)),
+      ausencia: ausenciaPorDia.get(fecha) ?? null,
+    }))
 
   return NextResponse.json({ hoy, dias })
 }

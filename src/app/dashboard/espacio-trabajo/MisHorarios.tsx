@@ -5,10 +5,17 @@ import { Spinner } from '@/components/ui'
 import { IconCalendarCheck, IconClock } from '@/components/ui/Icons'
 
 interface Turno { inicio: string; fin: string; origen: 'fresha' | 'aprobado'; equipo: string }
-interface Dia { fecha: string; turnos: Turno[] }
+interface Dia { fecha: string; turnos: Turno[]; ausencia: string | null }
 
 const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
+const AUSENCIA_LABEL: Record<string, string> = {
+  'Vacaciones': 'Vacaciones',
+  'Solicitud de Días': 'Día pedido',
+  'Ausencia por Salud': 'Ausencia por salud',
+  'Feriado/Local cerrado': 'Local cerrado',
+}
 
 function diaLabel(fecha: string) {
   const d = new Date(fecha + 'T12:00:00Z')
@@ -59,7 +66,12 @@ export default function MisHorarios() {
                 <p className={`text-[13px] font-semibold ${esHoy ? 'text-[var(--primary)]' : 'text-[var(--text)]'}`}>
                   {dia}{esHoy ? ' · Hoy' : ''}
                 </p>
-                {d.turnos.length === 0 ? (
+                {d.ausencia ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-lg bg-violet-50 text-violet-700 border border-violet-100 mt-1">
+                    <IconCalendarCheck size={11} />
+                    {AUSENCIA_LABEL[d.ausencia] ?? d.ausencia}
+                  </span>
+                ) : d.turnos.length === 0 ? (
                   <p className="text-[12px] text-[var(--text-muted)] mt-0.5">Sin turnos</p>
                 ) : (
                   <div className="flex flex-wrap gap-1.5 mt-1">
@@ -82,7 +94,7 @@ export default function MisHorarios() {
         )
       })}
 
-      {data.dias.every(d => d.turnos.length === 0) && (
+      {data.dias.every(d => d.turnos.length === 0 && !d.ausencia) && (
         <div className="bg-white rounded-2xl border border-[var(--border)] py-14 text-center px-6 mt-2">
           <IconCalendarCheck size={32} className="mx-auto mb-3 text-gray-200" />
           <p className="text-sm text-[var(--text-muted)]">No tenés turnos cargados estas dos semanas</p>
