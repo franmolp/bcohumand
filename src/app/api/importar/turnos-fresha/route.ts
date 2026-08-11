@@ -24,14 +24,17 @@ export async function POST(req: NextRequest) {
   const { data: usuarios } = await supabase.from('usuarios').select('id, nombre')
   const nameMap = new Map((usuarios ?? []).map(u => [norm(u.nombre), u.id]))
 
+  // Una empleada puede tener más de un bloque el mismo día (horario partido,
+  // ej. 9-12 y 15-20) — se guarda cada bloque como su propia fila. Solo se
+  // deduplica cuando el bloque es exactamente igual (mismo horario repetido),
+  // no por usuario+fecha.
   const recordMap = new Map<string, Record<string, unknown>>()
   const noEncontrados = new Set<string>()
 
   for (const row of rows) {
     const uid = nameMap.get(norm(row.nombre))
     if (!uid) { noEncontrados.add(row.nombre); continue }
-    // Last row wins for duplicate (usuario_id, fecha)
-    recordMap.set(`${uid}|${row.fecha}`, {
+    recordMap.set(`${uid}|${row.fecha}|${row.inicio}|${row.fin}`, {
       usuario_id: uid,
       fecha: row.fecha,
       inicio_base: row.inicio,

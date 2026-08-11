@@ -99,10 +99,27 @@ export async function POST(req: NextRequest) {
       .limit(10000),
   ])
 
-  // Construir mapas
+  // Construir mapas. horarios_base puede traer más de una fila el mismo día
+  // (horario partido, ej. 9-12 y 15-20) — se suman las horas de todos los
+  // bloques para no perder plata en el cálculo de presentismo/liquidación, y
+  // inicio/fin quedan como el rango exterior (primer inicio, último fin) para
+  // mostrar en pantalla. OJO: la detección de "llegada tarde"/"salida
+  // temprana" en computeChip todavía compara contra ese rango exterior como si
+  // fuera un solo turno continuo — en un día con horario partido puede no
+  // marcar tarde/temprano correctamente dentro del hueco entre bloques.
   const horarioMap = new Map<string, { inicio: string; fin: string; horas: number }>()
   for (const h of horariosRes.data ?? []) {
-    horarioMap.set(`${h.usuario_id}|${h.fecha}`, { inicio: h.inicio_base, fin: h.fin_base, horas: h.horas_base })
+    const key = `${h.usuario_id}|${h.fecha}`
+    const existente = horarioMap.get(key)
+    if (!existente) {
+      horarioMap.set(key, { inicio: h.inicio_base, fin: h.fin_base, horas: h.horas_base ?? 0 })
+    } else {
+      horarioMap.set(key, {
+        inicio: h.inicio_base < existente.inicio ? h.inicio_base : existente.inicio,
+        fin: h.fin_base > existente.fin ? h.fin_base : existente.fin,
+        horas: existente.horas + (h.horas_base ?? 0),
+      })
+    }
   }
 
   const rawMap = new Map<string, string[]>()

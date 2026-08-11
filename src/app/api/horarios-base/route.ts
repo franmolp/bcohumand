@@ -64,9 +64,13 @@ export async function POST(req: NextRequest) {
     }
   })
 
+  // horarios_base ya no tiene restricción única por (usuario_id, fecha) — una
+  // empleada puede tener más de un turno el mismo día (horario partido). Cada
+  // llamada inserta filas nuevas; para editar una fila puntual existente usar
+  // PUT /api/horarios-base/[id].
   const { data, error } = await supabase
     .from('horarios_base')
-    .upsert(toInsert, { onConflict: 'usuario_id,fecha' })
+    .insert(toInsert)
     .select()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
