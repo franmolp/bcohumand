@@ -181,9 +181,19 @@ export async function POST(request: NextRequest) {
       // Empleado creó solicitud → notificar admin+HR
       const adminIds = await getAdminAndHRIds()
       const fechaStr = fecha_fin && fecha_fin !== fecha_inicio ? `${fmtF(fecha_inicio)} → ${fmtF(fecha_fin)}` : fmtF(fecha_inicio)
+
+      // Cambio de horario/día: mostrar el detalle del cambio (lo importante acá),
+      // no solo la fecha — si no, con un motivo mínimo el mensaje queda casi vacío.
+      let detalle = fechaStr
+      if (tipo === 'Cambio de horario/día' && subtipo_horario === 'compensacion' && fecha_compensacion) {
+        detalle = `${fechaStr} por ${fmtF(fecha_compensacion)}${horario_nuevo ? ` (${horario_nuevo})` : ''}`
+      } else if (tipo === 'Cambio de horario/día' && horario_anterior && horario_nuevo) {
+        detalle = `${fechaStr} · ${horario_anterior} → ${horario_nuevo}`
+      }
+
       await crearNotificaciones(adminIds, {
         titulo: `Nueva solicitud de ${tipo.toLowerCase()} de ${session.nombre}`,
-        mensaje: fechaStr + (motivo ? ` · ${motivo}` : ''),
+        mensaje: detalle + (motivo ? ` · ${motivo}` : ''),
         tipo: 'solicitud_nueva',
       })
     }
