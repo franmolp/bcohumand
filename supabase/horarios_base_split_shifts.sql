@@ -19,7 +19,7 @@ BEGIN
   WHERE tc.table_name = 'horarios_base'
     AND tc.constraint_type = 'UNIQUE'
   GROUP BY tc.constraint_name
-  HAVING array_agg(kcu.column_name ORDER BY kcu.column_name) = ARRAY['fecha', 'usuario_id']
+  HAVING array_agg(kcu.column_name::text ORDER BY kcu.column_name) = ARRAY['fecha', 'usuario_id']::text[]
   LIMIT 1;
 
   IF conname IS NOT NULL THEN
