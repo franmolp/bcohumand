@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { crearNotificacion, crearNotificaciones, getAdminAndEncargadaIds } from '@/lib/notificaciones'
+import { crearNotificacion, crearNotificaciones, getAdminAndEncargadaIds, getAdminIds } from '@/lib/notificaciones'
 
 export async function GET() {
   const session = await getSession()
@@ -31,7 +31,9 @@ export async function POST(req: Request) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const isAdmin = session.rol === 'admin' || session.rol === 'Admin' || session.rol === 'encargada' || session.rol === 'Encargada'
+  const isAdminRol = session.rol === 'admin' || session.rol === 'Admin'
+  const isEncargadaRol = session.rol === 'encargada' || session.rol === 'Encargada'
+  const isAdmin = isAdminRol || isEncargadaRol
   const body = await req.json()
   const { titulo, descripcion, categoria, prioridad, usuario_id, nombre_empleada } = body
 
@@ -56,9 +58,20 @@ export async function POST(req: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Notify admins + encargadas when an employee creates a request
+  // Notify admins + encargadas when a regular employee creates a request
   if (!isAdmin) {
     const adminIds = await getAdminAndEncargadaIds()
+    if (adminIds.length) {
+      await crearNotificaciones(adminIds, {
+        titulo: 'Nueva solicitud de reparación',
+        mensaje: `${targetNombre}: ${titulo.trim()}`,
+        tipo: 'reparacion_nueva',
+      }).catch(() => {})
+    }
+  } else if (isEncargadaRol && (!usuario_id || usuario_id === session.id)) {
+    // Una encargada cargó su propia reparación — igual hay que avisarle al
+    // admin real, que es otra persona y no se entera solo por ser "isAdmin"
+    const adminIds = (await getAdminIds()).filter(id => id !== session.id)
     if (adminIds.length) {
       await crearNotificaciones(adminIds, {
         titulo: 'Nueva solicitud de reparación',
