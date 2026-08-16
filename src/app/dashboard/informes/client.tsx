@@ -127,6 +127,7 @@ interface RetiroItem {
 interface Evento {
   tipo: 'apertura' | 'cierre' | 'retiro' | 'sobre' | 'ajuste' | 'compra' | 'pago_in' | 'pago_out'
   hora: string
+  ts: string
   monto: number
   ventas?: number
   esperado?: number
@@ -134,6 +135,7 @@ interface Evento {
   detalle?: string | null
   id?: string
   explicado?: boolean
+  asignadoA?: string | null
 }
 
 interface DiaData {
@@ -218,6 +220,11 @@ function TabCaja({ mes }: { mes: string }) {
   const [erTipo, setErTipo] = useState<'retiro' | 'sobre'>('retiro')
   const [erEmpleadoId, setErEmpleadoId] = useState('')
   const [erSaving, setErSaving] = useState(false)
+
+  const [asignandoTs, setAsignandoTs] = useState<string | null>(null)
+  const [asigEmpleadoId, setAsigEmpleadoId] = useState('')
+  const [asigSaving, setAsigSaving] = useState(false)
+  const [asigError, setAsigError] = useState('')
 
   // silent=true: refresco de fondo (polling) — actualiza los datos sin mostrar el
   // spinner de pantalla completa ni pisar el log que la persona tenga abierto
@@ -319,6 +326,35 @@ function TabCaja({ mes }: { mes: string }) {
       })
       setEditRetiro(null); cargar()
     } finally { setErSaving(false) }
+  }
+
+  function abrirAsignarSalida(ev: Evento) {
+    setAsigEmpleadoId(''); setAsigError('')
+    setAsignandoTs(asignandoTs === ev.ts ? null : ev.ts)
+  }
+
+  async function confirmarAsignarSalida(dia: DiaData, ev: Evento) {
+    const empleado = empleados.find(e => e.id === asigEmpleadoId)
+    if (!empleado) { setAsigError('Elegí una empleada'); return }
+    setAsigSaving(true); setAsigError('')
+    try {
+      const res = await fetch('/api/caja/salidas/asignar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fecha: dia.fecha, movimiento_en: ev.ts, monto: ev.monto,
+          comentario: ev.detalle, empleado_id: empleado.id, empleado_nombre: empleado.nombre,
+        }),
+      })
+      const d = await res.json()
+      if (!res.ok) { setAsigError(d.error ?? 'Error al asignar'); return }
+      setAsignandoTs(null); cargar()
+    } finally { setAsigSaving(false) }
+  }
+
+  async function desasignarSalida(dia: DiaData, ev: Evento) {
+    await fetch(`/api/caja/salidas/asignar?fecha=${dia.fecha}&movimiento_en=${encodeURIComponent(ev.ts)}&monto=${ev.monto}`, { method: 'DELETE' })
+    cargar()
   }
 
   function abrirAjuste(fecha: string, saldo_actual: number) {
@@ -591,7 +627,7 @@ function TabCaja({ mes }: { mes: string }) {
                         const checked = ev.tipo === 'apertura' && ev.discrepancia !== null && ev.discrepancia !== undefined
                         const evDisc = checked && Math.abs(ev.discrepancia!) >= 1
                         const pagoOutExplicado = ev.tipo === 'pago_out' && ev.explicado === true
-                        const pagoOutSinExplicar = ev.tipo === 'pago_out' && ev.explicado === false
+                        const pagoOutSinExplicar = ev.tipo === 'pago_out' && ev.explicado === false && !ev.asignadoA
                         const c = EVENTO_CFG[ev.tipo]
                         const sub = ev.tipo === 'cierre' && ev.ventas !== undefined
                           ? `Vendieron ${fmt$(ev.ventas)}`
@@ -608,8 +644,8 @@ function TabCaja({ mes }: { mes: string }) {
                               {pagoOutSinExplicar && <IconAlertCircle size={13} className="text-amber-500 shrink-0" />}
                               <span className={`text-[13px] font-semibold shrink-0 ${evDisc ? 'text-red-600' : 'text-[var(--text)]'}`}>{fmt$(ev.monto)}</span>
                             </div>
-                            {(sub || ev.esperado !== undefined || evDisc) && (
-                              <div className="pl-5 mt-1 flex flex-col gap-0.5">
+                            {(sub || ev.esperado !== undefined || evDisc || ev.asignadoA || pagoOutSinExplicar) && (
+                              <div className="pl-5 mt-1 flex flex-col gap-1">
                                 {sub && <p className="text-[11px] text-[var(--text-muted)] leading-snug break-words">{sub}</p>}
                                 {ev.esperado !== undefined && (
                                   <>
@@ -623,6 +659,43 @@ function TabCaja({ mes }: { mes: string }) {
                                   <p className="text-[11px] font-semibold text-red-600 leading-snug">
                                     No coincide con el cierre anterior — diferencia de {fmt$(ev.discrepancia!)}
                                   </p>
+                                )}
+                                {ev.asignadoA && (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 shrink-0">
+                                      → {ev.asignadoA}
+                                    </span>
+                                    <button onClick={() => desasignarSalida(dia, ev)}
+                                      className="text-[10px] text-gray-400 hover:text-red-500 transition-colors cursor-pointer">
+                                      Quitar
+                                    </button>
+                                  </div>
+                                )}
+                                {pagoOutSinExplicar && asignandoTs !== ev.ts && (
+                                  <button onClick={() => abrirAsignarSalida(ev)}
+                                    className="self-start text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors cursor-pointer">
+                                    Asignar a empleada
+                                  </button>
+                                )}
+                                {pagoOutSinExplicar && asignandoTs === ev.ts && (
+                                  <div className="flex items-center gap-1">
+                                    <select value={asigEmpleadoId} onChange={e => setAsigEmpleadoId(e.target.value)}
+                                      className="flex-1 text-[11px] border border-[var(--border)] rounded-lg px-1.5 py-1">
+                                      <option value="">Elegir empleada…</option>
+                                      {empleados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                                    </select>
+                                    <button onClick={() => confirmarAsignarSalida(dia, ev)} disabled={asigSaving || !asigEmpleadoId}
+                                      className="p-1 text-green-600 hover:text-green-700 rounded-lg transition-colors cursor-pointer disabled:opacity-40">
+                                      <IconCheck size={14} />
+                                    </button>
+                                    <button onClick={() => setAsignandoTs(null)}
+                                      className="p-1 text-gray-300 hover:text-red-500 rounded-lg transition-colors cursor-pointer">
+                                      <IconX size={14} />
+                                    </button>
+                                  </div>
+                                )}
+                                {pagoOutSinExplicar && asignandoTs === ev.ts && asigError && (
+                                  <p className="text-[10px] text-red-500">{asigError}</p>
                                 )}
                               </div>
                             )}

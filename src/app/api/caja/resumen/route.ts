@@ -77,6 +77,14 @@ type Evento = {
   detalle?: string | null
   id?: string
   explicado?: boolean
+  asignadoA?: string | null
+}
+
+// Clave estable para matchear un movimiento de Loyverse (pay-in/pay-out) contra
+// una asignación a empleada — loyverse_movimientos_caja se borra y reimporta
+// entero en cada sync, así que su "id" no sirve como referencia entre sesiones.
+function claveMovimiento(movimientoEn: string, monto: number): string {
+  return `${new Date(movimientoEn).getTime()}|${Math.round(monto * 100)}`
 }
 
 export async function GET(req: NextRequest) {
@@ -119,7 +127,7 @@ export async function GET(req: NextRequest) {
   const queryFrom = mesStart < trackFrom ? mesStart : trackFrom
   const hayTracking = trackFrom <= calcEnd
 
-  const [cierresRes, retirosRes, ajustesRes, pagosRes, comprasRes, sobresTotalRes, movimientosRes] = await Promise.all([
+  const [cierresRes, retirosRes, ajustesRes, pagosRes, comprasRes, sobresTotalRes, movimientosRes, salidasAsignadasRes] = await Promise.all([
     supabaseAdmin
       .from('loyverse_cierres')
       .select('id, fecha, opened_at, closed_at, starting_cash, cash_payments, actual_cash, expected_cash, paid_out')
@@ -176,7 +184,19 @@ export async function GET(req: NextRequest) {
       .gte('fecha', queryFrom)
       .lte('fecha', calcEnd)
       .order('movimiento_en'),
+
+    // Salidas de caja de Loyverse ya asignadas a una empleada (ver claveMovimiento)
+    supabaseAdmin
+      .from('caja_salidas_asignadas')
+      .select('movimiento_en, monto, empleado_nombre')
+      .gte('fecha', queryFrom)
+      .lte('fecha', calcEnd),
   ])
+
+  const salidasAsignadasMap = new Map<string, string>()
+  for (const s of (salidasAsignadasRes.data ?? [])) {
+    salidasAsignadasMap.set(claveMovimiento(s.movimiento_en as string, Number(s.monto ?? 0)), s.empleado_nombre as string)
+  }
 
   // Turnos (shifts de Loyverse) agrupados por fecha, ordenados por apertura
   type Turno = {
@@ -323,7 +343,10 @@ export async function GET(req: NextRequest) {
     const sobresFusionados = new Set<string>()
     const comprasFusionadas = new Set<number>()
     const movimientosConEstado = movimientosDia.map(mv => {
-      if (mv.tipo !== 'PAY_OUT') return { ...mv, explicado: undefined as boolean | undefined, matchTexto: undefined as string | undefined }
+      if (mv.tipo !== 'PAY_OUT') return { ...mv, explicado: undefined as boolean | undefined, matchTexto: undefined as string | undefined, asignadoA: undefined as string | undefined }
+      // Una asignación explícita a empleada es prioritaria sobre el matching por texto
+      const asignadoA = salidasAsignadasMap.get(claveMovimiento(mv.movimiento_en, mv.monto))
+      if (asignadoA) return { ...mv, explicado: true, matchTexto: undefined as string | undefined, asignadoA }
       const match = candidatosSalida.find(c =>
         !c.usado && Math.abs(c.monto - mv.monto) < 1 && textosRelacionados(mv.comentario ?? '', c.texto)
       )
@@ -334,7 +357,7 @@ export async function GET(req: NextRequest) {
       } else {
         salidas_sin_explicar++
       }
-      return { ...mv, explicado: !!match, matchTexto: match?.texto }
+      return { ...mv, explicado: !!match, matchTexto: match?.texto, asignadoA: undefined as string | undefined }
     })
     if (movimientosDia.length === 0 && turnosDia.length > 0) {
       // Fallback para turnos importados antes de tener el detalle de movimientos:
@@ -427,8 +450,9 @@ export async function GET(req: NextRequest) {
       eventos.push({
         tipo: mv.tipo === 'PAY_IN' ? 'pago_in' : 'pago_out',
         hora: horaAR(mv.movimiento_en), ts: mv.movimiento_en, monto: mv.monto,
-        detalle: mv.explicado && mv.matchTexto ? mv.matchTexto : mv.comentario,
+        detalle: mv.asignadoA ? mv.comentario : (mv.explicado && mv.matchTexto ? mv.matchTexto : mv.comentario),
         explicado: mv.explicado,
+        asignadoA: mv.asignadoA ?? null,
       })
     }
 
