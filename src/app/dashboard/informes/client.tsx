@@ -348,13 +348,13 @@ function TabCaja({ mes }: { mes: string }) {
       })
       const d = await res.json()
       if (!res.ok) { setAsigError(d.error ?? 'Error al asignar'); return }
-      setAsignandoTs(null); cargar()
+      setAsignandoTs(null); cargar(true)
     } finally { setAsigSaving(false) }
   }
 
   async function desasignarSalida(dia: DiaData, ev: Evento) {
     await fetch(`/api/caja/salidas/asignar?fecha=${dia.fecha}&movimiento_en=${encodeURIComponent(ev.ts)}&monto=${ev.monto}`, { method: 'DELETE' })
-    cargar()
+    cargar(true)
   }
 
   function abrirAjuste(fecha: string, saldo_actual: number) {
