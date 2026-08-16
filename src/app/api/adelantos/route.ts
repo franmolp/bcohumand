@@ -127,6 +127,7 @@ export async function POST(req: NextRequest) {
     .from('adelantos')
     .select('id, monto')
     .eq('usuario_id', session.id)
+    .eq('tipo', 'efectivo')
     .neq('estado', 'rejected')
     .gte('created_at', periodoDesde)
     .lt('created_at', periodoHasta)

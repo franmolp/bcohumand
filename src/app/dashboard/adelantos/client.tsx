@@ -20,6 +20,7 @@ type Adelanto = {
   creado_por_admin: boolean
   created_at: string
   fecha_respuesta: string | null
+  tipo: 'efectivo' | 'servicio'
 }
 
 type Config = {
@@ -65,6 +66,15 @@ function EstadoBadge({ estado }: { estado: string }) {
   if (estado === 'approved') return <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-50 text-green-700">Aprobado</span>
   if (estado === 'rejected') return <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 text-red-600">Rechazado</span>
   return <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-600">Pendiente</span>
+}
+
+function TipoBadge({ tipo }: { tipo: 'efectivo' | 'servicio' }) {
+  if (tipo !== 'servicio') return null
+  return (
+    <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-600 flex-shrink-0" title="Servicio/consumo registrado desde Caja — no cuenta para el límite de adelantos en efectivo">
+      Servicio
+    </span>
+  )
 }
 
 export default function AdelantosClient({ user }: { user: SessionUser }) {
@@ -466,7 +476,10 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
                   {sorted.map(a => (
                     <div key={a.id} className="flex items-center gap-3 px-4 py-3">
                       <div className="flex-1 min-w-0">
-                        <p className="text-[14px] font-medium text-[var(--text)] truncate">{a.empleado_nombre}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-[14px] font-medium text-[var(--text)] truncate">{a.empleado_nombre}</p>
+                          {a.tipo === 'servicio' && <TipoBadge tipo="servicio" />}
+                        </div>
                         <p className="text-[11px] text-gray-400">{fmtFecha(a.created_at)}</p>
                         {a.comentario_admin && <p className="text-[11px] text-gray-400 italic truncate">{a.comentario_admin}</p>}
                       </div>
@@ -605,7 +618,7 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
   // EMPLOYEE VIEW
   // ─────────────────────────────────────────────
   const currentMes = getMesStr()
-  const thisMesUsados = adelantos.filter(a => a.created_at.slice(0, 7) === currentMes && a.estado !== 'rejected').length
+  const thisMesUsados = adelantos.filter(a => a.created_at.slice(0, 7) === currentMes && a.estado !== 'rejected' && a.tipo !== 'servicio').length
   const limitReached = thisMesUsados >= config.max_por_mes
 
   type YearGroup = { year: number; months: { mes: string; items: Adelanto[] }[] }
@@ -710,7 +723,10 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
                   {mg.items.map(a => (
                     <div key={a.id} className="px-4 py-3.5 space-y-1.5">
                       <div className="flex items-center justify-between gap-3">
-                        <EstadoBadge estado={a.estado} />
+                        <div className="flex items-center gap-1.5">
+                          <EstadoBadge estado={a.estado} />
+                          <TipoBadge tipo={a.tipo} />
+                        </div>
                         <p className="text-[17px] font-bold text-[var(--text)]">{fmtMonto(a.monto_aprobado ?? a.monto)}</p>
                       </div>
                       {a.estado === 'approved' && a.monto_aprobado !== null && a.monto_aprobado !== a.monto && (

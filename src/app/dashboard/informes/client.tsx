@@ -121,6 +121,7 @@ interface CajaConfig {
 
 interface RetiroItem {
   id: string; monto: number; descripcion: string | null; tipo: string; created_at: string
+  empleado_id: string | null; empleado_nombre: string | null
 }
 
 interface Evento {
@@ -184,8 +185,14 @@ function TabCaja({ mes }: { mes: string }) {
   const [rfMonto, setRfMonto] = useState('')
   const [rfDesc, setRfDesc] = useState('')
   const [rfTipo, setRfTipo] = useState<'retiro' | 'sobre'>('retiro')
+  const [rfEmpleadoId, setRfEmpleadoId] = useState('')
   const [rfSaving, setRfSaving] = useState(false)
   const [rfError, setRfError] = useState('')
+
+  const [empleados, setEmpleados] = useState<{ id: string; nombre: string }[]>([])
+  useEffect(() => {
+    fetch('/api/adelantos/usuarios').then(r => r.json()).then(d => setEmpleados(Array.isArray(d) ? d : [])).catch(() => {})
+  }, [])
 
   const [modalAjuste, setModalAjuste] = useState<{ fecha: string; saldo_actual: number } | null>(null)
   const [afSaldo, setAfSaldo] = useState('')
@@ -201,6 +208,7 @@ function TabCaja({ mes }: { mes: string }) {
 
   const [reimportando, setReimportando] = useState(false)
   const [reimportMsg, setReimportMsg] = useState('')
+  const [retiroAviso, setRetiroAviso] = useState('')
   const [logAbierto, setLogAbierto] = useState<string | null>(null)
 
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -208,6 +216,7 @@ function TabCaja({ mes }: { mes: string }) {
   const [erMonto, setErMonto] = useState('')
   const [erDesc, setErDesc] = useState('')
   const [erTipo, setErTipo] = useState<'retiro' | 'sobre'>('retiro')
+  const [erEmpleadoId, setErEmpleadoId] = useState('')
   const [erSaving, setErSaving] = useState(false)
 
   // silent=true: refresco de fondo (polling) — actualiza los datos sin mostrar el
@@ -254,7 +263,7 @@ function TabCaja({ mes }: { mes: string }) {
   }, [mes])
 
   function abrirModalRetiro(fecha: string) {
-    setRfFecha(fecha); setRfMonto(''); setRfDesc(''); setRfTipo('retiro'); setRfError('')
+    setRfFecha(fecha); setRfMonto(''); setRfDesc(''); setRfTipo('retiro'); setRfEmpleadoId(''); setRfError('')
     setModalRetiro({ fecha })
   }
 
@@ -263,13 +272,19 @@ function TabCaja({ mes }: { mes: string }) {
     if (!rfFecha || isNaN(monto) || monto <= 0) { setRfError('Ingresá un monto válido'); return }
     setRfSaving(true); setRfError('')
     try {
+      const empleado = empleados.find(e => e.id === rfEmpleadoId)
       const res = await fetch('/api/caja/retiros', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fecha: rfFecha, monto, descripcion: rfDesc || null, tipo: rfTipo }),
+        body: JSON.stringify({
+          fecha: rfFecha, monto, descripcion: rfDesc || null, tipo: rfTipo,
+          empleado_id: rfTipo === 'retiro' ? (rfEmpleadoId || null) : null,
+          empleado_nombre: rfTipo === 'retiro' ? (empleado?.nombre ?? null) : null,
+        }),
       })
       const d = await res.json()
       if (!res.ok) { setRfError(d.error ?? 'Error al guardar'); return }
+      if (d.aviso) { setRetiroAviso(d.aviso); setTimeout(() => setRetiroAviso(''), 8000) }
       setModalRetiro(null); cargar()
     } finally { setRfSaving(false) }
   }
@@ -283,6 +298,7 @@ function TabCaja({ mes }: { mes: string }) {
   function abrirEditRetiro(r: RetiroItem, fecha: string) {
     setEditRetiro({ ...r, fecha })
     setErMonto(String(r.monto)); setErDesc(r.descripcion ?? ''); setErTipo(r.tipo === 'sobre' ? 'sobre' : 'retiro')
+    setErEmpleadoId(r.empleado_id ?? '')
   }
 
   async function guardarEditRetiro() {
@@ -291,10 +307,15 @@ function TabCaja({ mes }: { mes: string }) {
     if (isNaN(monto) || monto <= 0) return
     setErSaving(true)
     try {
+      const empleado = empleados.find(e => e.id === erEmpleadoId)
       await fetch(`/api/caja/retiros/${editRetiro.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fecha: editRetiro.fecha, monto, descripcion: erDesc || null, tipo: erTipo }),
+        body: JSON.stringify({
+          fecha: editRetiro.fecha, monto, descripcion: erDesc || null, tipo: erTipo,
+          empleado_id: erTipo === 'retiro' ? (erEmpleadoId || null) : null,
+          empleado_nombre: erTipo === 'retiro' ? (empleado?.nombre ?? null) : null,
+        }),
       })
       setEditRetiro(null); cargar()
     } finally { setErSaving(false) }
@@ -431,6 +452,13 @@ function TabCaja({ mes }: { mes: string }) {
         {reimportMsg && <span className="text-[11px] text-green-600">{reimportMsg}</span>}
       </div>
 
+      {retiroAviso && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2.5 flex items-center gap-2">
+          <IconAlertCircle size={15} className="text-amber-500 shrink-0" />
+          <p className="text-[12px] text-amber-700">{retiroAviso}</p>
+        </div>
+      )}
+
       {/* Day cards */}
       {dias.length === 0 && (
         <div className="text-center py-10 text-[var(--text-muted)] text-[14px]">Sin datos para este período.</div>
@@ -529,6 +557,11 @@ function TabCaja({ mes }: { mes: string }) {
                         : <IconDollar size={13} className="text-amber-600 shrink-0" />}
                       <span className={`font-semibold ${r.tipo === 'sobre' ? 'text-purple-600' : 'text-amber-600'}`}>{fmt$(r.monto)}</span>
                       {r.descripcion && <span className="text-[var(--text-muted)] truncate">{r.descripcion}</span>}
+                      {r.empleado_nombre && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 shrink-0">
+                          → {r.empleado_nombre}
+                        </span>
+                      )}
                       <div className="flex-1" />
                       <button onClick={() => abrirEditRetiro(r, dia.fecha)}
                         className="p-1 text-gray-300 hover:text-[var(--primary)] rounded-lg transition-colors cursor-pointer">
@@ -670,6 +703,21 @@ function TabCaja({ mes }: { mes: string }) {
                   placeholder={rfTipo === 'sobre' ? 'ej: Sobre del mediodía, pago proveedor' : 'ej: Retiro fin de día'}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[var(--primary)]" />
               </div>
+              {rfTipo === 'retiro' && (
+                <div>
+                  <p className="text-[12px] font-medium text-gray-500 mb-1.5">Asignar a una empleada <span className="font-normal text-gray-400">(opcional)</span></p>
+                  <select value={rfEmpleadoId} onChange={e => setRfEmpleadoId(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[var(--primary)] bg-white cursor-pointer">
+                    <option value="">Sin asignar</option>
+                    {empleados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                  </select>
+                  {rfEmpleadoId && (
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      Se le va a sumar como adelanto de servicio en su liquidación — no cuenta para su límite de adelantos en efectivo.
+                    </p>
+                  )}
+                </div>
+              )}
               {rfError && <p className="text-red-500 text-[12px]">{rfError}</p>}
               <div className="flex gap-2 pt-1">
                 <button onClick={() => setModalRetiro(null)}
@@ -719,6 +767,16 @@ function TabCaja({ mes }: { mes: string }) {
                 <input type="text" value={erDesc} onChange={e => setErDesc(e.target.value)}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[var(--primary)]" />
               </div>
+              {erTipo === 'retiro' && (
+                <div>
+                  <p className="text-[12px] font-medium text-gray-500 mb-1.5">Asignar a una empleada <span className="font-normal text-gray-400">(opcional)</span></p>
+                  <select value={erEmpleadoId} onChange={e => setErEmpleadoId(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[var(--primary)] bg-white cursor-pointer">
+                    <option value="">Sin asignar</option>
+                    {empleados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                  </select>
+                </div>
+              )}
               <div className="flex gap-2 pt-1">
                 <button onClick={() => setEditRetiro(null)}
                   className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-[13px] cursor-pointer hover:bg-gray-50">Cancelar</button>

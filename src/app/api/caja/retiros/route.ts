@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { crearNotificacion } from '@/lib/notificaciones'
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
@@ -39,12 +40,17 @@ export async function POST(req: NextRequest) {
     monto?: number | string
     descripcion?: string
     tipo?: string
+    empleado_id?: string
+    empleado_nombre?: string
   }
 
   const monto = Number(body.monto ?? 0)
   if (!body.fecha || monto <= 0) return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 })
 
   const tipo = body.tipo === 'sobre' ? 'sobre' : 'retiro'
+  // Solo tiene sentido asignar un retiro personal a una empleada, nunca un sobre
+  const empleadoId = tipo === 'retiro' && body.empleado_id ? body.empleado_id : null
+  const empleadoNombre = empleadoId ? (body.empleado_nombre || null) : null
 
   const { data, error } = await supabaseAdmin
     .from('retiros_caja')
@@ -54,10 +60,59 @@ export async function POST(req: NextRequest) {
       descripcion: body.descripcion || null,
       tipo,
       usuario_id: session.id,
+      empleado_id: empleadoId,
+      empleado_nombre: empleadoNombre,
     })
     .select()
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+
+  let avisoAdelanto: string | undefined
+  if (empleadoId) {
+    const r = await crearAdelantoServicio({
+      empleadoId, empleadoNombre: empleadoNombre ?? 'Empleada', monto,
+      descripcion: body.descripcion || null, fecha: body.fecha,
+      retiroId: data.id, adminId: session.id,
+    })
+    if (!r.ok) avisoAdelanto = `El retiro se guardó, pero no se pudo asignar a la empleada: ${r.error}`
+  }
+
+  return NextResponse.json(avisoAdelanto ? { ...data, aviso: avisoAdelanto } : data)
+}
+
+// Crea el adelanto "de servicio" vinculado a un retiro de caja asignado a una empleada
+export async function crearAdelantoServicio(params: {
+  empleadoId: string; empleadoNombre: string; monto: number
+  descripcion: string | null; fecha: string; retiroId: string; adminId: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const { empleadoId, empleadoNombre, monto, descripcion, fecha, retiroId, adminId } = params
+  const { error } = await supabaseAdmin.from('adelantos').insert({
+    usuario_id: empleadoId,
+    empleado_nombre: empleadoNombre,
+    monto,
+    monto_aprobado: monto,
+    estado: 'approved',
+    tipo: 'servicio',
+    comentario_admin: descripcion || 'Servicio/consumo registrado desde Caja',
+    aprobado_por: adminId,
+    creado_por_admin: true,
+    fecha_respuesta: new Date().toISOString(),
+    created_at: `${fecha}T12:00:00.000Z`,
+    retiro_caja_id: retiroId,
+  })
+
+  if (error) {
+    console.error('[caja retiros] error al crear adelanto de servicio:', error.message)
+    return { ok: false, error: error.message }
+  }
+
+  await crearNotificacion({
+    usuario_id: empleadoId,
+    titulo: 'Se registró un consumo a tu nombre',
+    mensaje: `$${monto.toLocaleString('es-AR')}${descripcion ? ` · ${descripcion}` : ''} — se descuenta de tu próxima liquidación`,
+    tipo: 'adelanto_aprobado',
+  }).catch(() => {})
+
+  return { ok: true }
 }

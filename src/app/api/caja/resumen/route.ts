@@ -130,7 +130,7 @@ export async function GET(req: NextRequest) {
 
     supabaseAdmin
       .from('retiros_caja')
-      .select('id, fecha, monto, descripcion, tipo, created_at')
+      .select('id, fecha, monto, descripcion, tipo, created_at, empleado_id, empleado_nombre')
       .gte('fecha', queryFrom)
       .lte('fecha', calcEnd)
       .order('fecha')
@@ -200,7 +200,10 @@ export async function GET(req: NextRequest) {
   }
 
   // Index retiros by fecha — tipo 'retiro' (personal) | 'sobre' (va a caja fuerte)
-  type RetiroItem = { id: string; monto: number; descripcion: string | null; tipo: string; created_at: string }
+  type RetiroItem = {
+    id: string; monto: number; descripcion: string | null; tipo: string; created_at: string
+    empleado_id: string | null; empleado_nombre: string | null
+  }
   const retirosByFecha = new Map<string, { total: number; sobres: number; items: RetiroItem[] }>()
   for (const r of (retirosRes.data ?? [])) {
     const f = r.fecha as string
@@ -208,7 +211,10 @@ export async function GET(req: NextRequest) {
     const entry = retirosByFecha.get(f)!
     entry.total += Number(r.monto)
     if ((r.tipo ?? 'retiro') === 'sobre') entry.sobres += Number(r.monto)
-    entry.items.push({ id: r.id, monto: Number(r.monto), descripcion: r.descripcion, tipo: r.tipo ?? 'retiro', created_at: r.created_at })
+    entry.items.push({
+      id: r.id, monto: Number(r.monto), descripcion: r.descripcion, tipo: r.tipo ?? 'retiro', created_at: r.created_at,
+      empleado_id: r.empleado_id ?? null, empleado_nombre: r.empleado_nombre ?? null,
+    })
   }
 
   // Index ajustes by fecha, most recent per day (query is ordered DESC by created_at)
