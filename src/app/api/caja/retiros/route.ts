@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { crearNotificacion } from '@/lib/notificaciones'
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
@@ -106,13 +105,6 @@ export async function crearAdelantoServicio(params: {
     console.error('[caja retiros] error al crear adelanto de servicio:', error.message)
     return { ok: false, error: error.message }
   }
-
-  await crearNotificacion({
-    usuario_id: empleadoId,
-    titulo: 'Se registró un consumo a tu nombre',
-    mensaje: `$${monto.toLocaleString('es-AR')}${descripcion ? ` · ${descripcion}` : ''} — se descuenta de tu próxima liquidación`,
-    tipo: 'adelanto_aprobado',
-  }).catch(() => {})
 
   return { ok: true }
 }
