@@ -56,6 +56,20 @@ function nextMes(s: string) {
   return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
 }
 
+// Los períodos de adelantos cortan el día 8 (fecha de pago), no el 1 del mes —
+// coincide con DIA_CORTE del lado del servidor (src/app/api/adelantos/route.ts)
+const DIA_CORTE = 8
+function periodoKey(iso: string): string {
+  const d = new Date(iso)
+  let month = d.getMonth() + 1
+  let year = d.getFullYear()
+  if (d.getDate() < DIA_CORTE) {
+    month -= 1
+    if (month === 0) { month = 12; year -= 1 }
+  }
+  return `${year}-${String(month).padStart(2, '0')}`
+}
+
 function formatMiles(raw: string): string {
   const digits = raw.replace(/\D/g, '')
   if (!digits) return ''
@@ -617,14 +631,14 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
   // ─────────────────────────────────────────────
   // EMPLOYEE VIEW
   // ─────────────────────────────────────────────
-  const currentMes = getMesStr()
-  const thisMesUsados = adelantos.filter(a => a.created_at.slice(0, 7) === currentMes && a.estado !== 'rejected' && a.tipo !== 'servicio').length
+  const currentPeriodo = periodoKey(new Date().toISOString())
+  const thisMesUsados = adelantos.filter(a => periodoKey(a.created_at) === currentPeriodo && a.estado !== 'rejected' && a.tipo !== 'servicio').length
   const limitReached = thisMesUsados >= config.max_por_mes
 
   type YearGroup = { year: number; months: { mes: string; items: Adelanto[] }[] }
   const byYear: YearGroup[] = []
   for (const a of adelantos) {
-    const mes = a.created_at.slice(0, 7)
+    const mes = periodoKey(a.created_at)
     const year = Number(mes.slice(0, 4))
     let yg = byYear.find(g => g.year === year)
     if (!yg) { yg = { year, months: [] }; byYear.push(yg) }
@@ -715,9 +729,14 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
       ) : byYear.map(yg => (
         <div key={yg.year} className="space-y-3">
           <p className="text-[13px] font-bold text-gray-400">{yg.year}</p>
-          {yg.months.map(mg => (
+          {yg.months.map(mg => {
+            const mgTotal = mg.items.filter(a => a.estado === 'approved').reduce((s, a) => s + (a.monto_aprobado ?? a.monto), 0)
+            return (
             <div key={mg.mes}>
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">{mesLabel(mg.mes)}</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{mesLabel(mg.mes)}</p>
+                {mgTotal > 0 && <p className="text-[11px] font-semibold text-gray-400">Total: {fmtMonto(mgTotal)}</p>}
+              </div>
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="divide-y divide-gray-50">
                   {mg.items.map(a => (
@@ -748,7 +767,8 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
                 </div>
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       ))}
 
