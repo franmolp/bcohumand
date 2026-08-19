@@ -11,7 +11,7 @@ export async function GET() {
 
   let query = supabaseAdmin
     .from('pedidos_items')
-    .select('*, producto:pedidos_productos(id, nombre, marca, categoria, unidad, proveedor_id, proveedor:proveedores(id, nombre))')
+    .select('*, producto:pedidos_productos(id, nombre, marca, categoria, unidad, proveedor_id, proveedor:proveedores(id, nombre)), variante:pedidos_variantes(id, nombre)')
     .in('estado', ['ordenado', 'faltante', 'recibido'])
     .eq('archivado', true)
     .order('archivado_en', { ascending: false })
@@ -55,7 +55,7 @@ export async function GET() {
 
   // Group by date + proveedor
   type EnvioItem = {
-    id: string; ciclo_id: string; nombre: string; marca: string | null
+    id: string; ciclo_id: string; nombre: string; variante_nombre: string | null; marca: string | null
     cantidad: number; unidad: string; estado: string; notas: string | null
     urgente: boolean; usuario: string; producto_id: string | null; variante_id: string | null
   }
@@ -65,6 +65,8 @@ export async function GET() {
   for (const item of filtered) {
     const prod = Array.isArray(item.producto) ? item.producto[0] : item.producto
     const p = prod as { nombre: string; marca: string; proveedor_id: number | null; proveedor: { id: number; nombre: string } | null } | null
+    const variante = Array.isArray(item.variante) ? item.variante[0] : item.variante
+    const v = variante as { nombre: string } | null
     const fecha = item.archivado_en ? item.archivado_en.slice(0, 10) : 'sin_fecha'
     const provId = p?.proveedor?.id ?? null
     const provNombre = p?.proveedor?.nombre ?? 'Sin proveedor'
@@ -74,6 +76,7 @@ export async function GET() {
       id: item.id,
       ciclo_id: item.ciclo_id,
       nombre: p?.nombre ?? item.nombre_libre ?? 'Ítem',
+      variante_nombre: v?.nombre ?? null,
       marca: p?.marca ?? null,
       cantidad: item.cantidad,
       unidad: item.unidad,

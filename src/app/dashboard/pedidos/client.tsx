@@ -501,6 +501,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
                       <div className="w-1.5 h-1.5 rounded-full bg-gray-200 flex-shrink-0 mt-0.5" />
                       <span className="text-[12px] text-[var(--text-muted)] line-through">
                         {item.producto?.nombre ?? item.nombre_libre ?? 'Ítem'}
+                        {item.variante && <span> · {item.variante.nombre}</span>}
                       </span>
                       <span className="text-[11px] text-[var(--text-muted)]">{fmtCantidad(item.cantidad, item.unidad)}</span>
                     </div>
@@ -508,6 +509,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
                       Cargado por <span className="font-medium">{item.usuario.nombre}</span>
                       {item.archivado_por && <> · Archivado por <span className="font-medium">{item.archivado_por}</span></>}
                       {item.archivado_en && <> el {formatCerradoEn(item.archivado_en)}</>}
+                      {item.notas && <> · <span className="italic">{item.notas}</span></>}
                     </p>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
@@ -1000,7 +1002,7 @@ function ItemRow({ item, cicloAbierto, isAdmin, myId, onEdit, onArchive, onDelet
 // ─── Tab: Enviados ───────────────────────────────────────────────────────────
 
 type EnvioItem = {
-  id: string; ciclo_id: string; nombre: string; marca: string | null
+  id: string; ciclo_id: string; nombre: string; variante_nombre: string | null; marca: string | null
   cantidad: number; unidad: string; estado: string; notas: string | null
   urgente: boolean; usuario: string; producto_id: string | null; variante_id: string | null
 }
@@ -1125,7 +1127,10 @@ function TabEnviados({ cicloActivo, isAdmin, onRefresh }: { cicloActivo: Ciclo |
         }
       >
         <div className="p-3 bg-gray-50 border border-[var(--border)] rounded-xl">
-          <p className="text-[13px] font-semibold text-[var(--text)]">{recibirItem?.nombre}</p>
+          <p className="text-[13px] font-semibold text-[var(--text)]">
+            {recibirItem?.nombre}
+            {recibirItem?.variante_nombre && <span className="font-normal text-[var(--text-muted)]"> · {recibirItem.variante_nombre}</span>}
+          </p>
           {recibirItem?.marca && recibirItem.marca !== 'Sin marca' && (
             <p className="text-[11px] text-[var(--text-muted)]">{recibirItem.marca}</p>
           )}
@@ -1185,11 +1190,17 @@ function TabEnviados({ cicloActivo, isAdmin, onRefresh }: { cicloActivo: Ciclo |
                       <div className="flex-1 min-w-0">
                         <span className={`text-[13px] font-medium ${item.estado === 'faltante' || (yaMarcado && marcado === 0) ? 'line-through text-orange-600' : ''}`}>
                           {item.nombre}
+                          {item.variante_nombre && (
+                            <span className="text-[11px] font-normal text-[var(--text-muted)] ml-1">· {item.variante_nombre}</span>
+                          )}
                           {item.marca && item.marca !== 'Sin marca' && (
                             <span className="text-[11px] font-normal text-[var(--text-muted)] ml-1">· {item.marca}</span>
                           )}
                         </span>
                         <span className="text-[12px] text-[var(--text-muted)] ml-2">{fmtCantidad(item.cantidad, item.unidad)}</span>
+                        {item.notas && (
+                          <span className="text-[11px] text-[var(--text-muted)] ml-2 italic">· {item.notas}</span>
+                        )}
                         {item.estado === 'faltante' && (
                           <span className="ml-2 text-[10px] font-bold text-orange-500 uppercase">no llegó</span>
                         )}
