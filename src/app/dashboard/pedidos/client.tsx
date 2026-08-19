@@ -218,12 +218,6 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
 
   useEffect(() => { cargar() }, [cargar])
 
-  useEffect(() => {
-    if (!cicloActivo) return
-    const interval = setInterval(() => { cargar() }, 15000)
-    return () => clearInterval(interval)
-  }, [cicloActivo, cargar])
-
   function openAdd() {
     setShowAdd(true); setAddStep('search'); setBusqueda(''); setProductoSel(null)
     setVarianteSel(null); setVariantesDisponibles([])
