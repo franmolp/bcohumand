@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import type { SessionUser } from '@/types'
 import { Button, Spinner, Modal, Toast, Confirm, Select } from '@/components/ui'
 import {
-  IconBottle, IconShoppingBag, IconX, IconCheck, IconEdit, IconPlus, IconChevronRight, IconTrash, IconAlertCircle, IconClock,
+  IconBottle, IconShoppingBag, IconX, IconCheck, IconEdit, IconPlus, IconChevronRight, IconChevronLeft, IconTrash, IconAlertCircle, IconClock,
 } from '@/components/ui/Icons'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -1005,6 +1005,7 @@ type EnvioItem = {
   id: string; ciclo_id: string; nombre: string; variante_nombre: string | null; marca: string | null
   cantidad: number; unidad: string; estado: string; notas: string | null
   urgente: boolean; usuario: string; producto_id: string | null; variante_id: string | null
+  recibido_en: string | null
 }
 type EnvioGroup = { fecha: string; proveedor_id: number | null; proveedor_nombre: string; items: EnvioItem[] }
 
@@ -1017,9 +1018,21 @@ function TabEnviados({ cicloActivo, isAdmin, onRefresh }: { cicloActivo: Ciclo |
   // Marcas locales sin guardar todavía: id de ítem -> cantidad recibida (0 = no llegó)
   const [borrador, setBorrador] = useState<Record<string, number>>({})
   const [guardandoPedido, setGuardandoPedido] = useState(false)
+  const [abiertos, setAbiertos] = useState<Set<string>>(new Set())
+  const [pagina, setPagina] = useState(0)
+  const POR_PAGINA = 8
 
   function showToast(msg: string, type: 'success' | 'error' = 'success') {
     setToast({ msg, type }); setTimeout(() => setToast(null), 3000)
+  }
+
+  function toggleGrupo(key: string) {
+    setAbiertos(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
   }
 
   const cargar = useCallback(() => {
@@ -1104,9 +1117,25 @@ function TabEnviados({ cicloActivo, isAdmin, onRefresh }: { cicloActivo: Ciclo |
     return `${parseInt(d)}/${parseInt(m)}/${y}`
   }
 
+  function formatFechaHora(iso: string) {
+    const d = new Date(iso)
+    return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'numeric', year: 'numeric' })
+  }
+
   if (loading) return <Spinner />
 
   const cantMarcados = Object.keys(borrador).length
+  // Los pedidos con ítems sin recibir (todavía "ordenado") van arriba de todo —
+  // el resto, ya cerrado, queda después. Dentro de cada grupo se mantiene el
+  // orden por fecha que ya viene del backend (sort estable).
+  const gruposOrdenados = [...grupos].sort((a, b) => {
+    const aAbierto = a.items.some(i => i.estado === 'ordenado') ? 1 : 0
+    const bAbierto = b.items.some(i => i.estado === 'ordenado') ? 1 : 0
+    return bAbierto - aAbierto
+  })
+  const totalPaginas = Math.max(1, Math.ceil(gruposOrdenados.length / POR_PAGINA))
+  const paginaSegura = Math.min(pagina, totalPaginas - 1)
+  const gruposPagina = gruposOrdenados.slice(paginaSegura * POR_PAGINA, paginaSegura * POR_PAGINA + POR_PAGINA)
 
   return (
     <div>
@@ -1170,17 +1199,36 @@ function TabEnviados({ cicloActivo, isAdmin, onRefresh }: { cicloActivo: Ciclo |
       )}
 
       {!grupos.length && <p className="text-center text-[13px] text-gray-400 py-12">No hay pedidos enviados</p>}
-      <div className="space-y-5">
-        {grupos.map(g => {
+      <div className="space-y-3">
+        {gruposPagina.map(g => {
           const key = `${g.fecha}__${g.proveedor_id ?? 'null'}`
+          const abierto = abiertos.has(key)
+          const pendientes = g.items.filter(i => i.estado === 'ordenado' && borrador[i.id] === undefined).length
+          const fechaRecibido = pendientes === 0
+            ? g.items.reduce((max: string | null, i) => i.recibido_en && (!max || i.recibido_en > max) ? i.recibido_en : max, null)
+            : null
           return (
             <div key={key} className="bg-white border border-[var(--border)] rounded-2xl shadow-sm overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--border)]">
+              <button onClick={() => toggleGrupo(key)}
+                className="w-full flex items-center gap-2 px-4 py-3 text-left cursor-pointer hover:bg-gray-50 transition-colors">
                 <IconShoppingBag size={13} className="text-[var(--primary)] flex-shrink-0" />
-                <p className="text-[13px] font-bold text-[var(--text)] flex-1">{g.proveedor_nombre}</p>
-                <span className="text-[11px] text-[var(--text-muted)]">{formatFechaEnvio(g.fecha)}</span>
-              </div>
-              <div className="divide-y divide-gray-50 px-4">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-bold text-[var(--text)]">{g.proveedor_nombre}</p>
+                  <p className="text-[11px] text-[var(--text-muted)]">
+                    Pedido {formatFechaEnvio(g.fecha)}
+                    {fechaRecibido && <> · Recibido {formatFechaHora(fechaRecibido)}</>}
+                  </p>
+                  {pendientes > 0 && (
+                    <p className="text-[11px] font-bold text-orange-600 mt-0.5">
+                      Falta revisar {pendientes} producto{pendientes !== 1 ? 's' : ''}
+                    </p>
+                  )}
+                </div>
+                <span className="text-[11px] text-[var(--text-muted)] flex-shrink-0">{g.items.length} ítem{g.items.length !== 1 ? 's' : ''}</span>
+                <IconChevronRight size={14} className={`text-gray-400 flex-shrink-0 transition-transform duration-200 ${abierto ? 'rotate-90' : ''}`} />
+              </button>
+              {abierto && (
+              <div className="divide-y divide-gray-50 px-4 border-t border-[var(--border)]">
                 {g.items.map(item => {
                   const marcado = borrador[item.id]
                   const yaMarcado = marcado !== undefined
@@ -1239,10 +1287,25 @@ function TabEnviados({ cicloActivo, isAdmin, onRefresh }: { cicloActivo: Ciclo |
                   )
                 })}
               </div>
+              )}
             </div>
           )
         })}
       </div>
+
+      {totalPaginas > 1 && (
+        <div className="flex items-center justify-center gap-3 pt-4">
+          <button onClick={() => setPagina(p => Math.max(0, p - 1))} disabled={paginaSegura === 0}
+            className="p-2 rounded-xl border border-[var(--border)] disabled:opacity-30 cursor-pointer hover:bg-gray-50 transition-colors">
+            <IconChevronLeft size={14} />
+          </button>
+          <span className="text-[12px] text-[var(--text-muted)]">Página {paginaSegura + 1} de {totalPaginas}</span>
+          <button onClick={() => setPagina(p => Math.min(totalPaginas - 1, p + 1))} disabled={paginaSegura >= totalPaginas - 1}
+            className="p-2 rounded-xl border border-[var(--border)] disabled:opacity-30 cursor-pointer hover:bg-gray-50 transition-colors">
+            <IconChevronRight size={14} />
+          </button>
+        </div>
+      )}
     </div>
   )
 }

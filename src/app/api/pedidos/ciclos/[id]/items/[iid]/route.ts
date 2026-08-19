@@ -51,8 +51,10 @@ export async function PUT(
     }
   } else if (esFaltante) {
     update.estado = 'faltante'
+    update.recibido_en = new Date().toISOString()
   } else {
     update.estado = 'recibido'
+    update.recibido_en = new Date().toISOString()
     if (cantidad !== undefined && !isNaN(Number(cantidad)) && Number(cantidad) >= 0) update.cantidad = Number(cantidad)
   }
 

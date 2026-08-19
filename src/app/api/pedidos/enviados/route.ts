@@ -58,6 +58,7 @@ export async function GET() {
     id: string; ciclo_id: string; nombre: string; variante_nombre: string | null; marca: string | null
     cantidad: number; unidad: string; estado: string; notas: string | null
     urgente: boolean; usuario: string; producto_id: string | null; variante_id: string | null
+    recibido_en: string | null
   }
   type EnvioGroup = { fecha: string; proveedor_id: number | null; proveedor_nombre: string; items: EnvioItem[] }
   const groups: Record<string, EnvioGroup> = {}
@@ -86,6 +87,7 @@ export async function GET() {
       usuario: userMap[item.usuario_id] ?? 'Usuario',
       producto_id: item.producto_id ?? null,
       variante_id: item.variante_id ?? null,
+      recibido_en: item.recibido_en ?? null,
     })
   }
 
