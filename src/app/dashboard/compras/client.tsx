@@ -18,6 +18,12 @@ function fmtFecha(iso: string) {
   const [y, m, d] = iso.split('-')
   return `${d}/${m}/${y}`
 }
+// new Date().toISOString().slice(0,10) da la fecha en UTC — después de las 21hs
+// (Argentina UTC-3) ya es "mañana" en UTC y la compra se cargaba con la fecha
+// equivocada. Esto fuerza la fecha de hoy en huso horario Argentina.
+function todayAR() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+}
 function fmtMonto(n: number) {
   return '$' + n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
@@ -68,7 +74,7 @@ interface FormState {
 }
 
 const FORM_EMPTY: FormState = {
-  fecha: new Date().toISOString().slice(0, 10),
+  fecha: todayAR(),
   proveedor_id: '',
   proveedor_nombre_nuevo: '',
   monto: '',
@@ -109,7 +115,7 @@ function CompraModal({ open, editTarget, proveedores, onClose, onSaved, onProvee
 
   useEffect(() => {
     if (open) {
-      setForm(editTarget ? compraToForm(editTarget) : { ...FORM_EMPTY, fecha: new Date().toISOString().slice(0, 10) })
+      setForm(editTarget ? compraToForm(editTarget) : { ...FORM_EMPTY, fecha: todayAR() })
       setFotoFile(null)
       setError('')
     }
