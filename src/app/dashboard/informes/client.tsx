@@ -249,7 +249,7 @@ function TabCaja({ mes }: { mes: string }) {
       })
       const d = await res.json()
       if (!res.ok) { setReimportMsg(d.error ?? 'Error'); return }
-      setReimportMsg(`${d.ok ?? 0} cierres importados`)
+      setReimportMsg(`${d.ok ?? 0} cierres · ${d.pagos ?? 0} pagos importados`)
       cargar()
     } finally {
       setReimportando(false)

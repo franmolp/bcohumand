@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { syncPagosYTickets } from '@/lib/loyverse-sync'
 
 const TOKEN = process.env.LOYVERSE_TOKEN
 
@@ -114,8 +115,14 @@ export async function POST(req: NextRequest) {
   const to = body.to ?? hoy
 
   try {
-    const result = await fetchAndStoreShifts(from, to)
-    return NextResponse.json(result)
+    // El botón manual hace lo mismo que el cron nocturno: cierres/turnos Y
+    // ventas/pagos (efectivo) — antes solo traía cierres y el efectivo del día
+    // quedaba desactualizado hasta la sync automática de la noche.
+    const [cierres, pagos] = await Promise.all([
+      fetchAndStoreShifts(from, to),
+      syncPagosYTickets(from, to),
+    ])
+    return NextResponse.json({ ok: cierres.ok, tickets: pagos.ok, pagos: pagos.pagosOk })
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
     return NextResponse.json({ error: msg }, { status: 500 })
