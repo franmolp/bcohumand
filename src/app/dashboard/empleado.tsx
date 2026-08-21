@@ -448,10 +448,17 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
             <IconLayoutGrid size={20} className="text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[14px] font-bold text-white">Sumá horas esta semana y la que viene</p>
+            <p className="text-[14px] font-bold text-white">Sumá horas</p>
             <p className="text-[12px] text-white/70">
-              Hay {puestosDisponibles.reduce((acc, p) => acc + p.cantidad, 0)} {puestosDisponibles[0].tipo_recurso === 'box' ? 'boxes' : 'mesas'} libres
-              {' '}— el más próximo: {fmtFechaLarga(puestosDisponibles[0].fecha)}, {puestosDisponibles[0].hora_inicio}–{puestosDisponibles[0].hora_fin}
+              {(() => {
+                const total = puestosDisponibles.reduce((acc, p) => acc + p.cantidad, 0)
+                const esBox = puestosDisponibles[0].tipo_recurso === 'box'
+                const sustantivo = esBox ? (total === 1 ? 'box' : 'boxes') : (total === 1 ? 'mesa' : 'mesas')
+                const adjetivo = total === 1 ? 'libre' : 'libres'
+                const articulo = esBox ? 'el más próximo' : 'la más próxima'
+                return `Hay ${total} ${sustantivo} ${adjetivo} — ${articulo}: `
+              })()}
+              {fmtFechaLarga(puestosDisponibles[0].fecha)}, {puestosDisponibles[0].hora_inicio}–{puestosDisponibles[0].hora_fin}
             </p>
           </div>
           <IconChevronRight size={16} className="text-white/60 shrink-0" />
