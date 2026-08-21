@@ -51,6 +51,7 @@ function tipoConfig(tipo: string) {
     mural_like:            { icon: <IconHeartFilled size={14} />,      bg: 'bg-teal-100',    color: 'text-teal-600',    href: '/dashboard/muro' },
     mural_mencion:         { icon: <IconWall size={14} />,             bg: 'bg-teal-100',    color: 'text-teal-600',    href: '/dashboard/muro' },
     fichadas:              { icon: <IconFingerprint size={14} />,      bg: 'bg-cyan-100',    color: 'text-cyan-600',    href: '/dashboard/asistencia' },
+    asistencia_incompleta: { icon: <IconFingerprint size={14} />,      bg: 'bg-cyan-100',    color: 'text-cyan-600',    href: '/dashboard/mi-asistencia' },
     adelanto_solicitado:   { icon: <IconDollar size={14} />,           bg: 'bg-emerald-100', color: 'text-emerald-600', href: '/dashboard/adelantos' },
     adelanto_aprobado:     { icon: <IconDollar size={14} />,           bg: 'bg-emerald-100', color: 'text-emerald-600', href: '/dashboard/adelantos' },
     adelanto_rechazado:    { icon: <IconDollar size={14} />,           bg: 'bg-red-100',     color: 'text-red-500',     href: '/dashboard/adelantos' },

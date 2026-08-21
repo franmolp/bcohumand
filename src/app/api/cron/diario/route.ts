@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ejecutarCumpleanos } from '../cumpleanos/route'
+import { ejecutarAsistenciaIncompleta } from '../asistencia-incompleta/route'
 import { ejecutarCertificados } from '../certificados/route'
 import { ejecutarPedidosRecordatorio } from '../pedidos-recordatorio/route'
 import { ejecutarGoogleReviewsRefresh } from '@/app/api/google-reviews/refresh/route'
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest) {
   }
 
   await correr('cumpleanos', ejecutarCumpleanos)
+  await correr('asistenciaIncompleta', ejecutarAsistenciaIncompleta)
   await correr('googleReviews', ejecutarGoogleReviewsRefresh)
   await correr('pedidosRecordatorio', ejecutarPedidosRecordatorio)
   await correr('monotributo', async () => {

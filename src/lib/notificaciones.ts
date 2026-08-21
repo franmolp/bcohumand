@@ -22,6 +22,7 @@ export type TipoNotif =
   | 'reparacion_nueva'
   | 'reparacion_actualizada'
   | 'fichadas'
+  | 'asistencia_incompleta'
   | 'reconocimiento_pendiente'
   | 'reconocimiento_aprobado'
   | 'reconocimiento_recordatorio'
