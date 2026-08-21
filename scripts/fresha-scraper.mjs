@@ -385,6 +385,30 @@ async function postAPI(endpoint, rows, label) {
   return data
 }
 
+// Los turnos/citas de Fresha se importan cada noche, pero la tabla `asistencia`
+// (lo que se ve en pantalla) es un cálculo cacheado que solo se recalcula al
+// tocar "Regenerar mes" a mano o cuando llegan fichadas nuevas de HIKVISION
+// (que solo re-generan el/los días de esa fichada). Si algo cambia en Fresha
+// para un día ya procesado (se cancela un turno, se corrige un horario), el
+// chip mostrado queda desactualizado hasta que alguien regenera manualmente.
+// Por eso, al terminar de importar turnos y citas, se regenera todo el rango
+// importado para que quede al día solo.
+async function regenerarAsistencia(from, to) {
+  const url = `${APP_URL}/api/asistencia/regenerar`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${CRON_SECRET}`,
+    },
+    body: JSON.stringify({ fechaInicio: from, fechaFin: to }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(`[asistencia] API error ${res.status}: ${data.error ?? JSON.stringify(data)}`)
+  console.log(`[asistencia] ✓ Regenerados: ${data.procesados ?? '?'} registros (${from} → ${to})`)
+  return data
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -436,6 +460,14 @@ async function main() {
       await postAPI('/api/importar/citas-detalle-fresha', detalleRows, 'citas-detalle')
     } else {
       console.warn('[citas-detalle] Sin registros')
+    }
+
+    // 4. Regenerar asistencia del rango importado, para que los chips reflejen
+    // los turnos/citas recién actualizados sin esperar a una regeneración manual
+    try {
+      await regenerarAsistencia(from, to)
+    } catch (e) {
+      console.error('[asistencia] ✗ No se pudo regenerar automáticamente:', e.message)
     }
 
     console.log('\n✓ Importación completada correctamente.\n')

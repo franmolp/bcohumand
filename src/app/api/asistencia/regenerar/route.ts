@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { computeChip, getTeamType, DEFAULT_CONFIG, AsistenciaConfig } from '@/lib/asistencia'
+import { isRecepcion } from '@/lib/gaps'
 
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
@@ -186,6 +187,7 @@ export async function POST(req: NextRequest) {
       : Array.isArray(equipoRaw) ? (equipoRaw[0]?.nombre ?? null)
       : equipoRaw.nombre
     const teamType = getTeamType(equipoNombre, config)
+    const esRecepcion = equipoNombre ? isRecepcion(equipoNombre) : false
 
     for (const fecha of dias) {
       const horario = horarioMap.get(`${usuario.id}|${fecha}`) ?? null
@@ -205,6 +207,7 @@ export async function POST(req: NextRequest) {
         solicitudEstado: (solicitud?.estado ?? null) as 'pending' | 'approved' | 'rejected' | null,
         teamType,
         config,
+        esRecepcion,
       })
 
       const dt = new Date(fecha + 'T12:00:00')

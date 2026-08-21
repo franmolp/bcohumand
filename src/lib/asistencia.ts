@@ -76,10 +76,14 @@ export interface ComputeInput {
   solicitudEstado: 'pending' | 'approved' | 'rejected' | null
   teamType: TeamType
   config: AsistenciaConfig
+  // Recepción no tiene turnos de Fresha (no atiende clientes con cita) — para
+  // ellas cantCitas siempre es 0, así que ese dato no sirve para distinguir
+  // "no tenía horario ese día" de "tenía horario y no fichó".
+  esRecepcion?: boolean
 }
 
 export function computeChip(input: ComputeInput): ComputeResult {
-  const { horario, fichadas, primerTurno, cantCitas, solicitudTipo, solicitudEstado, teamType, config } = input
+  const { horario, fichadas, primerTurno, cantCitas, solicitudTipo, solicitudEstado, teamType, config, esRecepcion } = input
 
   const empty: ComputeResult = {
     estado: 'Sin turnos', fichada_entrada: null, fichada_salida: null,
@@ -119,7 +123,7 @@ export function computeChip(input: ComputeInput): ComputeResult {
 
   if (deduped.length === 0) {
     const hb = horario.horas ?? parseFloat(((toMinutes(horario.fin) - toMinutes(horario.inicio)) / 60).toFixed(2))
-    if (cantCitas === 0) return { ...empty, estado: 'Sin turnos', horas_fichadas: hb, tiene_justificacion: false }
+    if (!esRecepcion && cantCitas === 0) return { ...empty, estado: 'Sin turnos', horas_fichadas: hb, tiene_justificacion: false }
     return { ...empty, estado: 'Sin fichada', horas_fichadas: hb, tiene_justificacion: false }
   }
 
