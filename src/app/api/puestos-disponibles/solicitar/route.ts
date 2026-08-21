@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { defaultCapacity, findGapsForDay, restarAprobados, toMin, minToStr, overlaps, conArticulo } from '@/lib/gaps'
+import { defaultCapacity, findGapsForDay, restarAprobados, toMin, minToStr, overlaps, conArticulo, minGapParaEquipo } from '@/lib/gaps'
 import { fmtFechaLarga } from '@/lib/fecha'
 import { resolverAccesoPuestos } from '@/lib/puestos'
 import { crearNotificaciones, getAdminAndEncargadaIds } from '@/lib/notificaciones'
@@ -71,11 +71,12 @@ export async function POST(req: NextRequest) {
   // Revalidar server-side que el hueco sigue libre — nunca confiar en lo que mandó el cliente.
   // Se resta lo ya aprobado (puede haber partido un hueco en dos) y se busca algún carril que
   // todavía contenga completo el horario pedido.
-  const gapsCrudos = findGapsForDay(shiftsDia, capacity)
+  const minGap = minGapParaEquipo(equipoRow.nombre)
+  const gapsCrudos = findGapsForDay(shiftsDia, capacity, minGap)
   const aprobadosDia = solicitudesExistentes
     .filter(s => s.estado === 'approved')
     .map(s => ({ lane: s.lane, start: toMin(s.hora_inicio.slice(0, 5)), end: toMin(s.hora_fin.slice(0, 5)) }))
-  const gapsLibres = restarAprobados(gapsCrudos, aprobadosDia)
+  const gapsLibres = restarAprobados(gapsCrudos, aprobadosDia, minGap)
   const lanesDisponibles = [...new Set(
     gapsLibres.filter(g => g.start <= start && g.end >= end).map(g => g.lane)
   )]

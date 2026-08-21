@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { tipoRecurso, defaultCapacity, findGapsForDay, toMin, minToStr, overlaps, restarAprobados, decomponerGap } from '@/lib/gaps'
+import { tipoRecurso, defaultCapacity, findGapsForDay, toMin, minToStr, overlaps, restarAprobados, decomponerGap, minGapParaEquipo } from '@/lib/gaps'
 
 function addDays(date: string, n: number): string {
   const d = new Date(date + 'T12:00:00Z')
@@ -131,9 +131,10 @@ export async function getPuestosDisponibles(
   }
 
   const puestos: PuestoDisponible[] = []
+  const minGap = minGapParaEquipo(equipoRow.nombre)
 
   for (const [fecha, shiftsDia] of turnosPorFecha.entries()) {
-    const gapsCrudos = findGapsForDay(shiftsDia, capacity)
+    const gapsCrudos = findGapsForDay(shiftsDia, capacity, minGap)
     const solicitudesDia = solicitudesPorFecha.get(fecha) ?? []
 
     // "Turnos propios" para no ofrecer huecos que se pisen: los reales de Fresha
@@ -152,14 +153,14 @@ export async function getPuestosDisponibles(
     const aprobadosDia = solicitudesDia
       .filter(s => s.estado === 'approved')
       .map(s => ({ lane: s.lane, start: toMin(s.hora_inicio.slice(0, 5)), end: toMin(s.hora_fin.slice(0, 5)) }))
-    const gapsLibres = restarAprobados(gapsCrudos, aprobadosDia)
+    const gapsLibres = restarAprobados(gapsCrudos, aprobadosDia, minGap)
 
     // Descompone en turnos fijos (mañana/tarde) cuando el hueco cubre uno entero, para no
     // ofrecer "todo el día" como un solo bloque gigante; y fusiona por carril para no mostrar
     // el mismo horario repetido varias veces cuando hay más de una mesa/box libre a la vez.
     const grupos = new Map<string, { start: number; end: number; label: 'Mañana' | 'Tarde' | null; lanes: number[] }>()
     for (const gap of gapsLibres) {
-      for (const pieza of decomponerGap(gap, tipo)) {
+      for (const pieza of decomponerGap(gap, tipo, minGap)) {
         const sePisaConTurnoPropio = misTurnosDia.some(t => overlaps(pieza.start, pieza.end, toMin(t.inicio), toMin(t.fin)))
         if (sePisaConTurnoPropio) continue
 

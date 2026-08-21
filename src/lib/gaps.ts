@@ -13,6 +13,7 @@ export interface TurnoBasico {
 const GANTT_START = 9 * 60
 const GANTT_END = 20 * 60
 export const MIN_GAP_MINUTOS = 3 * 60
+const MIN_GAP_MINUTOS_MASAJES = 60
 
 function normalizeEquipo(equipo: string): string {
   return equipo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -33,6 +34,12 @@ export function isMasajistaODepiladora(equipo: string): boolean {
 
 export function isManicura(equipo: string): boolean {
   return !isRecepcion(equipo) && !isPeluqueria(equipo) && !isMasajistaODepiladora(equipo)
+}
+
+// Masajistas/depiladoras pueden ofrecer/pedir huecos cortos entre turnos propios (ej. la 1:30hs
+// libre de una compañera que termina antes de lo habitual) — el resto sigue en el mínimo de 3hs.
+export function minGapParaEquipo(equipo: string): number {
+  return isMasajistaODepiladora(equipo) ? MIN_GAP_MINUTOS_MASAJES : MIN_GAP_MINUTOS
 }
 
 // 'mesa' | 'box' = equipo elegible para la dinámica de puestos libres. null = no participa

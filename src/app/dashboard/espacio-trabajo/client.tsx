@@ -88,14 +88,19 @@ function peakConcurrent(shifts: Turno[]): number {
   return Math.max(...assignLanes(shifts).map(s => s.lane)) + 1
 }
 
-// ── Available slots (huecos ≥ 3h) ────────────────────────────────────────────
+// ── Available slots (huecos ≥ 3h — masajistas/depiladoras, ≥ 1h) ────────────
 const MIN_GAP = 3 * 60
+const MIN_GAP_MASAJES = 60
+
+function minGapDe(equipo: string): number {
+  return isMasajistaODepiladora(equipo) ? MIN_GAP_MASAJES : MIN_GAP
+}
 
 function minToStr(m: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
 }
 
-function findGaps(shifts: Turno[], capacity: number): { lane: number; gaps: { start: number; end: number }[] }[] {
+function findGaps(shifts: Turno[], capacity: number, minGap: number = MIN_GAP): { lane: number; gaps: { start: number; end: number }[] }[] {
   const withLanes = assignLanes(shifts)
   const usedLanes = withLanes.length > 0 ? Math.max(...withLanes.map(t => t.lane)) + 1 : 0
   const totalLanes = Math.max(capacity > 0 ? capacity : 0, usedLanes)
@@ -113,10 +118,10 @@ function findGaps(shifts: Turno[], capacity: number): { lane: number; gaps: { st
     for (const shift of laneShifts) {
       const s = toMin(shift.inicio)
       const e = toMin(shift.fin)
-      if (s - cursor >= MIN_GAP) gaps.push({ start: cursor, end: s })
+      if (s - cursor >= minGap) gaps.push({ start: cursor, end: s })
       cursor = Math.max(cursor, e)
     }
-    if (GANTT_END - cursor >= MIN_GAP) gaps.push({ start: cursor, end: GANTT_END })
+    if (GANTT_END - cursor >= minGap) gaps.push({ start: cursor, end: GANTT_END })
 
     if (gaps.length > 0) result.push({ lane, gaps })
   }
@@ -308,7 +313,7 @@ function AvailableSection({ equipo, capacity, shifts, selectedDate }: {
   selectedDate: string
 }) {
   const dayShifts = shifts.filter(t => t.fecha === selectedDate)
-  const laneGaps = findGaps(dayShifts, capacity)
+  const laneGaps = findGaps(dayShifts, capacity, minGapDe(equipo))
 
   if (laneGaps.length === 0) return null
 
@@ -365,7 +370,7 @@ function WeekDayChips({ dates, selectedDate, todayStr, onSelect, turnos, capacid
               const eqShifts = dayTurnos.filter(t => t.equipo === eq)
               if (!eqShifts.length) continue
               if (peakConcurrent(eqShifts) > cap) isExcedido = true
-              if (findGaps(eqShifts, cap).length > 0) isLibre = true
+              if (findGaps(eqShifts, cap, minGapDe(eq)).length > 0) isLibre = true
             }
             dotColor = isExcedido ? 'bg-red-500' : isLibre ? 'bg-emerald-400' : 'bg-red-400'
             dotPing = isExcedido
@@ -507,7 +512,7 @@ export default function EspacioTrabajoClient({ user, isAdminOrEncargada }: { use
     if (!apiData) return false
     return groups.some(eq => {
       const dayShifts = apiData.turnos.filter(t => t.equipo === eq && t.fecha === selectedDate)
-      return findGaps(dayShifts, apiData.capacidades[eq] ?? 8).length > 0
+      return findGaps(dayShifts, apiData.capacidades[eq] ?? 8, minGapDe(eq)).length > 0
     })
   }, [apiData, groups, selectedDate])
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { tipoRecurso, defaultCapacity, findGapsForDay, restarAprobados, decomponerGap, toMin } from '@/lib/gaps'
+import { tipoRecurso, defaultCapacity, findGapsForDay, restarAprobados, decomponerGap, toMin, minGapParaEquipo } from '@/lib/gaps'
 import { getEquiposHabilitadosPuestos } from '@/lib/puestos'
 import { crearNotificaciones, getUserIdsByEquipo } from '@/lib/notificaciones'
 
@@ -66,13 +66,14 @@ async function enviarAvisoSemanal() {
     }
 
     let huecosTotal = 0
+    const minGap = minGapParaEquipo(equipo.nombre)
 
     for (const [fecha, shiftsDia] of turnosPorFecha.entries()) {
-      const gapsCrudos = findGapsForDay(shiftsDia, capacity)
+      const gapsCrudos = findGapsForDay(shiftsDia, capacity, minGap)
       const aprobadosDia = aprobadosPorFecha.get(fecha) ?? []
-      const gapsLibres = restarAprobados(gapsCrudos, aprobadosDia)
+      const gapsLibres = restarAprobados(gapsCrudos, aprobadosDia, minGap)
       for (const gap of gapsLibres) {
-        huecosTotal += decomponerGap(gap, tipo).length
+        huecosTotal += decomponerGap(gap, tipo, minGap).length
       }
     }
 
