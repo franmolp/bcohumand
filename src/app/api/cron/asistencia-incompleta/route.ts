@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { crearNotificaciones } from '@/lib/notificaciones'
 
-const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-
 export async function ejecutarAsistenciaIncompleta() {
   // Fecha en huso horario Argentina, no la del runtime del server (que en Vercel es UTC)
   const hoyStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
@@ -11,7 +9,7 @@ export async function ejecutarAsistenciaIncompleta() {
   ayerD.setDate(ayerD.getDate() - 1)
   const ayerStr = ayerD.toISOString().split('T')[0]
   const [, m, d] = ayerStr.split('-')
-  const ayerLabel = `${parseInt(d)} de ${MESES_CORTOS[parseInt(m) - 1]}`
+  const ayerLabel = `${parseInt(d)}/${parseInt(m)}`
 
   const { data: incompletos, error } = await supabase
     .from('asistencia')
@@ -25,8 +23,8 @@ export async function ejecutarAsistenciaIncompleta() {
   const usuarioIds = [...new Set(incompletos.map(i => i.usuario_id))]
 
   await crearNotificaciones(usuarioIds, {
-    titulo: 'Te faltó marcar una fichada ayer',
-    mensaje: `El ${ayerLabel} solo registramos una marcación tuya (entrada o salida, no las dos). Revisalo en Mi Asistencia y avisale a tu encargada si fue un olvido.`,
+    titulo: 'Fichada incompleta ayer',
+    mensaje: `${ayerLabel}: solo se registró una fichada (entrada o salida). Tocá para ver el detalle.`,
     tipo: 'asistencia_incompleta',
     url: '/dashboard/mi-asistencia',
   })
