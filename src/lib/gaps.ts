@@ -21,18 +21,38 @@ const MIN_GAP_MINUTOS_MASAJES = 60
 export const MIN_GAP_CONTIGUO = 60
 const TOLERANCIA_CONTIGUO = 30
 
+// 'entrar_antes' = el hueco está justo antes de un turno mío (puedo entrar antes)
+// 'quedarse_mas' = el hueco está justo después de un turno mío (puedo quedarme más)
+// 'ambos'        = cae entre dos turnos míos del día (completo la jornada)
+export type TipoContiguidad = 'entrar_antes' | 'quedarse_mas' | 'ambos'
+
+// ¿El hueco [startMin, endMin] está pegado a alguno de mis turnos ese día, y de qué lado?
+export function contiguidadConTurno(
+  startMin: number,
+  endMin: number,
+  misTurnos: { inicio: number; fin: number }[],
+): TipoContiguidad | null {
+  let puedeQuedarse = false   // hueco pegado DESPUÉS de un turno mío
+  let puedeEntrarAntes = false // hueco pegado ANTES de un turno mío
+  for (const t of misTurnos) {
+    const huecoDespuesDeMiTurno = startMin - t.fin   // el hueco arranca después de que termino
+    const huecoAntesDeMiTurno = t.inicio - endMin    // el hueco termina antes de que arranco
+    if (huecoDespuesDeMiTurno >= -1 && huecoDespuesDeMiTurno <= TOLERANCIA_CONTIGUO) puedeQuedarse = true
+    if (huecoAntesDeMiTurno >= -1 && huecoAntesDeMiTurno <= TOLERANCIA_CONTIGUO) puedeEntrarAntes = true
+  }
+  if (puedeQuedarse && puedeEntrarAntes) return 'ambos'
+  if (puedeQuedarse) return 'quedarse_mas'
+  if (puedeEntrarAntes) return 'entrar_antes'
+  return null
+}
+
 // ¿El hueco [startMin, endMin] está pegado a alguno de mis turnos ese día?
 export function esContiguoAturno(
   startMin: number,
   endMin: number,
   misTurnos: { inicio: number; fin: number }[],
 ): boolean {
-  return misTurnos.some(t => {
-    const huecoDespuesDeMiTurno = startMin - t.fin   // el hueco arranca después de que termino
-    const huecoAntesDeMiTurno = t.inicio - endMin    // el hueco termina antes de que arranco
-    return (huecoDespuesDeMiTurno >= -1 && huecoDespuesDeMiTurno <= TOLERANCIA_CONTIGUO)
-      || (huecoAntesDeMiTurno >= -1 && huecoAntesDeMiTurno <= TOLERANCIA_CONTIGUO)
-  })
+  return contiguidadConTurno(startMin, endMin, misTurnos) !== null
 }
 
 function normalizeEquipo(equipo: string): string {

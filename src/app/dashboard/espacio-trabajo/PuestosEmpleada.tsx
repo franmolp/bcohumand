@@ -19,6 +19,14 @@ interface Puesto {
   mi_solicitud: 'none' | 'pending'
   solicitud_id: string | null
   contiguo?: boolean
+  contiguoTipo?: 'entrar_antes' | 'quedarse_mas' | 'ambos' | null
+}
+
+// Textos según de qué lado queda el hueco respecto del turno propio
+const CONTIGUO_TEXTO: Record<'entrar_antes' | 'quedarse_mas' | 'ambos', { badge: string; sub: string }> = {
+  entrar_antes: { badge: 'Entrá antes', sub: 'Pegado a tu turno — podés entrar antes' },
+  quedarse_mas: { badge: 'Quedate más', sub: 'Pegado a tu turno — podés quedarte más' },
+  ambos: { badge: 'Completá tu jornada', sub: 'Justo entre tus dos turnos del día' },
 }
 
 function todayStr() {
@@ -190,9 +198,9 @@ export default function PuestosEmpleadaView({ soloHorarios = false }: { soloHora
                           Turno {p.turno}
                         </span>
                       )}
-                      {p.contiguo && (
+                      {p.contiguo && p.contiguoTipo && (
                         <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100">
-                          Extendé tu turno
+                          {CONTIGUO_TEXTO[p.contiguoTipo].badge}
                         </span>
                       )}
                     </div>
@@ -201,8 +209,8 @@ export default function PuestosEmpleadaView({ soloHorarios = false }: { soloHora
                       <IconClock size={11} />
                       {p.hora_inicio} – {p.hora_fin} · {p.horas}hs disponibles
                     </p>
-                    {p.contiguo && (
-                      <p className="text-[11px] text-emerald-600 mt-0.5">Pegado a tu turno — podés entrar antes o quedarte más</p>
+                    {p.contiguo && p.contiguoTipo && (
+                      <p className="text-[11px] text-emerald-600 mt-0.5">{CONTIGUO_TEXTO[p.contiguoTipo].sub}</p>
                     )}
                   </div>
                 </div>

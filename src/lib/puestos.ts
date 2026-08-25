@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { tipoRecurso, defaultCapacity, findGapsForDay, toMin, minToStr, overlaps, restarAprobados, decomponerGap, minGapParaEquipo, MIN_GAP_CONTIGUO, esContiguoAturno } from '@/lib/gaps'
+import { tipoRecurso, defaultCapacity, findGapsForDay, toMin, minToStr, overlaps, restarAprobados, decomponerGap, minGapParaEquipo, MIN_GAP_CONTIGUO, contiguidadConTurno, type TipoContiguidad } from '@/lib/gaps'
 
 function addDays(date: string, n: number): string {
   const d = new Date(date + 'T12:00:00Z')
@@ -21,6 +21,8 @@ export interface PuestoDisponible {
   // true = hueco corto (1hs a 3hs) ofrecido solo porque está pegado a un turno
   // propio (para entrar antes o quedarse más), no disponible para todo el equipo.
   contiguo: boolean
+  // De qué lado está pegado a mi turno (para el texto), null si no es contiguo.
+  contiguoTipo: TipoContiguidad | null
 }
 
 const CONFIG_KEY_EQUIPOS = 'puestos_equipos'
@@ -166,7 +168,7 @@ export async function getPuestosDisponibles(
     // Descompone en turnos fijos (mañana/tarde) cuando el hueco cubre uno entero, para no
     // ofrecer "todo el día" como un solo bloque gigante; y fusiona por carril para no mostrar
     // el mismo horario repetido varias veces cuando hay más de una mesa/box libre a la vez.
-    const grupos = new Map<string, { start: number; end: number; label: 'Mañana' | 'Tarde' | null; lanes: number[]; contiguo: boolean }>()
+    const grupos = new Map<string, { start: number; end: number; label: 'Mañana' | 'Tarde' | null; lanes: number[]; contiguo: boolean; contiguoTipo: TipoContiguidad | null }>()
     for (const gap of gapsLibres) {
       for (const pieza of decomponerGap(gap, tipo, piso)) {
         const sePisaConTurnoPropio = misTurnosDia.some(t => overlaps(pieza.start, pieza.end, toMin(t.inicio), toMin(t.fin)))
@@ -174,15 +176,16 @@ export async function getPuestosDisponibles(
 
         // Hueco corto (menor al mínimo del equipo): solo se ofrece si está pegado a un turno propio
         const esCorto = pieza.end - pieza.start < minGap
-        if (esCorto && !esContiguoAturno(pieza.start, pieza.end, misTurnosMin)) continue
+        const contiguoTipo = esCorto ? contiguidadConTurno(pieza.start, pieza.end, misTurnosMin) : null
+        if (esCorto && !contiguoTipo) continue
 
         const key = `${pieza.start}-${pieza.end}-${pieza.label}`
-        if (!grupos.has(key)) grupos.set(key, { start: pieza.start, end: pieza.end, label: pieza.label, lanes: [], contiguo: esCorto })
+        if (!grupos.has(key)) grupos.set(key, { start: pieza.start, end: pieza.end, label: pieza.label, lanes: [], contiguo: esCorto, contiguoTipo })
         grupos.get(key)!.lanes.push(gap.lane)
       }
     }
 
-    for (const { start, end, label, lanes, contiguo } of grupos.values()) {
+    for (const { start, end, label, lanes, contiguo, contiguoTipo } of grupos.values()) {
       // Si es hoy y la hora de inicio ya pasó, no lo ofrecemos más
       if (fecha === today && start <= nowMin) continue
 
@@ -203,6 +206,7 @@ export async function getPuestosDisponibles(
         mi_solicitud: miSolicitudPendiente ? 'pending' : 'none',
         solicitud_id: miSolicitudPendiente?.id ?? null,
         contiguo,
+        contiguoTipo,
       })
     }
   }
