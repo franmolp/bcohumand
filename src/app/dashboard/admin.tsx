@@ -327,7 +327,7 @@ export default async function AdminDashboard({ session }: { session: SessionUser
             <IconChevronRight size={14} className="text-white/50 mt-1" />
           </div>
           <p className="text-[32px] font-bold leading-none mb-1">{totalEmpleados}</p>
-          <p className="text-[11px] text-white/70">Empleadas activas</p>
+          <p className="text-[11px] text-white/70">Empleados activos</p>
         </Link>
 
         {/* Reparaciones pendientes — solo admin */}

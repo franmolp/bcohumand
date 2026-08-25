@@ -246,7 +246,7 @@ function AdminResumen() {
 
       {loading ? <Spinner /> : data.length === 0 ? (
         <div className="text-center py-16 text-[var(--text-muted)] text-sm">
-          No hay empleadas con Monotributo habilitado
+          No hay empleados con Monotributo habilitado
         </div>
       ) : (
         <>
@@ -255,7 +255,7 @@ function AdminResumen() {
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-50 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
-                  <th className="px-4 py-3 text-left">Empleada</th>
+                  <th className="px-4 py-3 text-left">Empleado</th>
                   <th className="px-4 py-3 text-left">Estado</th>
                   <th className="px-4 py-3 text-left">Comprobante</th>
                   <th className="px-4 py-3 text-left">Factura</th>
@@ -339,7 +339,7 @@ function AdminResumen() {
             <button onClick={() => deleteId && handleDelete(deleteId)} className="flex-1 h-10 rounded-xl bg-red-500 text-white text-sm font-medium">Eliminar</button>
           </>
         }>
-        <p className="text-sm text-[var(--text-sub)]">¿Eliminás el monotributo presentado? La empleada deberá volver a cargarlo.</p>
+        <p className="text-sm text-[var(--text-sub)]">¿Eliminás el monotributo presentado? El empleado deberá volver a cargarlo.</p>
       </Modal>
 
       {/* Admin upload modal */}
@@ -430,7 +430,7 @@ function AdminConfig() {
 
       {habilitadas > 0 && (
         <p className="text-sm text-[var(--text-muted)]">
-          <span className="font-semibold text-[var(--text)]">{habilitadas}</span> empleada{habilitadas !== 1 ? 's' : ''} con Monotributo habilitado
+          <span className="font-semibold text-[var(--text)]">{habilitadas}</span> empleado{habilitadas !== 1 ? 's' : ''} con Monotributo habilitado
         </p>
       )}
 

@@ -70,11 +70,11 @@ export async function POST(req: NextRequest) {
   let avisoAdelanto: string | undefined
   if (empleadoId) {
     const r = await crearAdelantoServicio({
-      empleadoId, empleadoNombre: empleadoNombre ?? 'Empleada', monto,
+      empleadoId, empleadoNombre: empleadoNombre ?? 'Empleado', monto,
       descripcion: body.descripcion || null, fecha: body.fecha,
       retiroId: data.id, adminId: session.id,
     })
-    if (!r.ok) avisoAdelanto = `El retiro se guardó, pero no se pudo asignar a la empleada: ${r.error}`
+    if (!r.ok) avisoAdelanto = `El retiro se guardó, pero no se pudo asignar al empleado: ${r.error}`
   }
 
   return NextResponse.json(avisoAdelanto ? { ...data, aviso: avisoAdelanto } : data)

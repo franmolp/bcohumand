@@ -499,7 +499,7 @@ function GanadoresMeses({ data }: { data: HistorialEntry[] }) {
     <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
         <IconTrophy size={15} className="text-amber-400" />
-        <span className="text-[14px] font-semibold">Ganadoras por mes</span>
+        <span className="text-[14px] font-semibold">Ganadores por mes</span>
       </div>
       <div className="divide-y divide-gray-50">
         {data.map((e, i) => (
@@ -585,7 +585,7 @@ function AdminPalabras() {
           <textarea
             value={pistaAdmin}
             onChange={e => setPistaAdmin(e.target.value)}
-            placeholder="Pista para las jugadoras (opcional)..."
+            placeholder="Pista para los jugadores (opcional)..."
             rows={2}
             className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] outline-none focus:border-[var(--primary)] resize-none"
           />

@@ -526,7 +526,7 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-5">
               <div>
                 <p className="text-[13px] font-semibold text-gray-700 mb-0.5">Montos permitidos</p>
-                <p className="text-[11px] text-gray-400 mb-3">El máximo es la suma total de adelantos por empleada en el mes.</p>
+                <p className="text-[11px] text-gray-400 mb-3">El máximo es la suma total de adelantos por empleado en el mes.</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Mínimo por solicitud ($)</label>
@@ -535,7 +535,7 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
                       min={0} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
                   </div>
                   <div>
-                    <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Máximo mensual por empleada ($)</label>
+                    <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Máximo mensual por empleado ($)</label>
                     <input type="number" value={configEdit.monto_maximo}
                       onChange={e => setConfigEdit(c => ({ ...c, monto_maximo: Number(e.target.value) }))}
                       min={0} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
@@ -560,7 +560,7 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
                     <input type="number" value={configEdit.max_por_mes}
                       onChange={e => setConfigEdit(c => ({ ...c, max_por_mes: Number(e.target.value) }))}
                       min={1} max={10} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
-                    <p className="text-[11px] text-gray-400 mt-1">por empleada</p>
+                    <p className="text-[11px] text-gray-400 mt-1">por empleado</p>
                   </div>
                 </div>
               </div>
@@ -583,16 +583,16 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
               <form onSubmit={handleCreate}>
                 <div className="p-5 space-y-3">
                   <div>
-                    <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Empleada</label>
+                    <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Empleado</label>
                     {usuarios.length > 0 ? (
                       <select value={createUserId}
                         onChange={e => { const u = usuarios.find(u => u.id === e.target.value); setCreateUserId(e.target.value); setCreateNombre(u?.nombre ?? '') }}
                         required className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] bg-white cursor-pointer">
-                        <option value="">Seleccionar empleada</option>
+                        <option value="">Seleccionar empleado</option>
                         {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
                       </select>
                     ) : (
-                      <input type="text" value={createNombre} onChange={e => setCreateNombre(e.target.value)} placeholder="Nombre de la empleada" required
+                      <input type="text" value={createNombre} onChange={e => setCreateNombre(e.target.value)} placeholder="Nombre del empleado" required
                         className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
                     )}
                   </div>

@@ -53,7 +53,7 @@ export async function PUT(
         .from('adelantos')
         .update({
           usuario_id: empleadoId,
-          empleado_nombre: empleadoNombre ?? 'Empleada',
+          empleado_nombre: empleadoNombre ?? 'Empleado',
           monto,
           monto_aprobado: monto,
           comentario_admin: body.descripcion || 'Servicio/consumo registrado desde Caja',
@@ -62,7 +62,7 @@ export async function PUT(
         .eq('id', adelantoExistente.id)
     } else {
       await crearAdelantoServicio({
-        empleadoId, empleadoNombre: empleadoNombre ?? 'Empleada', monto,
+        empleadoId, empleadoNombre: empleadoNombre ?? 'Empleado', monto,
         descripcion: body.descripcion || null, fecha: body.fecha,
         retiroId: id, adminId: session.id,
       })

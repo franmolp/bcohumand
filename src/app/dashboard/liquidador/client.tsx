@@ -161,7 +161,7 @@ function LiquidacionesTab() {
       const parsed: ParsedPago[] = rows
         .filter(r => r.A && !SKIP.has(String(r.A).trim().toUpperCase()))
         .map(r => ({ nombre: String(r.A).trim(), total: Math.round(Number(r.B) || 0), efectivo: Math.round(Number(r.C) || 0), transferencia: Math.round(Number(r.D) || 0) }))
-      if (!parsed.length) throw new Error('No se encontraron filas de empleadas en la hoja')
+      if (!parsed.length) throw new Error('No se encontraron filas de empleados en la hoja')
       setPreview(parsed)
 
       // Hoja "Todas" — brutos históricos por empleada
@@ -314,7 +314,7 @@ function LiquidacionesTab() {
       {/* Preview importación */}
       {preview && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
-          <p className="text-[12px] font-semibold text-amber-800">Vista previa — {preview.length} empleadas · Confirmar para guardar</p>
+          <p className="text-[12px] font-semibold text-amber-800">Vista previa — {preview.length} empleados · Confirmar para guardar</p>
           <div className="max-h-48 overflow-y-auto space-y-1">
             {preview.map((p, i) => (
               <div key={i} className="flex items-center justify-between text-[12px] py-1 border-b border-amber-100 last:border-0">

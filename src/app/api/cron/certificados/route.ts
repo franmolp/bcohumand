@@ -60,7 +60,7 @@ export async function ejecutarCertificados() {
     await supabaseAdmin.from('notificaciones').insert({
       usuario_id: adminRow.id,
       titulo: `Certificados: ${usuarioIds.length} recordatorio${usuarioIds.length > 1 ? 's' : ''} enviado${usuarioIds.length > 1 ? 's' : ''}`,
-      mensaje: `Se notificó a ${usuarioIds.length} empleada${usuarioIds.length > 1 ? 's' : ''} con ausencia por salud sin certificado en ${nombreMes}.`,
+      mensaje: `Se notificó a ${usuarioIds.length} empleado${usuarioIds.length > 1 ? 's' : ''} con ausencia por salud sin certificado en ${nombreMes}.`,
       tipo: 'aviso',
       leida: false,
     })

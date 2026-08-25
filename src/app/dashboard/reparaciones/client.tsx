@@ -293,7 +293,7 @@ export default function ReparacionesClient({
                 : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
             }`}
           >
-            Todas las empleadas
+            Todos los empleados
           </button>
           {usedEmps.map(e => (
             <button
@@ -435,7 +435,7 @@ export default function ReparacionesClient({
                     <textarea
                       value={actionForm.comentario}
                       onChange={e => setActionForm(f => ({ ...f, comentario: e.target.value }))}
-                      placeholder="Comentario para la empleada (opcional)…"
+                      placeholder="Comentario para el empleado (opcional)…"
                       rows={2}
                       style={{ fontSize: 16 }}
                       className="w-full px-4 py-3 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] placeholder:text-[var(--text-muted)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] resize-none text-[13px]"
@@ -464,7 +464,7 @@ export default function ReparacionesClient({
         <div className="space-y-4">
           {isAdmin && (
             <Select
-              label="Para empleada"
+              label="Para empleado"
               value={form.usuario_id}
               onChange={v => {
                 const emp = empleadasList.find(x => x.id === v)

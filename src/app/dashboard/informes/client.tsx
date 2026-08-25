@@ -335,7 +335,7 @@ function TabCaja({ mes }: { mes: string }) {
 
   async function confirmarAsignarSalida(dia: DiaData, ev: Evento) {
     const empleado = empleados.find(e => e.id === asigEmpleadoId)
-    if (!empleado) { setAsigError('Elegí una empleada'); return }
+    if (!empleado) { setAsigError('Elegí un empleado'); return }
     setAsigSaving(true); setAsigError('')
     try {
       const res = await fetch('/api/caja/salidas/asignar', {
@@ -674,14 +674,14 @@ function TabCaja({ mes }: { mes: string }) {
                                 {pagoOutSinExplicar && asignandoTs !== ev.ts && (
                                   <button onClick={() => abrirAsignarSalida(ev)}
                                     className="self-start text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors cursor-pointer">
-                                    Asignar a empleada
+                                    Asignar a empleado
                                   </button>
                                 )}
                                 {pagoOutSinExplicar && asignandoTs === ev.ts && (
                                   <div className="flex items-center gap-1">
                                     <select value={asigEmpleadoId} onChange={e => setAsigEmpleadoId(e.target.value)}
                                       className="flex-1 text-[11px] border border-[var(--border)] rounded-lg px-1.5 py-1">
-                                      <option value="">Elegir empleada…</option>
+                                      <option value="">Elegir empleado…</option>
                                       {empleados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
                                     </select>
                                     <button onClick={() => confirmarAsignarSalida(dia, ev)} disabled={asigSaving || !asigEmpleadoId}
@@ -778,7 +778,7 @@ function TabCaja({ mes }: { mes: string }) {
               </div>
               {rfTipo === 'retiro' && (
                 <div>
-                  <p className="text-[12px] font-medium text-gray-500 mb-1.5">Asignar a una empleada <span className="font-normal text-gray-400">(opcional)</span></p>
+                  <p className="text-[12px] font-medium text-gray-500 mb-1.5">Asignar a un empleado <span className="font-normal text-gray-400">(opcional)</span></p>
                   <select value={rfEmpleadoId} onChange={e => setRfEmpleadoId(e.target.value)}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[var(--primary)] bg-white cursor-pointer">
                     <option value="">Sin asignar</option>
@@ -842,7 +842,7 @@ function TabCaja({ mes }: { mes: string }) {
               </div>
               {erTipo === 'retiro' && (
                 <div>
-                  <p className="text-[12px] font-medium text-gray-500 mb-1.5">Asignar a una empleada <span className="font-normal text-gray-400">(opcional)</span></p>
+                  <p className="text-[12px] font-medium text-gray-500 mb-1.5">Asignar a un empleado <span className="font-normal text-gray-400">(opcional)</span></p>
                   <select value={erEmpleadoId} onChange={e => setErEmpleadoId(e.target.value)}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[var(--primary)] bg-white cursor-pointer">
                     <option value="">Sin asignar</option>
@@ -963,14 +963,14 @@ function TabProductividad({ data }: { data: ApiData }) {
     <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
       <div className="px-4 py-3 border-b border-[var(--border)]">
         <p className="text-[13px] font-semibold text-[var(--text)] flex items-center gap-2">
-          <IconUsers size={15} className="text-[var(--primary)]" /> Productividad por empleada
+          <IconUsers size={15} className="text-[var(--primary)]" /> Productividad por empleado
         </p>
       </div>
       <div className="lg:hidden overflow-x-auto">
         <table className="w-full text-[11px] min-w-[380px]">
           <thead>
             <tr className="border-b border-gray-100 text-[var(--text-muted)] uppercase tracking-wide">
-              <th className={thCls('nombre', false) + ' pl-4'} onClick={() => toggleSort('nombre')}>Empleada{sortIcon('nombre')}</th>
+              <th className={thCls('nombre', false) + ' pl-4'} onClick={() => toggleSort('nombre')}>Empleado{sortIcon('nombre')}</th>
               <th className={thCls('citas')} onClick={() => toggleSort('citas')}>Citas{sortIcon('citas')}</th>
               <th className={thCls('ventas')} onClick={() => toggleSort('ventas')}>Ventas{sortIcon('ventas')}</th>
               <th className={thCls('sueldo')} onClick={() => toggleSort('sueldo')}>Sueldo{sortIcon('sueldo')}</th>
@@ -1003,7 +1003,7 @@ function TabProductividad({ data }: { data: ApiData }) {
         <table className="w-full text-[12px]">
           <thead>
             <tr className="border-b border-[var(--border)] text-[var(--text-muted)]">
-              <th className={thCls('nombre', false) + ' pl-4'} onClick={() => toggleSort('nombre')}>Empleada{sortIcon('nombre')}</th>
+              <th className={thCls('nombre', false) + ' pl-4'} onClick={() => toggleSort('nombre')}>Empleado{sortIcon('nombre')}</th>
               <th className={thCls('citas')} onClick={() => toggleSort('citas')}>Citas{sortIcon('citas')}</th>
               <th className={thCls('ventas')} onClick={() => toggleSort('ventas')}>Ventas{sortIcon('ventas')}</th>
               <th className={thCls('sueldo')} onClick={() => toggleSort('sueldo')}>Sueldo{sortIcon('sueldo')}</th>

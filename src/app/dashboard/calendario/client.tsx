@@ -657,7 +657,7 @@ function CreateEventModal({
                 <option value="all">Todos</option>
                 <option value="team">Equipo</option>
                 <option value="role">Rol</option>
-                <option value="employee">Empleadas específicas</option>
+                <option value="employee">Empleados específicos</option>
               </select>
             </div>
 
@@ -681,7 +681,7 @@ function CreateEventModal({
             {form.tipo_destinatario === 'employee' && (
               <div>
                 <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">
-                  Empleadas {selectedEmployees.length > 0 && <span className="text-[var(--primary)]">({selectedEmployees.length} seleccionadas)</span>}
+                  Empleados {selectedEmployees.length > 0 && <span className="text-[var(--primary)]">({selectedEmployees.length} seleccionados)</span>}
                 </label>
                 <input
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[14px] outline-none focus:border-[var(--primary)] mb-2"
