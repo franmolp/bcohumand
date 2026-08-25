@@ -24,6 +24,11 @@ export async function POST(request: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ ok: false }, { status: 401 })
 
+  // Si un admin está viendo la app personificando a otro empleado, no registrar
+  // esto como actividad/login de ese empleado (no toca su último acceso ni deja
+  // un "Ingresó a la app" en el módulo de Seguridad).
+  if (session.impersonadoPor) return NextResponse.json({ ok: true, impersonando: true })
+
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
     ?? request.headers.get('x-real-ip')
     ?? 'desconocida'
