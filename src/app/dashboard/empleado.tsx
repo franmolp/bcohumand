@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { IconCalendar, IconBell, IconAlertCircle, IconChevronRight, IconStar, IconClock, IconWall, IconTrophy, IconLayoutGrid } from '@/components/ui/Icons'
 import GoogleReviewsCarousel from '@/components/GoogleReviewsCarousel'
+import ListaPreciosCard from '@/components/ListaPreciosCard'
 import { getPuestosDisponibles } from '@/lib/puestos'
 import { fmtFechaLarga } from '@/lib/fecha'
 
@@ -464,6 +465,9 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
           <IconChevronRight size={16} className="text-white/60 shrink-0" />
         </Link>
       )}
+
+      {/* Lista de precios vigente — link fijo a Google Drive */}
+      <ListaPreciosCard />
 
       {/* Últimas novedades del muro — solo si hubo posts en las últimas 24hs */}
       {muroPost && muroAutor && (
