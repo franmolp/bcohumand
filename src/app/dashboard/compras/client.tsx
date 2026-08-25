@@ -307,15 +307,60 @@ function CompraModal({ open, editTarget, proveedores, onClose, onSaved, onProvee
 
 // ─── Tab: Proveedores ─────────────────────────────────────────────────────────
 
-function ProveedoresTab({ proveedores, onToggle }: {
+function ProveedoresTab({ proveedores, onToggle, onCreated }: {
   proveedores: Proveedor[]
   onToggle: (id: number, val: boolean) => void
+  onCreated: (p: Proveedor) => void
 }) {
+  const [agregando, setAgregando] = useState(false)
+  const [nombre, setNombre] = useState('')
+  const [contacto, setContacto] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState('')
+
+  async function crear() {
+    if (!nombre.trim()) { setError('Ingresá el nombre del proveedor'); return }
+    setGuardando(true); setError('')
+    try {
+      const res = await fetch('/api/proveedores', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre: nombre.trim(), contacto: contacto.trim() || null }),
+      })
+      const d = await res.json()
+      if (!res.ok) { setError(d.error || 'Error al crear proveedor'); return }
+      onCreated(d)
+      setNombre(''); setContacto(''); setAgregando(false)
+    } finally { setGuardando(false) }
+  }
+
   return (
     <div>
       <p className="text-[13px] text-[var(--text-muted)] mb-4">
         Los proveedores marcados como <span className="font-semibold text-amber-600">Solo admin</span> no serán visibles para el resto del equipo. Usalo para proveedores de gastos privados.
       </p>
+
+      {!agregando ? (
+        <Button size="sm" onClick={() => { setAgregando(true); setError('') }} className="mb-4">
+          <IconPlus size={15} className="mr-1" /> Agregar proveedor
+        </Button>
+      ) : (
+        <div className="bg-white border border-[var(--border)] rounded-2xl p-4 mb-4 space-y-3 shadow-sm">
+          <div>
+            <label className="block text-[13px] font-medium text-[var(--text)] mb-1">Nombre <span className="text-red-500">*</span></label>
+            <Input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre del proveedor" autoFocus />
+          </div>
+          <div>
+            <label className="block text-[13px] font-medium text-[var(--text)] mb-1">Contacto (opcional)</label>
+            <Input value={contacto} onChange={e => setContacto(e.target.value)} placeholder="Teléfono, email, etc." />
+          </div>
+          {error && <p className="text-[12px] text-red-500">{error}</p>}
+          <div className="flex gap-2">
+            <Button size="sm" onClick={crear} loading={guardando} disabled={!nombre.trim()}>Guardar</Button>
+            <Button size="sm" variant="secondary" onClick={() => { setAgregando(false); setNombre(''); setContacto(''); setError('') }}>Cancelar</Button>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-2">
         {proveedores.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map(p => (
           <div key={p.id} className="bg-white border border-[var(--border)] rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm">
@@ -467,7 +512,7 @@ export default function ComprasClient({ user }: { user: SessionUser }) {
       )}
 
       {tab === 'proveedores' && isAdmin && (
-        <ProveedoresTab proveedores={proveedores} onToggle={toggleSoloAdmin} />
+        <ProveedoresTab proveedores={proveedores} onToggle={toggleSoloAdmin} onCreated={p => setProveedores(prev => [...prev, p])} />
       )}
 
       {tab === 'historial' && (<>
