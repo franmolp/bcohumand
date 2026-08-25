@@ -167,11 +167,25 @@ export default async function AdminDashboard({ session }: { session: SessionUser
   )
   const isAdminRole = session.rol === 'admin' || session.rol === 'Admin' || session.rol === 'encargada' || session.rol === 'Encargada'
 
+  // Acceso al módulo de Pedidos: admin siempre; otros roles (ej. HR) solo si
+  // tienen al menos una categoría habilitada. Mismo criterio que el layout/nav,
+  // para que HR no vea la card de pedidos en el inicio si no tiene acceso.
+  const esAdmin = session.rol === 'admin' || session.rol === 'Admin'
+  let hasPedidosAccess = esAdmin
+  if (!hasPedidosAccess) {
+    const { data: pedidosPerms } = await supabaseAdmin
+      .from('pedidos_permisos')
+      .select('categoria')
+      .eq('usuario_id', session.id)
+      .limit(1)
+    hasPedidosAccess = (pedidosPerms?.length ?? 0) > 0
+  }
+
   // Pedidos pendientes del ciclo abierto, agrupados por proveedor
   type PedidoProvRow = { nombre: string; count: number }
   let pedidosPorProveedor: PedidoProvRow[] = []
   let pedidosTotalItems = 0
-  {
+  if (hasPedidosAccess) {
     const { data: cicloAbierto } = await supabaseAdmin
       .from('pedidos_ciclos')
       .select('id')
