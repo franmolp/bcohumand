@@ -64,7 +64,7 @@ export default function ImpersonarModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal open onClose={onClose} title="Ver como empleado">
       <p className="text-[12px] text-[var(--text-muted)] -mt-1 mb-1">
-        Vas a navegar la app con los permisos y datos de la persona que elijas, hasta que vuelvas a la cuenta Prueba.
+        Vas a navegar la app con los permisos y datos de la persona que elijas, hasta que vuelvas a tu cuenta.
       </p>
 
       <div className="relative">

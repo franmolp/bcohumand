@@ -7,28 +7,49 @@ const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || 'humand-secret-key-change-in-production'
 )
 
-// Solo la cuenta de usuario "prueba" puede iniciar una impersonación. Si ya
-// está impersonando a alguien, el id de esa cuenta prueba viaja en el propio
-// JWT (impersonadoPor) y se usa para permitir cambiar de empleado sin volver
-// a pasar por "prueba" primero.
-async function resolverPruebaId(): Promise<{ ok: true; pruebaId: string } | { ok: false; error: string; status: number }> {
+function esOriginalHabilitado(usuario: string | null | undefined, rol: string | null | undefined): boolean {
+  // Puede personificar cualquier admin, más la cuenta histórica "prueba".
+  return usuario === 'prueba' || rol?.toLowerCase() === 'admin'
+}
+
+// Quién puede iniciar/continuar una impersonación: cualquier admin (o la cuenta
+// histórica "prueba"). Si ya está impersonando, el id de la cuenta original
+// viaja en el JWT (impersonadoPor); se re-verifica contra la base que esa cuenta
+// siga siendo admin/prueba, para que un JWT viejo no sirva si le sacaron el rol.
+async function resolverOriginalId(): Promise<{ ok: true; originalId: string; originalNombre: string } | { ok: false; error: string; status: number }> {
   const session = await getSession()
   if (!session) return { ok: false, error: 'No autorizado', status: 401 }
-  if (session.impersonadoPor) return { ok: true, pruebaId: session.impersonadoPor }
-  if (session.usuario === 'prueba') return { ok: true, pruebaId: session.id }
-  return { ok: false, error: 'Solo la cuenta de prueba puede usar esta función', status: 403 }
+
+  if (session.impersonadoPor) {
+    const { data: orig } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, nombre, usuario, estado_cuenta, rol:roles(nombre)')
+      .eq('id', session.impersonadoPor)
+      .single()
+    const rolRaw = orig?.rol as { nombre: string } | { nombre: string }[] | null
+    const rolNombre = Array.isArray(rolRaw) ? rolRaw[0]?.nombre : rolRaw?.nombre
+    if (!orig || orig.estado_cuenta !== 'activo' || !esOriginalHabilitado(orig.usuario, rolNombre)) {
+      return { ok: false, error: 'Tu cuenta ya no puede usar esta función', status: 403 }
+    }
+    return { ok: true, originalId: orig.id, originalNombre: orig.nombre }
+  }
+
+  if (esOriginalHabilitado(session.usuario, session.rol)) {
+    return { ok: true, originalId: session.id, originalNombre: session.nombre }
+  }
+  return { ok: false, error: 'Solo un administrador puede usar esta función', status: 403 }
 }
 
 // GET — lista de empleados activos disponibles para impersonar
 export async function GET() {
-  const check = await resolverPruebaId()
+  const check = await resolverOriginalId()
   if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status })
 
   const { data, error } = await supabaseAdmin
     .from('usuarios')
     .select('id, nombre, usuario, foto_perfil, equipo:equipos(nombre), rol:roles(nombre)')
     .eq('estado_cuenta', 'activo')
-    .neq('id', check.pruebaId)
+    .neq('id', check.originalId)
     .order('nombre')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -51,7 +72,7 @@ export async function GET() {
 
 // POST — arranca (o cambia) la impersonación hacia el empleado indicado
 export async function POST(req: NextRequest) {
-  const check = await resolverPruebaId()
+  const check = await resolverOriginalId()
   if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status })
 
   const body = await req.json().catch(() => ({})) as { empleadoId?: string }
@@ -78,7 +99,8 @@ export async function POST(req: NextRequest) {
     email: empleado.email,
     rol: rolNombre || 'empleado',
     equipo: equipoNombre || '',
-    impersonadoPor: check.pruebaId,
+    impersonadoPor: check.originalId,
+    impersonadoPorNombre: check.originalNombre,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('30d')

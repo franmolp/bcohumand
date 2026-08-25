@@ -38,8 +38,12 @@ export default function Navigation({ user, hasPedidosAccess = false, hasPuestosA
   const isHR = user.rol === 'HR'
   const isAdminOrHR = isAdmin || isHR
   const isEncargada = user.rol === 'Encargada'
-  const isPrueba = user.usuario === 'prueba'
+  const puedeImpersonar = isAdmin || user.usuario === 'prueba'
   const isImpersonando = !!user.impersonadoPor
+  // Nombre corto de la cuenta original, para el botón "Volver a …"
+  const volverLabel = user.impersonadoPorNombre
+    ? `Volver a ${user.impersonadoPorNombre.split(' ')[0]}`
+    : 'Volver a mi cuenta'
   const [showImpersonar, setShowImpersonar] = useState(false)
   const [saliendoImpersonar, setSaliendoImpersonar] = useState(false)
   const [drawer, setDrawer] = useState(false)
@@ -241,10 +245,10 @@ export default function Navigation({ user, hasPedidosAccess = false, hasPuestosA
           {isImpersonando && (
             <button onClick={salirImpersonacion} disabled={saliendoImpersonar}
               className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white text-[12px] font-semibold px-3 py-1.5 rounded-lg cursor-pointer transition-colors disabled:opacity-50">
-              <IconLogout size={13} /> {saliendoImpersonar ? 'Volviendo…' : 'Volver a Prueba'}
+              <IconLogout size={13} /> {saliendoImpersonar ? 'Volviendo…' : volverLabel}
             </button>
           )}
-          {isPrueba && !isImpersonando && (
+          {puedeImpersonar && !isImpersonando && (
             <button onClick={() => setShowImpersonar(true)}
               className="flex items-center gap-1.5 text-white/80 hover:text-white transition-colors cursor-pointer" title="Ver como empleado">
               <IconEye size={18} />
@@ -317,11 +321,11 @@ export default function Navigation({ user, hasPedidosAccess = false, hasPuestosA
         <div className="flex items-center gap-1">
           {isImpersonando && (
             <button onClick={salirImpersonacion} disabled={saliendoImpersonar}
-              className="text-white/90 hover:text-white p-2 -mr-1 flex items-center justify-center cursor-pointer disabled:opacity-50" title="Volver a Prueba">
+              className="text-white/90 hover:text-white p-2 -mr-1 flex items-center justify-center cursor-pointer disabled:opacity-50" title={volverLabel}>
               <IconLogout size={17} />
             </button>
           )}
-          {isPrueba && !isImpersonando && (
+          {puedeImpersonar && !isImpersonando && (
             <button onClick={() => setShowImpersonar(true)} className="text-white/80 hover:text-white p-2 -mr-1 flex items-center justify-center cursor-pointer" title="Ver como empleado">
               <IconEye size={18} />
             </button>
@@ -410,8 +414,8 @@ export default function Navigation({ user, hasPedidosAccess = false, hasPuestosA
                   </Link>
                 )
               })}
-              {(isPrueba || isImpersonando) && <hr className="my-2 border-gray-100" />}
-              {isPrueba && !isImpersonando && (
+              {(puedeImpersonar || isImpersonando) && <hr className="my-2 border-gray-100" />}
+              {puedeImpersonar && !isImpersonando && (
                 <button onClick={() => { setDrawer(false); setShowImpersonar(true) }}
                   className="flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-[15px] text-[var(--text)] w-full active:bg-gray-50 cursor-pointer">
                   <IconEye size={20} className="text-gray-400" /> Ver como empleado
@@ -425,7 +429,7 @@ export default function Navigation({ user, hasPedidosAccess = false, hasPuestosA
                   </button>
                   <button onClick={salirImpersonacion} disabled={saliendoImpersonar}
                     className="flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-[15px] text-amber-600 w-full active:bg-amber-50 cursor-pointer disabled:opacity-50">
-                    <IconLogout size={20} /> {saliendoImpersonar ? 'Volviendo…' : 'Volver a Prueba'}
+                    <IconLogout size={20} /> {saliendoImpersonar ? 'Volviendo…' : volverLabel}
                   </button>
                 </>
               )}
