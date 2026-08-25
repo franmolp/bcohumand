@@ -84,13 +84,15 @@ export default function PuestosEmpleadaView({ soloHorarios = false }: { soloHora
   const [confirmSolicitar, setConfirmSolicitar] = useState<Puesto | null>(null)
   const [confirmCancelar, setConfirmCancelar] = useState<Puesto | null>(null)
 
-  const cargar = useCallback(() => {
-    setLoading(true); setError('')
+  // silent=true: recarga de fondo, sin el spinner de pantalla completa, para
+  // reconciliar después de una acción sin pisar lo que ya se mostró optimista.
+  const cargar = useCallback((silent = false) => {
+    if (!silent) { setLoading(true); setError('') }
     fetch('/api/puestos-disponibles')
       .then(r => r.json())
-      .then(d => { if (d.error) setError(d.error); else { setPuestos(d.puestos); setRecurso(d.tipo_recurso); setHoy(d.hoy) } })
-      .catch(() => setError('No se pudo cargar'))
-      .finally(() => setLoading(false))
+      .then(d => { if (d.error) { if (!silent) setError(d.error) } else { setPuestos(d.puestos); setRecurso(d.tipo_recurso); setHoy(d.hoy) } })
+      .catch(() => { if (!silent) setError('No se pudo cargar') })
+      .finally(() => { if (!silent) setLoading(false) })
   }, [])
 
   useEffect(() => { if (!soloHorarios) cargar() }, [cargar, soloHorarios])
@@ -111,8 +113,11 @@ export default function PuestosEmpleadaView({ soloHorarios = false }: { soloHora
       })
       const d = await res.json()
       if (!res.ok) { setToast(d.error ?? 'No se pudo solicitar'); return }
+      // Reflejar al instante el estado "pendiente" (con el id que devolvió el POST)
+      // y reconciliar en segundo plano, sin el flash de recarga completa.
+      setPuestos(prev => prev?.map(p => p.id === id ? { ...p, mi_solicitud: 'pending', solicitud_id: d?.id ?? p.solicitud_id } : p) ?? prev)
       setToast('Solicitud enviada — te avisamos cuando se apruebe')
-      cargar()
+      cargar(true)
     } finally { setEnviando(null); setConfirmSolicitar(null) }
   }
 
@@ -120,8 +125,10 @@ export default function PuestosEmpleadaView({ soloHorarios = false }: { soloHora
     setEnviando(id)
     try {
       await fetch(`/api/puestos-disponibles/${solicitudId}`, { method: 'DELETE' })
+      // Sacar al instante el estado "pendiente" y reconciliar en segundo plano
+      setPuestos(prev => prev?.map(p => p.id === id ? { ...p, mi_solicitud: 'none', solicitud_id: null } : p) ?? prev)
       setToast('Solicitud cancelada')
-      cargar()
+      cargar(true)
     } finally { setEnviando(null); setConfirmCancelar(null) }
   }
 
