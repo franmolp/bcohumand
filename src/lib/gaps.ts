@@ -14,6 +14,26 @@ const GANTT_START = 9 * 60
 const GANTT_END = 20 * 60
 export const MIN_GAP_MINUTOS = 3 * 60
 const MIN_GAP_MINUTOS_MASAJES = 60
+// Piso para los huecos cortos "de extensión": un hueco de 1hs a 3hs no se ofrece
+// a todo el equipo, pero sí a quien tenga un turno propio pegado (arranca justo
+// donde termina el hueco, o termina justo donde empieza) para entrar antes o
+// quedarse más. Tolerancia de 30' para contemplar el corte de mediodía (14:30/15).
+export const MIN_GAP_CONTIGUO = 60
+const TOLERANCIA_CONTIGUO = 30
+
+// ¿El hueco [startMin, endMin] está pegado a alguno de mis turnos ese día?
+export function esContiguoAturno(
+  startMin: number,
+  endMin: number,
+  misTurnos: { inicio: number; fin: number }[],
+): boolean {
+  return misTurnos.some(t => {
+    const huecoDespuesDeMiTurno = startMin - t.fin   // el hueco arranca después de que termino
+    const huecoAntesDeMiTurno = t.inicio - endMin    // el hueco termina antes de que arranco
+    return (huecoDespuesDeMiTurno >= -1 && huecoDespuesDeMiTurno <= TOLERANCIA_CONTIGUO)
+      || (huecoAntesDeMiTurno >= -1 && huecoAntesDeMiTurno <= TOLERANCIA_CONTIGUO)
+  })
+}
 
 function normalizeEquipo(equipo: string): string {
   return equipo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')

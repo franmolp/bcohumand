@@ -18,6 +18,7 @@ interface Puesto {
   cantidad: number
   mi_solicitud: 'none' | 'pending'
   solicitud_id: string | null
+  contiguo?: boolean
 }
 
 function todayStr() {
@@ -189,12 +190,20 @@ export default function PuestosEmpleadaView({ soloHorarios = false }: { soloHora
                           Turno {p.turno}
                         </span>
                       )}
+                      {p.contiguo && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100">
+                          Extendé tu turno
+                        </span>
+                      )}
                     </div>
                     <p className="text-[13px] text-[var(--text)] mt-1">{fmtFechaLarga(p.fecha)}</p>
                     <p className={`text-[12px] flex items-center gap-1 mt-0.5 ${estilo.text}`}>
                       <IconClock size={11} />
                       {p.hora_inicio} – {p.hora_fin} · {p.horas}hs disponibles
                     </p>
+                    {p.contiguo && (
+                      <p className="text-[11px] text-emerald-600 mt-0.5">Pegado a tu turno — podés entrar antes o quedarte más</p>
+                    )}
                   </div>
                 </div>
                 {p.mi_solicitud === 'pending' ? (

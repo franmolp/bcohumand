@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { defaultCapacity, findGapsForDay, restarAprobados, toMin, minToStr, overlaps, conArticulo, minGapParaEquipo } from '@/lib/gaps'
+import { defaultCapacity, findGapsForDay, restarAprobados, toMin, minToStr, overlaps, conArticulo, minGapParaEquipo, MIN_GAP_CONTIGUO, esContiguoAturno } from '@/lib/gaps'
 import { fmtFechaLarga } from '@/lib/fecha'
 import { resolverAccesoPuestos } from '@/lib/puestos'
 import { crearNotificaciones, getAdminAndEncargadaIds } from '@/lib/notificaciones'
@@ -70,18 +70,32 @@ export async function POST(req: NextRequest) {
 
   // Revalidar server-side que el hueco sigue libre — nunca confiar en lo que mandó el cliente.
   // Se resta lo ya aprobado (puede haber partido un hueco en dos) y se busca algún carril que
-  // todavía contenga completo el horario pedido.
+  // todavía contenga completo el horario pedido. Se busca desde el piso corto (1hs).
   const minGap = minGapParaEquipo(equipoRow.nombre)
-  const gapsCrudos = findGapsForDay(shiftsDia, capacity, minGap)
+  const piso = Math.min(minGap, MIN_GAP_CONTIGUO)
+  const gapsCrudos = findGapsForDay(shiftsDia, capacity, piso)
   const aprobadosDia = solicitudesExistentes
     .filter(s => s.estado === 'approved')
     .map(s => ({ lane: s.lane, start: toMin(s.hora_inicio.slice(0, 5)), end: toMin(s.hora_fin.slice(0, 5)) }))
-  const gapsLibres = restarAprobados(gapsCrudos, aprobadosDia, minGap)
+  const gapsLibres = restarAprobados(gapsCrudos, aprobadosDia, piso)
   const lanesDisponibles = [...new Set(
     gapsLibres.filter(g => g.start <= start && g.end >= end).map(g => g.lane)
   )]
   if (lanesDisponibles.length === 0) {
     return NextResponse.json({ error: 'Ese puesto ya no está disponible' }, { status: 409 })
+  }
+
+  // Si el horario pedido es más corto que el mínimo del equipo, solo se permite
+  // cuando está pegado a un turno propio (entrar antes / quedarse más). Mismo
+  // criterio que la vista de disponibles — nunca confiar solo en el front.
+  if (end - start < minGap) {
+    const misTurnosMin = misTurnosDia.map(t => ({ inicio: toMin(t.inicio), fin: toMin(t.fin) }))
+    const misAprobadosMin = solicitudesExistentes
+      .filter(s => s.usuario_id === session.id && s.estado === 'approved')
+      .map(s => ({ inicio: toMin(s.hora_inicio.slice(0, 5)), fin: toMin(s.hora_fin.slice(0, 5)) }))
+    if (!esContiguoAturno(start, end, [...misTurnosMin, ...misAprobadosMin])) {
+      return NextResponse.json({ error: 'Este horario corto solo se puede pedir para extender un turno propio contiguo' }, { status: 409 })
+    }
   }
 
   const yaLoPidioEllaMisma = solicitudesExistentes.some(s =>

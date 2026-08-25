@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { tipoRecurso, defaultCapacity, findGapsForDay, toMin, minToStr, overlaps, restarAprobados, decomponerGap, minGapParaEquipo } from '@/lib/gaps'
+import { tipoRecurso, defaultCapacity, findGapsForDay, toMin, minToStr, overlaps, restarAprobados, decomponerGap, minGapParaEquipo, MIN_GAP_CONTIGUO, esContiguoAturno } from '@/lib/gaps'
 
 function addDays(date: string, n: number): string {
   const d = new Date(date + 'T12:00:00Z')
@@ -18,6 +18,9 @@ export interface PuestoDisponible {
   cantidad: number
   mi_solicitud: 'none' | 'pending'
   solicitud_id: string | null
+  // true = hueco corto (1hs a 3hs) ofrecido solo porque está pegado a un turno
+  // propio (para entrar antes o quedarse más), no disponible para todo el equipo.
+  contiguo: boolean
 }
 
 const CONFIG_KEY_EQUIPOS = 'puestos_equipos'
@@ -132,9 +135,13 @@ export async function getPuestosDisponibles(
 
   const puestos: PuestoDisponible[] = []
   const minGap = minGapParaEquipo(equipoRow.nombre)
+  // Buscamos huecos desde el piso corto (1hs). Los >= minGap se ofrecen a todo el
+  // equipo; los que caen en [MIN_GAP_CONTIGUO, minGap) solo a quien tenga un turno
+  // pegado. Para masajistas minGap ya es 60, así que no hay banda "corta" (sin cambio).
+  const piso = Math.min(minGap, MIN_GAP_CONTIGUO)
 
   for (const [fecha, shiftsDia] of turnosPorFecha.entries()) {
-    const gapsCrudos = findGapsForDay(shiftsDia, capacity, minGap)
+    const gapsCrudos = findGapsForDay(shiftsDia, capacity, piso)
     const solicitudesDia = solicitudesPorFecha.get(fecha) ?? []
 
     // "Turnos propios" para no ofrecer huecos que se pisen: los reales de Fresha
@@ -148,29 +155,34 @@ export async function getPuestosDisponibles(
         .filter(s => s.usuario_id === usuarioId && s.estado === 'approved')
         .map(s => ({ inicio: s.hora_inicio.slice(0, 5), fin: s.hora_fin.slice(0, 5) })),
     ]
+    const misTurnosMin = misTurnosDia.map(t => ({ inicio: toMin(t.inicio), fin: toMin(t.fin) }))
 
     // Resta lo ya aprobado (puede partir un hueco en dos) antes de ofrecer nada
     const aprobadosDia = solicitudesDia
       .filter(s => s.estado === 'approved')
       .map(s => ({ lane: s.lane, start: toMin(s.hora_inicio.slice(0, 5)), end: toMin(s.hora_fin.slice(0, 5)) }))
-    const gapsLibres = restarAprobados(gapsCrudos, aprobadosDia, minGap)
+    const gapsLibres = restarAprobados(gapsCrudos, aprobadosDia, piso)
 
     // Descompone en turnos fijos (mañana/tarde) cuando el hueco cubre uno entero, para no
     // ofrecer "todo el día" como un solo bloque gigante; y fusiona por carril para no mostrar
     // el mismo horario repetido varias veces cuando hay más de una mesa/box libre a la vez.
-    const grupos = new Map<string, { start: number; end: number; label: 'Mañana' | 'Tarde' | null; lanes: number[] }>()
+    const grupos = new Map<string, { start: number; end: number; label: 'Mañana' | 'Tarde' | null; lanes: number[]; contiguo: boolean }>()
     for (const gap of gapsLibres) {
-      for (const pieza of decomponerGap(gap, tipo, minGap)) {
+      for (const pieza of decomponerGap(gap, tipo, piso)) {
         const sePisaConTurnoPropio = misTurnosDia.some(t => overlaps(pieza.start, pieza.end, toMin(t.inicio), toMin(t.fin)))
         if (sePisaConTurnoPropio) continue
 
+        // Hueco corto (menor al mínimo del equipo): solo se ofrece si está pegado a un turno propio
+        const esCorto = pieza.end - pieza.start < minGap
+        if (esCorto && !esContiguoAturno(pieza.start, pieza.end, misTurnosMin)) continue
+
         const key = `${pieza.start}-${pieza.end}-${pieza.label}`
-        if (!grupos.has(key)) grupos.set(key, { start: pieza.start, end: pieza.end, label: pieza.label, lanes: [] })
+        if (!grupos.has(key)) grupos.set(key, { start: pieza.start, end: pieza.end, label: pieza.label, lanes: [], contiguo: esCorto })
         grupos.get(key)!.lanes.push(gap.lane)
       }
     }
 
-    for (const { start, end, label, lanes } of grupos.values()) {
+    for (const { start, end, label, lanes, contiguo } of grupos.values()) {
       // Si es hoy y la hora de inicio ya pasó, no lo ofrecemos más
       if (fecha === today && start <= nowMin) continue
 
@@ -190,6 +202,7 @@ export async function getPuestosDisponibles(
         cantidad: lanes.length,
         mi_solicitud: miSolicitudPendiente ? 'pending' : 'none',
         solicitud_id: miSolicitudPendiente?.id ?? null,
+        contiguo,
       })
     }
   }
