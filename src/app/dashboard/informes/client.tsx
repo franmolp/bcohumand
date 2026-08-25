@@ -66,13 +66,38 @@ function nextMes(mes: string) {
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
 
-function KpiCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
+function KpiCard({ label, value, sub, color, delta }: { label: string; value: string; sub?: string; color?: string; delta?: React.ReactNode }) {
   return (
     <div className="bg-white rounded-2xl border border-[var(--border)] p-4 flex flex-col gap-1">
       <p className="text-[11px] text-[var(--text-muted)] font-medium uppercase tracking-wide">{label}</p>
       <p className={`text-[22px] font-bold leading-tight ${color ?? 'text-[var(--text)]'}`}>{value}</p>
+      {delta}
       {sub && <p className="text-[11px] text-[var(--text-muted)]">{sub}</p>}
     </div>
+  )
+}
+
+// Indicador de variación vs el mes anterior (mismo tramo de días). Para ingresos,
+// subir es bueno (verde); para gastos, subir es malo (rojo). La flecha marca la
+// dirección real (sube/baja) y el color, si es bueno o malo.
+function DeltaBadge({ actual, anterior, tipo }: { actual: number; anterior: number | undefined; tipo: 'ingreso' | 'gasto' }) {
+  if (anterior === undefined || anterior <= 0 || actual <= 0) return null
+  const diff = actual - anterior
+  const pct = Math.round(diff / anterior * 100)
+  if (pct === 0) {
+    return <span className="text-[11px] text-gray-400 font-medium">Igual que el mes anterior</span>
+  }
+  const subio = diff > 0
+  const bueno = tipo === 'ingreso' ? subio : !subio
+  const color = bueno ? 'text-green-600' : 'text-red-500'
+  return (
+    <span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${color}`}>
+      <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className={subio ? '' : 'rotate-180'}>
+        <path d="M8 2.5l5.5 8.5h-11z" />
+      </svg>
+      {Math.abs(pct)}%
+      <span className="font-normal text-[var(--text-muted)]">vs mes ant.</span>
+    </span>
   )
 }
 
@@ -1136,20 +1161,38 @@ export default function InformesClient({ user: _user }: { user: SessionUser }) {
   const [mes, setMes] = useState(mesActual)
   const [tab, setTab] = useState<Tab>('resumen')
   const [datos, setDatos] = useState<ApiData | null>(null)
+  const [kpisPrev, setKpisPrev] = useState<Kpis | null>(null)
   const [ultimaActualizacion, setUltimaActualizacion] = useState<string | null>(null)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const topRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    setCargando(true); setError(null)
-    fetch(`/api/informes?mes=${mes}`)
-      .then(r => r.json())
-      .then(d => {
+    setCargando(true); setError(null); setKpisPrev(null)
+
+    // Para comparar contra el mes anterior sobre el MISMO tramo de días: si el mes
+    // que miro está en curso, corto el mes anterior en el mismo día de hoy; si es
+    // un mes cerrado, comparo mes completo contra mes completo.
+    const mesAnt = prevMes(mes)
+    const [py, pm] = mesAnt.split('-').map(Number)
+    const ultimoDiaPrev = new Date(py, pm, 0).getDate()
+    const [vy, vm] = mes.split('-').map(Number)
+    const cutoffDay = mes === mesActual()
+      ? Number(todayAR().substring(8))
+      : new Date(vy, vm, 0).getDate()
+    const dia = Math.min(cutoffDay, ultimoDiaPrev)
+    const hasta = `${mesAnt}-${String(dia).padStart(2, '0')}`
+
+    Promise.all([
+      fetch(`/api/informes?mes=${mes}`).then(r => r.json()),
+      fetch(`/api/informes?mes=${mesAnt}&hasta=${hasta}`).then(r => r.json()).catch(() => null),
+    ])
+      .then(([d, dPrev]) => {
         if (d.error) setError(d.error)
         else {
           setDatos(d)
           if (d.ultimaActualizacion) setUltimaActualizacion(d.ultimaActualizacion)
+          setKpisPrev(dPrev && !dPrev.error ? dPrev.kpis : null)
         }
       })
       .catch(() => setError('Error al cargar'))
@@ -1220,14 +1263,20 @@ export default function InformesClient({ user: _user }: { user: SessionUser }) {
           {datos && !cargando && k && tab === 'resumen' && (
             <div className="flex flex-col gap-5">
               <div className="grid grid-cols-2 gap-3">
-                <KpiCard label="Citas realizadas" value={String(k.totalCitas)} sub={k.canceladas > 0 ? `${k.canceladas} canceladas (${k.tasaCancelacion}%)` : undefined} />
-                <KpiCard label="Ventas netas" value={fmt$(k.ventasNetas)} sub="Loyverse" />
-                <KpiCard label="Gastos" value={fmt$(k.gastos)} />
-                <KpiCard label="Masa salarial" value={k.sueldos > 0 ? fmt$(k.sueldos) : '—'} sub={k.sueldos > 0 ? 'Liquidaciones del mes' : 'Sin liquidaciones cargadas'} />
+                <KpiCard label="Citas realizadas" value={String(k.totalCitas)} sub={k.canceladas > 0 ? `${k.canceladas} canceladas (${k.tasaCancelacion}%)` : undefined}
+                  delta={<DeltaBadge actual={k.totalCitas} anterior={kpisPrev?.totalCitas} tipo="ingreso" />} />
+                <KpiCard label="Ventas netas" value={fmt$(k.ventasNetas)} sub="Loyverse"
+                  delta={<DeltaBadge actual={k.ventasNetas} anterior={kpisPrev?.ventasNetas} tipo="ingreso" />} />
+                <KpiCard label="Gastos" value={fmt$(k.gastos)}
+                  delta={<DeltaBadge actual={k.gastos} anterior={kpisPrev?.gastos} tipo="gasto" />} />
+                <KpiCard label="Masa salarial" value={k.sueldos > 0 ? fmt$(k.sueldos) : '—'} sub={k.sueldos > 0 ? 'Liquidaciones del mes' : 'Sin liquidaciones cargadas'}
+                  delta={<DeltaBadge actual={k.sueldos} anterior={kpisPrev?.sueldos} tipo="gasto" />} />
                 <div className="col-span-2">
                   {(() => {
                     const rem = k.ventasNetas - k.sueldos - k.gastos
-                    return <KpiCard label="Remanente del mes" value={fmt$(rem)} color={rem >= 0 ? 'text-green-600' : 'text-red-500'} sub="Ventas netas − sueldos − compras" />
+                    const remPrev = kpisPrev ? kpisPrev.ventasNetas - kpisPrev.sueldos - kpisPrev.gastos : undefined
+                    return <KpiCard label="Remanente del mes" value={fmt$(rem)} color={rem >= 0 ? 'text-green-600' : 'text-red-500'} sub="Ventas netas − sueldos − compras"
+                      delta={<DeltaBadge actual={rem} anterior={remPrev} tipo="ingreso" />} />
                   })()}
                 </div>
               </div>

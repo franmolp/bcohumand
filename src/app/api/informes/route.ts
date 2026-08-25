@@ -54,7 +54,11 @@ export async function GET(request: NextRequest) {
   const tz = 'America/Argentina/Buenos_Aires'
   const ahora = new Date()
   const hoyStr = ahora.toLocaleDateString('en-CA', { timeZone: tz })
-  const finDatos = hoyStr < fin ? hoyStr : fin
+  let finDatos = hoyStr < fin ? hoyStr : fin
+  // Tope opcional (para comparar el mes anterior hasta el mismo día que el mes en
+  // curso, y no comparar un mes completo contra uno a medias). Solo recorta.
+  const hastaParam = request.nextUrl.searchParams.get('hasta')
+  if (hastaParam && /^\d{4}-\d{2}-\d{2}$/.test(hastaParam) && hastaParam < finDatos) finDatos = hastaParam
 
   const diasTranscurridos = finDatos >= fin ? diasDelMes : Math.max(1, parseInt(finDatos.substring(8)))
 
