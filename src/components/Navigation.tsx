@@ -72,6 +72,10 @@ export default function Navigation({ user, hasPedidosAccess = false, hasPuestosA
     ? ['/dashboard', '/dashboard/asistencia', '/dashboard/solicitudes', '/dashboard/calendario', '/dashboard/informes'] // Contabilidad en mobile bar admin
     : isHR
     ? ['/dashboard', '/dashboard/asistencia', '/dashboard/solicitudes', '/dashboard/empleados', '/dashboard/calendario']
+    : isEncargada
+    // La Encargada no ve "Mi Asistencia" (usa el módulo "Asistencia" completo),
+    // así que su barra usa Asistencia para no quedar con un acceso menos.
+    ? ['/dashboard', '/dashboard/asistencia', '/dashboard/solicitudes', '/dashboard/liquidador', '/dashboard/calendario']
     : ['/dashboard', '/dashboard/mi-asistencia', '/dashboard/solicitudes', '/dashboard/liquidador', '/dashboard/calendario']
   const mobileItems = mobileHrefs.map(href => items.find(i => i.href === href)).filter(Boolean) as typeof items
   const initials = user.nombre.split(' ').map(n => n[0]).join('').slice(0, 2)
