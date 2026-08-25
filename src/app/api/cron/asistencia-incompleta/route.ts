@@ -2,17 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { crearNotificaciones } from '@/lib/notificaciones'
 
-export async function ejecutarAsistenciaIncompleta() {
+export async function ejecutarAsistenciaIncompleta(fechaOverride?: string) {
   // Fecha en huso horario Argentina, no la del runtime del server (que en Vercel es UTC)
   const hoyStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-  const ayerD = new Date(hoyStr + 'T12:00:00')
-  ayerD.setDate(ayerD.getDate() - 1)
-  const ayerStr = ayerD.toISOString().split('T')[0]
+  let ayerStr = fechaOverride ?? ''
+  if (!ayerStr) {
+    const ayerD = new Date(hoyStr + 'T12:00:00')
+    ayerD.setDate(ayerD.getDate() - 1)
+    ayerStr = ayerD.toISOString().split('T')[0]
+  }
   const [, m, d] = ayerStr.split('-')
   const ayerLabel = `${parseInt(d)}/${parseInt(m)}`
 
   const { data: incompletos, error } = await supabase
-    .from('asistencia')
+    .from('asistencia_procesada')
     .select('usuario_id')
     .eq('fecha', ayerStr)
     .eq('estado', 'Incompleto')
@@ -41,7 +44,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
   try {
-    return NextResponse.json(await ejecutarAsistenciaIncompleta())
+    const fecha = request.nextUrl.searchParams.get('fecha') ?? undefined
+    return NextResponse.json(await ejecutarAsistenciaIncompleta(fecha))
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Error' }, { status: 500 })
   }
