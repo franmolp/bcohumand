@@ -1274,9 +1274,17 @@ export default function InformesClient({ user: _user }: { user: SessionUser }) {
                 <div className="col-span-2">
                   {(() => {
                     const rem = k.ventasNetas - k.sueldos - k.gastos
-                    const remPrev = kpisPrev ? kpisPrev.ventasNetas - kpisPrev.sueldos - kpisPrev.gastos : undefined
+                    // En el mes en curso los sueldos todavía no están cargados, así que
+                    // para la variación comparo el remanente SIN descontar sueldos de
+                    // ninguno de los dos meses (si no, da porcentajes disparatados).
+                    // En meses cerrados comparo el remanente completo contra completo.
+                    const enCurso = mes === mesActual()
+                    const remCmp = enCurso ? k.ventasNetas - k.gastos : rem
+                    const remPrev = kpisPrev
+                      ? (enCurso ? kpisPrev.ventasNetas - kpisPrev.gastos : kpisPrev.ventasNetas - kpisPrev.sueldos - kpisPrev.gastos)
+                      : undefined
                     return <KpiCard label="Remanente del mes" value={fmt$(rem)} color={rem >= 0 ? 'text-green-600' : 'text-red-500'} sub="Ventas netas − sueldos − compras"
-                      delta={<DeltaBadge actual={rem} anterior={remPrev} tipo="ingreso" />} />
+                      delta={<DeltaBadge actual={remCmp} anterior={remPrev} tipo="ingreso" />} />
                   })()}
                 </div>
               </div>
