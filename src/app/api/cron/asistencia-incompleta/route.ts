@@ -14,25 +14,39 @@ export async function ejecutarAsistenciaIncompleta(fechaOverride?: string) {
   const [, m, d] = ayerStr.split('-')
   const ayerLabel = `${parseInt(d)}/${parseInt(m)}`
 
-  const { data: incompletos, error } = await supabase
+  const { data: filas, error } = await supabase
     .from('asistencia_procesada')
-    .select('usuario_id')
+    .select('usuario_id, estado')
     .eq('fecha', ayerStr)
-    .eq('estado', 'Incompleto')
+    .in('estado', ['Incompleto', 'Sin fichada'])
 
   if (error) throw new Error(error.message)
-  if (!incompletos?.length) return { ok: true, enviadas: 0 }
+  if (!filas?.length) return { ok: true, enviadas: 0 }
 
-  const usuarioIds = [...new Set(incompletos.map(i => i.usuario_id))]
+  // Incompleto = una sola marcación (entrada o salida). Sin fichada = tuvo turno
+  // pero no quedó ninguna marcación. Cada caso recibe su propio texto.
+  const incompletos = [...new Set(filas.filter(f => f.estado === 'Incompleto').map(f => f.usuario_id))]
+  const sinFichada = [...new Set(filas.filter(f => f.estado === 'Sin fichada').map(f => f.usuario_id))]
 
-  await crearNotificaciones(usuarioIds, {
-    titulo: 'Fichada incompleta ayer',
-    mensaje: `${ayerLabel}: solo se registró una fichada (entrada o salida). Tocá para ver el detalle.`,
-    tipo: 'asistencia_incompleta',
-    url: '/dashboard/mi-asistencia',
-  })
+  if (incompletos.length) {
+    await crearNotificaciones(incompletos, {
+      titulo: 'Revisá tu fichada de ayer',
+      mensaje: `El ${ayerLabel} quedó registrada una sola marcación. Acordate de fichar al entrar y al salir: además de que tu asistencia y liquidación queden bien, fichar correctamente evita sanciones. Tocá para revisarlo.`,
+      tipo: 'asistencia_incompleta',
+      url: '/dashboard/mi-asistencia',
+    })
+  }
 
-  return { ok: true, enviadas: usuarioIds.length }
+  if (sinFichada.length) {
+    await crearNotificaciones(sinFichada, {
+      titulo: 'Ayer no quedó registrada tu fichada',
+      mensaje: `El ${ayerLabel} tuviste turno pero no se registró ninguna marcación. Acordate de fichar siempre al entrar y al salir para que tu jornada quede registrada y evitar sanciones; si fuiste, avisale a tu encargada. Tocá para revisarlo.`,
+      tipo: 'asistencia_incompleta',
+      url: '/dashboard/mi-asistencia',
+    })
+  }
+
+  return { ok: true, enviadas: incompletos.length + sinFichada.length }
 }
 
 // Ruta standalone (debug/manual) — el cron de Vercel llama a /api/cron/diario
