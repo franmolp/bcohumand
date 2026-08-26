@@ -1938,6 +1938,20 @@ function AjustesTab({ configDraft, setConfigDraft, saveConfig, savingCfg, empLis
     setConfigDraft({ ...configDraft, [key]: val })
   }
 
+  const [enviandoAvisos, setEnviandoAvisos] = useState(false)
+  const [avisosMsg, setAvisosMsg] = useState('')
+  async function dispararAvisosFichada() {
+    setEnviandoAvisos(true); setAvisosMsg('')
+    try {
+      const res = await fetch('/api/cron/asistencia-incompleta', { method: 'POST' })
+      const d = await res.json()
+      if (!res.ok) { setAvisosMsg(d.error ?? 'Error al enviar'); return }
+      setAvisosMsg(d.enviadas > 0 ? `Enviados ${d.enviadas} aviso${d.enviadas !== 1 ? 's' : ''}` : 'No hubo fichadas incompletas ni sin fichada ayer')
+    } catch {
+      setAvisosMsg('Error al enviar')
+    } finally { setEnviandoAvisos(false) }
+  }
+
   function InputNum({ label, field, unit }: { label: string; field: keyof AsistenciaConfig; unit?: string }) {
     return (
       <div>
@@ -2063,6 +2077,17 @@ function AjustesTab({ configDraft, setConfigDraft, saveConfig, savingCfg, empLis
       <Button onClick={saveConfig} loading={savingCfg} className="w-full">
         Guardar configuración
       </Button>
+
+      <div className="bg-white rounded-2xl border border-[var(--border)] p-4 space-y-3">
+        <h2 className="text-sm font-semibold text-[var(--text)]">Avisos de fichada de ayer</h2>
+        <p className="text-xs text-[var(--text-muted)]">
+          Envía manualmente las notificaciones a quienes ayer quedaron con fichada incompleta o sin fichada. Sirve para probar que llegan bien; normalmente salen solas cada mañana.
+        </p>
+        <Button variant="secondary" onClick={dispararAvisosFichada} loading={enviandoAvisos} className="w-full">
+          Enviar avisos de ayer
+        </Button>
+        {avisosMsg && <p className="text-xs text-[var(--text-sub)] text-center">{avisosMsg}</p>}
+      </div>
     </div>
   )
 }

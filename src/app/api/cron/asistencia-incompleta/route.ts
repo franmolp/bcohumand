@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { crearNotificaciones } from '@/lib/notificaciones'
+import { getSession } from '@/lib/auth'
 
 export async function ejecutarAsistenciaIncompleta(fechaOverride?: string) {
   // Fecha en huso horario Argentina, no la del runtime del server (que en Vercel es UTC)
@@ -57,6 +58,19 @@ export async function GET(request: NextRequest) {
   if (secret !== process.env.CRON_SECRET && bearerSecret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
+  try {
+    const fecha = request.nextUrl.searchParams.get('fecha') ?? undefined
+    return NextResponse.json(await ejecutarAsistenciaIncompleta(fecha))
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Error' }, { status: 500 })
+  }
+}
+
+// Disparo manual desde Ajustes (admin) — para testear que el aviso de ayer sale bien
+export async function POST(request: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  if (session.rol !== 'admin' && session.rol !== 'Admin') return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
   try {
     const fecha = request.nextUrl.searchParams.get('fecha') ?? undefined
     return NextResponse.json(await ejecutarAsistenciaIncompleta(fecha))
