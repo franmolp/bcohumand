@@ -650,12 +650,12 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
 
   return (
     <div className="py-4 fade-in space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="space-y-2.5">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
             <IconDollar size={18} className="text-white" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-[17px] font-bold text-[var(--text)]">Mis Adelantos</h1>
             {!loading && (
               <p className="text-xs text-[var(--text-muted)]">
@@ -664,8 +664,8 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1.5 text-[12px] text-gray-400 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-100">
-          <IconAlertCircle size={13} />
+        <div className="inline-flex items-center gap-1.5 text-[12px] text-gray-400 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-100 whitespace-nowrap">
+          <IconAlertCircle size={13} className="flex-shrink-0" />
           Del día {config.dia_habilitacion} al 7 de cada mes
         </div>
       </div>
