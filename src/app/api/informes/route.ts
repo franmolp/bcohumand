@@ -68,7 +68,11 @@ export async function GET(request: NextRequest) {
   finDatosDplusOne.setDate(finDatosDplusOne.getDate() + 1)
   const finDatosUTC = `${finDatosDplusOne.toISOString().slice(0, 10)}T02:59:59.999Z`
 
-  // Paginación para tablas con >1000 filas (límite por defecto de Supabase)
+  // Paginación para tablas con >1000 filas (límite por defecto de Supabase).
+  // IMPORTANTE: cada query DEBE venir con un .order() por una columna única/estable,
+  // porque sin ORDER BY Postgres no garantiza el mismo orden entre páginas y se
+  // pierden o duplican filas al paginar con .range() — eso subcontaba las ventas
+  // de las empleadas de forma intermitente cuando el mes tenía >1000 tickets.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function fetchAll<T>(query: () => any): Promise<T[]> {
     const PAGE = 1000
@@ -99,18 +103,22 @@ export async function GET(request: NextRequest) {
       .select('usuario_id, nombre_empleada, estado, categoria, servicio, duracion_min, franja_inicio, franja_fin, venta_neta, fecha')
       .gte('fecha', inicio)
       .lte('fecha', finDatos)
+      // Orden estable para paginar sin perder filas (combinación única por fila)
+      .order('usuario_id').order('fecha').order('franja_inicio').order('franja_fin').order('servicio')
     ),
     fetchAll<any>(() => supabaseAdmin
       .from('loyverse_tickets')
       .select('profesional, total_money, total_discount, item_name, receipt_date')
       .gte('receipt_date', inicioUTC)
       .lte('receipt_date', finDatosUTC)
+      .order('id') // clave única del ticket → paginación estable
     ),
     fetchAll<any>(() => supabaseAdmin
       .from('loyverse_pagos')
       .select('payment_name, payment_money')
       .gte('receipt_date', inicioUTC)
       .lte('receipt_date', finDatosUTC)
+      .order('receipt_number').order('payment_name') // clave única → paginación estable
     ).catch(() => [] as { payment_name: string; payment_money: number }[]),
     supabaseAdmin
       .from('asistencia_procesada')
