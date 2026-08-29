@@ -225,17 +225,18 @@ export async function GET(request: NextRequest) {
   // del servicio; el factor 0.9 convierte al precio que figura en la liquidación.
   // Si bruto=0 (canje sin precio, ej. "$0 CANJE DIA DE SPA"), se resuelve al
   // precio de referencia del servicio base (moda del mes) × 0.9.
-  // Si el campo profesional tiene varios nombres separados por coma, se divide
-  // el valor en partes iguales.
+  // Reparto entre profesionales (campo con varios nombres separados por coma):
+  //  - Ticket con precio real: representa el total, se divide en partes iguales.
+  //  - Canje (precio del servicio base): cada profesional cobra el servicio COMPLETO,
+  //    igual que una venta — no se divide (el precio base ya es por servicio/persona).
   const loyVentaMap = new Map<string, number>()
   for (const t of tickets) {
     if (!t.profesional) continue
     const pros = t.profesional.split(',').map((p: string) => p.trim()).filter(Boolean)
-    const share = 1 / pros.length
     let bruto = (t.total_money || 0) + (t.total_discount || 0)
-    if (bruto === 0 && t.item_name) {
-      bruto = precioRefMap.get(normItem(t.item_name)) ?? 0
-    }
+    const esCanje = bruto === 0 && !!t.item_name
+    if (esCanje) bruto = precioRefMap.get(normItem(t.item_name)) ?? 0
+    const share = esCanje ? 1 : 1 / pros.length
     for (const pro of pros) {
       const key = shortNorm(pro)
       loyVentaMap.set(key, (loyVentaMap.get(key) ?? 0) + bruto * share * 0.9)
