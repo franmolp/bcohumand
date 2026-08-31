@@ -43,5 +43,13 @@ export async function PUT(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (count === 0) return NextResponse.json({ error: 'Registro no encontrado' }, { status: 404 })
+
+  // Invalidar cache de informes del mes editado: cambiar estado/horario base de un
+  // día afecta la ocupación y los días presentes de la productividad, sin cambiar
+  // el conteo de filas (por eso el fingerprint no lo detectaría).
+  if (typeof fecha === 'string') {
+    await supabaseAdmin.from('informes_cache').delete().eq('mes', fecha.slice(0, 7))
+  }
+
   return NextResponse.json({ ok: true })
 }

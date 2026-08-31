@@ -78,6 +78,12 @@ export async function POST(req: NextRequest) {
     .from('configuracion')
     .upsert({ clave: 'ultima_importacion_citas_fresha', valor: { fecha: new Date().toISOString() } }, { onConflict: 'clave' })
 
+  // Invalidar el cache de informes de los meses cuyas citas se reimportaron.
+  const mesesAfectados = new Set([...dates].map(f => f.slice(0, 7)))
+  if (mesesAfectados.size) {
+    await supabaseAdmin.from('informes_cache').delete().in('mes', [...mesesAfectados])
+  }
+
   const adminIds = await getAdminIds()
   if (adminIds.length) {
     const noEnc = noEncontrados.size ? ` · ${noEncontrados.size} sin usuario` : ''

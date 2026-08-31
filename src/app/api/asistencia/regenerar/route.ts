@@ -281,5 +281,19 @@ export async function POST(req: NextRequest) {
     if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 })
   }
 
+  // Invalidar el cache de informes de los meses regenerados (la ocupación/días
+  // presentes de la productividad depende de asistencia_procesada). El uso diario
+  // regenera el mes en curso, que no se cachea; solo invalida al tocar meses pasados.
+  const mesesReproc = new Set<string>()
+  let curMes = fechaInicio.slice(0, 7)
+  const finMes = fechaFinEfectiva.slice(0, 7)
+  for (let i = 0; i < 60 && curMes <= finMes; i++) {
+    mesesReproc.add(curMes)
+    const [yy, mm] = curMes.split('-').map(Number)
+    const next = new Date(Date.UTC(yy, mm, 1))
+    curMes = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}`
+  }
+  if (mesesReproc.size) await supabaseAdmin.from('informes_cache').delete().in('mes', [...mesesReproc])
+
   return NextResponse.json({ procesados: toInsert.length })
 }

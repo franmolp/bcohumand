@@ -99,5 +99,21 @@ export async function POST(req: NextRequest) {
     .from('configuracion')
     .upsert({ clave: 'ultima_importacion_loyverse', valor: { fecha: new Date().toISOString() } }, { onConflict: 'clave' })
 
+  // Invalidar el cache de informes de los meses afectados. Cubre el caso de
+  // reimportar un mes pasado con montos corregidos sobre los mismos tickets
+  // (mismo conteo, distinto valor), que el fingerprint por conteo no detecta.
+  if (body.from && body.to && /^\d{4}-\d{2}/.test(body.from) && /^\d{4}-\d{2}/.test(body.to)) {
+    const meses = new Set<string>()
+    let cur = body.from.slice(0, 7)
+    const fin = body.to.slice(0, 7)
+    for (let i = 0; i < 60 && cur <= fin; i++) {
+      meses.add(cur)
+      const [yy, mm] = cur.split('-').map(Number)
+      const next = new Date(Date.UTC(yy, mm, 1))
+      cur = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}`
+    }
+    if (meses.size) await supabaseAdmin.from('informes_cache').delete().in('mes', [...meses])
+  }
+
   return NextResponse.json({ ok, pagosOk, errors })
 }

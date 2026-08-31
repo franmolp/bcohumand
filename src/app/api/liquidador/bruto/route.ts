@@ -51,5 +51,16 @@ export async function POST(request: NextRequest) {
     .upsert(records, { onConflict: 'anio,mes,nombre_excel' })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Invalidar el cache de informes: los sueldos aparecen en la productividad y en
+  // los KPIs. Reimportar un mes con brutos corregidos mantiene el conteo, así que
+  // el fingerprint no lo detecta → se invalida explícitamente acá.
+  if (body.truncate) {
+    await supabaseAdmin.from('informes_cache').delete().neq('mes', '')
+  } else {
+    const mesesSueldo = new Set(filas.map(f => `${f.anio}-${String(f.mes).padStart(2, '0')}`))
+    if (mesesSueldo.size) await supabaseAdmin.from('informes_cache').delete().in('mes', [...mesesSueldo])
+  }
+
   return NextResponse.json({ ok: records.length })
 }

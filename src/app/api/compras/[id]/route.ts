@@ -8,7 +8,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const isAdmin = session.rol === 'Admin' || session.rol === 'admin'
     const { id } = await params
 
-    const { data: existing } = await supabaseAdmin.from('compras').select('usuario_id').eq('id', id).single()
+    const { data: existing } = await supabaseAdmin.from('compras').select('usuario_id, fecha').eq('id', id).single()
     if (!existing) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
     if (!isAdmin && existing.usuario_id !== session.id) return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
 
@@ -31,6 +31,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       .select('*')
       .single()
     if (error) throw error
+
+    // Invalidar cache de informes de los meses afectados (editar monto/fecha cambia
+    // el gasto del mes sin cambiar el conteo; cambiar la fecha puede mover de mes).
+    const mesesCompra = new Set<string>()
+    if (typeof existing.fecha === 'string') mesesCompra.add(existing.fecha.slice(0, 7))
+    if (typeof fecha === 'string') mesesCompra.add(fecha.slice(0, 7))
+    if (mesesCompra.size) await supabaseAdmin.from('informes_cache').delete().in('mes', [...mesesCompra])
+
     return NextResponse.json(data)
   } catch {
     return NextResponse.json({ error: 'Error al actualizar' }, { status: 500 })
@@ -43,12 +51,18 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const isAdmin = session.rol === 'Admin' || session.rol === 'admin'
     const { id } = await params
 
-    const { data: existing } = await supabaseAdmin.from('compras').select('usuario_id').eq('id', id).single()
+    const { data: existing } = await supabaseAdmin.from('compras').select('usuario_id, fecha').eq('id', id).single()
     if (!existing) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
     if (!isAdmin && existing.usuario_id !== session.id) return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
 
     const { error } = await supabaseAdmin.from('compras').delete().eq('id', id)
     if (error) throw error
+
+    // Invalidar cache de informes del mes de la compra eliminada.
+    if (typeof existing.fecha === 'string') {
+      await supabaseAdmin.from('informes_cache').delete().eq('mes', existing.fecha.slice(0, 7))
+    }
+
     return NextResponse.json({ ok: true })
   } catch {
     return NextResponse.json({ error: 'Error al eliminar' }, { status: 500 })

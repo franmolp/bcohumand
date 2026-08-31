@@ -88,6 +88,47 @@ export async function GET(request: NextRequest) {
     return rows
   }
 
+  // ─── Cache de meses cerrados ────────────────────────────────────────────────
+  // Solo se cachea un mes completamente cerrado (todo el mes en el pasado) y sin
+  // recorte parcial por ?hasta (el mes anterior se pide con ?hasta para comparar
+  // hasta el mismo día). El mes en curso siempre se recalcula en vivo.
+  const puedeCachear = fin < hoyStr && finDatos >= fin
+
+  // Fingerprint = conteos de las tablas fuente del mes. Barato (head+count, sin
+  // transferir filas). Si no coincide con el guardado, el snapshot quedó viejo
+  // (se agregaron/borraron filas) y se recalcula.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function calcularFingerprint(): Promise<string> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const countOf = async (q: any): Promise<number> => {
+      const { count, error } = await q
+      if (error) return -1 // fuerza recálculo si la tabla no existe o hay error
+      return count ?? 0
+    }
+    const [tN, pN, cN, coN, aN, sN] = await Promise.all([
+      countOf(supabaseAdmin.from('loyverse_tickets').select('*', { count: 'exact', head: true }).gte('receipt_date', inicioUTC).lte('receipt_date', finDatosUTC)),
+      countOf(supabaseAdmin.from('loyverse_pagos').select('*', { count: 'exact', head: true }).gte('receipt_date', inicioUTC).lte('receipt_date', finDatosUTC)),
+      countOf(supabaseAdmin.from('fresha_citas_detalle').select('*', { count: 'exact', head: true }).gte('fecha', inicio).lte('fecha', finDatos)),
+      countOf(supabaseAdmin.from('compras').select('*', { count: 'exact', head: true }).gte('fecha', inicio).lte('fecha', fin)),
+      countOf(supabaseAdmin.from('asistencia_procesada').select('*', { count: 'exact', head: true }).gte('fecha', inicio).lte('fecha', finDatos)),
+      countOf(supabaseAdmin.from('liquidaciones_bruto').select('*', { count: 'exact', head: true }).eq('anio', y).eq('mes', m)),
+    ])
+    return `t:${tN}|p:${pN}|c:${cN}|co:${coN}|a:${aN}|s:${sN}`
+  }
+
+  let fingerprint = ''
+  if (puedeCachear) {
+    fingerprint = await calcularFingerprint()
+    const { data: cacheRow } = await supabaseAdmin
+      .from('informes_cache')
+      .select('payload, fingerprint')
+      .eq('mes', mes)
+      .maybeSingle()
+    if (cacheRow && cacheRow.fingerprint === fingerprint) {
+      return NextResponse.json(cacheRow.payload)
+    }
+  }
+
   const [
     citas,
     loyTickets,
@@ -369,7 +410,7 @@ export async function GET(request: NextRequest) {
   const ultimaActualizacion = [tsMap.get('ultima_importacion_loyverse'), tsMap.get('ultima_importacion_citas_fresha')]
     .filter(Boolean).sort().at(-1) ?? null
 
-  return NextResponse.json({
+  const respuesta = {
     ultimaActualizacion,
     kpis: {
       totalCitas: citasNoCanc.length,
@@ -387,5 +428,15 @@ export async function GET(request: NextRequest) {
     productividad,
     servicios,
     rentabilidad,
-  })
+  }
+
+  // Guardar el snapshot del mes cerrado para leerlo al instante la próxima vez.
+  if (puedeCachear) {
+    const { error: cacheErr } = await supabaseAdmin
+      .from('informes_cache')
+      .upsert({ mes, payload: respuesta, fingerprint, computed_at: new Date().toISOString() }, { onConflict: 'mes' })
+    if (cacheErr) console.error('informes_cache upsert error:', cacheErr.message)
+  }
+
+  return NextResponse.json(respuesta)
 }
