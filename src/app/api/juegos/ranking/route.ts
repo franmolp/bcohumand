@@ -2,9 +2,30 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/auth'
 
-function puntosPorIntentos(intentos: number, resuelta: boolean) {
+// Desde el 1/9/2026 el puntaje es mixto: intentos + bonus por tiempo. Antes de
+// esa fecha se mantiene la fórmula vieja (solo intentos) para no cambiar los
+// ganadores de los meses ya cerrados.
+const CORTE_PUNTAJE_MIXTO = '2026-09-01'
+
+function bonusTiempo(tiempoSeg: number | null | undefined): number {
+  if (typeof tiempoSeg !== 'number' || tiempoSeg < 0) return 0
+  if (tiempoSeg < 10) return 5        // menos de 10 seg
+  if (tiempoSeg < 30) return 4        // 10–30 seg
+  if (tiempoSeg < 60) return 3        // 30–60 seg
+  if (tiempoSeg < 180) return 2       // 1–3 min
+  if (tiempoSeg < 300) return 1       // 3–5 min
+  return 0                            // más de 5 min
+}
+
+function puntosPartida(
+  intentos: number,
+  resuelta: boolean,
+  tiempoSeg: number | null | undefined,
+  fecha: string,
+): number {
   if (!resuelta) return 0
-  return Math.max(1, 11 - intentos)
+  const base = Math.max(1, 11 - intentos)
+  return fecha >= CORTE_PUNTAJE_MIXTO ? base + bonusTiempo(tiempoSeg) : base
 }
 
 export async function GET(request: NextRequest) {
@@ -104,7 +125,7 @@ export async function GET(request: NextRequest) {
     const [{ data: partidas }, { count: totalPalabras }] = await Promise.all([
       supabaseAdmin
         .from('juegos_partidas')
-        .select('usuario_id, intentos, resuelta')
+        .select('usuario_id, intentos, resuelta, tiempo_seg, fecha')
         .eq('juego', 'wordle')
         .gte('fecha', inicioMes)
         .lte('fecha', hoy)
@@ -134,7 +155,7 @@ export async function GET(request: NextRequest) {
       const prev = acum.get(p.usuario_id) ?? { nombre, puntos: 0, partidas: 0, resueltas: 0 }
       acum.set(p.usuario_id, {
         nombre,
-        puntos: prev.puntos + puntosPorIntentos(p.intentos, p.resuelta),
+        puntos: prev.puntos + puntosPartida(p.intentos, p.resuelta, p.tiempo_seg, p.fecha),
         partidas: prev.partidas + 1,
         resueltas: prev.resueltas + (p.resuelta ? 1 : 0),
       })
@@ -159,7 +180,7 @@ export async function GET(request: NextRequest) {
 
     const { data: todasPartidas } = await supabaseAdmin
       .from('juegos_partidas')
-      .select('usuario_id, intentos, resuelta, fecha')
+      .select('usuario_id, intentos, resuelta, fecha, tiempo_seg')
       .eq('juego', 'wordle')
       .eq('resuelta', true)
       .gte('fecha', meses[meses.length - 1].inicio)
@@ -178,7 +199,7 @@ export async function GET(request: NextRequest) {
       for (const p of partidasMes) {
         const nombre = nombreMap.get(p.usuario_id) ?? '—'
         const prev = acum.get(p.usuario_id) ?? { nombre, puntos: 0 }
-        acum.set(p.usuario_id, { nombre, puntos: prev.puntos + puntosPorIntentos(p.intentos, p.resuelta) })
+        acum.set(p.usuario_id, { nombre, puntos: prev.puntos + puntosPartida(p.intentos, p.resuelta, p.tiempo_seg, p.fecha) })
       }
       const sorted = [...acum.values()].sort((a, b) => b.puntos - a.puntos)
       return { mes: label, ganador: sorted[0].nombre, puntos: sorted[0].puntos }
