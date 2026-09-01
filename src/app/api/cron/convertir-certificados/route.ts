@@ -7,11 +7,34 @@ const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto'
 
 type ConvertirMesResult =
   | { ok: false; error: string }
-  | { ok: true; convertidas: number; mes: string; usuariosAfectados?: number }
+  | { ok: true; convertidas: number; mes: string; usuarioIds: string[]; inicioMes: string; finMes: string }
+
+// Regenera la asistencia procesada SOLO de las empleadas afectadas (una por una,
+// liviano y confiable). Regenerar el mes entero de todo el staff desde un cron
+// es pesado y el self-fetch se corta por timeout — por eso antes fallaba en
+// silencio y había que regenerar a mano.
+async function regenerarUsuarios(origin: string, usuarioIds: string[], fechaInicio: string, fechaFin: string): Promise<number> {
+  let total = 0
+  for (const usuarioId of usuarioIds) {
+    try {
+      const res = await fetch(`${origin}/api/asistencia/regenerar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.CRON_SECRET}` },
+        body: JSON.stringify({ fechaInicio, fechaFin, usuarioId }),
+      })
+      const data = await res.json().catch(() => ({}))
+      total += data.procesados ?? 0
+    } catch (e) {
+      console.error('[convertir-certificados] regen usuario falló:', usuarioId, e)
+    }
+  }
+  return total
+}
 
 async function convertirMes(year: number, month: number /* 0-indexed */): Promise<ConvertirMesResult> {
   const mesStr = String(month + 1).padStart(2, '0')
   const inicioMes = `${year}-${mesStr}-01`
+  const finMes = `${year}-${mesStr}-${String(new Date(year, month + 1, 0).getDate()).padStart(2, '0')}`
   // Usamos < primer día del mes siguiente para cubrir toda la última hora del mes
   const nextMonth = month === 11 ? new Date(year + 1, 0, 1) : new Date(year, month + 1, 1)
   const inicioSiguiente = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-01`
@@ -34,7 +57,7 @@ async function convertirMes(year: number, month: number /* 0-indexed */): Promis
 
   if (!solicitudes || solicitudes.length === 0) {
     console.log('[convertir-certificados] sin solicitudes sin certificado en', nombreMes, year)
-    return { ok: true, convertidas: 0, mes: `${nombreMes} ${year}` }
+    return { ok: true, convertidas: 0, mes: `${nombreMes} ${year}`, usuarioIds: [], inicioMes, finMes }
   }
 
   const ids = solicitudes.map(s => s.id)
@@ -67,7 +90,7 @@ async function convertirMes(year: number, month: number /* 0-indexed */): Promis
   }
 
   console.log(`[convertir-certificados] convertidas: ${solicitudes.length}, usuarios: ${usuarioIds.length}, mes: ${nombreMes} ${year}`)
-  return { ok: true, convertidas: solicitudes.length, usuariosAfectados: usuarioIds.length, mes: `${nombreMes} ${year}` }
+  return { ok: true, convertidas: solicitudes.length, usuarioIds, mes: `${nombreMes} ${year}`, inicioMes, finMes }
 }
 
 // Cron automático (Vercel cron, día 1 de cada mes)
@@ -97,26 +120,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 500 })
     }
 
-    // Regenerar asistencia del mes cerrado (no debe tumbar la respuesta si falla)
+    // Regenerar la asistencia solo de las empleadas afectadas (no debe tumbar la
+    // respuesta si falla). Si no hubo conversiones, no hay nada que regenerar.
     let regenerados: number | null = null
-    try {
-      const host = request.headers.get('host')
-      const protocol = host?.includes('localhost') ? 'http' : 'https'
-      const mesStr = String(prevMonthDate.getMonth() + 1).padStart(2, '0')
-      const inicioMes = `${prevMonthDate.getFullYear()}-${mesStr}-01`
-      const nextMonth = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 1)
-      const finMes = new Date(nextMonth.getTime() - 86400000)
-      const finMesStr = `${finMes.getFullYear()}-${String(finMes.getMonth() + 1).padStart(2, '0')}-${String(finMes.getDate()).padStart(2, '0')}`
-
-      const regenRes = await fetch(`${protocol}://${host}/api/asistencia/regenerar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.CRON_SECRET}` },
-        body: JSON.stringify({ fechaInicio: inicioMes, fechaFin: finMesStr }),
-      })
-      const regenData = await regenRes.json().catch(() => ({}))
-      regenerados = regenData.procesados ?? null
-    } catch (e) {
-      console.error('[convertir-certificados] regenerar asistencia falló:', e)
+    if (result.usuarioIds.length > 0) {
+      const origin = new URL(request.url).origin
+      regenerados = await regenerarUsuarios(origin, result.usuarioIds, result.inicioMes, result.finMes)
     }
 
     // Avisar a los admins del resultado (aunque sean 0 conversiones), para que
@@ -167,7 +176,15 @@ export async function POST(request: NextRequest) {
 
     const result = await convertirMes(year, month)
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 500 })
-    return NextResponse.json(result)
+
+    // Regenerar la asistencia de las empleadas afectadas también en el disparo manual.
+    let regenerados: number | null = null
+    if (result.usuarioIds.length > 0) {
+      const origin = new URL(request.url).origin
+      regenerados = await regenerarUsuarios(origin, result.usuarioIds, result.inicioMes, result.finMes)
+    }
+
+    return NextResponse.json({ ...result, regenerados })
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Error al ejecutar conversión'
     return NextResponse.json({ error: msg }, { status: 500 })
