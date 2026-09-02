@@ -76,6 +76,14 @@ export async function POST(req: NextRequest) {
   const gapsCrudos = findGapsForDay(shiftsDia, capacity, piso)
   const aprobadosDia = solicitudesExistentes
     .filter(s => s.estado === 'approved')
+    // Ignora solicitudes aprobadas OBSOLETAS (misma lógica que /lib/puestos y la vista
+    // de Ocupación): si la persona ya tiene un turno regular ese día que se pisa con lo
+    // que pidió, la solicitud quedó vieja y no debe seguir ocupando el carril — si no,
+    // el puesto aparece libre pero al pedirlo tira "ya no está disponible".
+    .filter(s => {
+      const ini = toMin(s.hora_inicio.slice(0, 5)), fin = toMin(s.hora_fin.slice(0, 5))
+      return !shiftsDia.some(t => t.usuario_id === s.usuario_id && overlaps(ini, fin, toMin(t.inicio), toMin(t.fin)))
+    })
     .map(s => ({ lane: s.lane, start: toMin(s.hora_inicio.slice(0, 5)), end: toMin(s.hora_fin.slice(0, 5)) }))
   const gapsLibres = restarAprobados(gapsCrudos, aprobadosDia, piso)
   const lanesDisponibles = [...new Set(
