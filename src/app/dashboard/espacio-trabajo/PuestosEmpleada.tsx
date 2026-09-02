@@ -20,6 +20,7 @@ interface Puesto {
   solicitud_id: string | null
   contiguo?: boolean
   contiguoTipo?: 'entrar_antes' | 'quedarse_mas' | 'ambos' | null
+  dobleTurno?: boolean
 }
 
 // Textos según de qué lado queda el hueco respecto del turno propio
@@ -205,7 +206,12 @@ export default function PuestosEmpleadaView({ soloHorarios = false }: { soloHora
                           Turno {p.turno}
                         </span>
                       )}
-                      {p.contiguo && p.contiguoTipo && (
+                      {p.dobleTurno && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-100">
+                          Hacé doble turno
+                        </span>
+                      )}
+                      {!p.dobleTurno && p.contiguoTipo && (
                         <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100">
                           {CONTIGUO_TEXTO[p.contiguoTipo].badge}
                         </span>
@@ -216,7 +222,10 @@ export default function PuestosEmpleadaView({ soloHorarios = false }: { soloHora
                       <IconClock size={11} />
                       {p.hora_inicio} – {p.hora_fin} · {p.horas}hs disponibles
                     </p>
-                    {p.contiguo && p.contiguoTipo && (
+                    {p.dobleTurno && (
+                      <p className="text-[11px] text-amber-600 mt-0.5">Ya trabajás ese día — podés sumar el otro turno completo</p>
+                    )}
+                    {!p.dobleTurno && p.contiguoTipo && (
                       <p className="text-[11px] text-emerald-600 mt-0.5">{CONTIGUO_TEXTO[p.contiguoTipo].sub}</p>
                     )}
                   </div>

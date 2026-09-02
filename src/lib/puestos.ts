@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { tipoRecurso, defaultCapacity, findGapsForDay, toMin, minToStr, overlaps, restarAprobados, decomponerGap, minGapParaEquipo, MIN_GAP_CONTIGUO, contiguidadConTurno, type TipoContiguidad } from '@/lib/gaps'
+import { tipoRecurso, defaultCapacity, findGapsForDay, toMin, minToStr, overlaps, restarAprobados, decomponerGap, minGapParaEquipo, MIN_GAP_CONTIGUO, contiguidadConTurno, turnosDeTipo, type TipoContiguidad } from '@/lib/gaps'
 
 function addDays(date: string, n: number): string {
   const d = new Date(date + 'T12:00:00Z')
@@ -22,7 +22,11 @@ export interface PuestoDisponible {
   // propio (para entrar antes o quedarse más), no disponible para todo el equipo.
   contiguo: boolean
   // De qué lado está pegado a mi turno (para el texto), null si no es contiguo.
+  // Se apaga cuando es un turno completo complementario (gana el chip "doble turno").
   contiguoTipo: TipoContiguidad | null
+  // true = turno completo (mañana/tarde) ofrecido a quien ya cubre el turno
+  // complementario ese día (ej. trabaja de mañana y se le ofrece la tarde entera).
+  dobleTurno: boolean
 }
 
 const CONFIG_KEY_EQUIPOS = 'puestos_equipos'
@@ -168,24 +172,41 @@ export async function getPuestosDisponibles(
     // Descompone en turnos fijos (mañana/tarde) cuando el hueco cubre uno entero, para no
     // ofrecer "todo el día" como un solo bloque gigante; y fusiona por carril para no mostrar
     // el mismo horario repetido varias veces cuando hay más de una mesa/box libre a la vez.
-    const grupos = new Map<string, { start: number; end: number; label: 'Mañana' | 'Tarde' | null; lanes: number[]; contiguo: boolean; contiguoTipo: TipoContiguidad | null }>()
+    // ¿Mis turnos propios de ese día cubren (>=60%) un turno canónico dado?
+    const turnosCanonicos = turnosDeTipo(tipo)
+    const cubreTurno = (t: { inicio: number; fin: number }) =>
+      misTurnosMin.some(mt => Math.min(mt.fin, t.fin) - Math.max(mt.inicio, t.inicio) >= (t.fin - t.inicio) * 0.6)
+
+    const grupos = new Map<string, { start: number; end: number; label: 'Mañana' | 'Tarde' | null; lanes: number[]; contiguo: boolean; contiguoTipo: TipoContiguidad | null; dobleTurno: boolean }>()
     for (const gap of gapsLibres) {
       for (const pieza of decomponerGap(gap, tipo, piso)) {
         const sePisaConTurnoPropio = misTurnosDia.some(t => overlaps(pieza.start, pieza.end, toMin(t.inicio), toMin(t.fin)))
         if (sePisaConTurnoPropio) continue
 
-        // Hueco corto (menor al mínimo del equipo): solo se ofrece si está pegado a un turno propio
+        // Hueco corto (menor al mínimo del equipo): solo se ofrece si está pegado a un turno propio.
+        // La contigüidad ("entra antes / quedate más") se calcula para CUALQUIER hueco pegado,
+        // no solo los cortos — así un hueco de 3hs+ pegado al turno también lo muestra.
         const esCorto = pieza.end - pieza.start < minGap
-        const contiguoTipo = esCorto ? contiguidadConTurno(pieza.start, pieza.end, misTurnosMin) : null
+        let contiguoTipo = contiguidadConTurno(pieza.start, pieza.end, misTurnosMin)
         if (esCorto && !contiguoTipo) continue
 
+        // Doble turno: la pieza es un turno completo (mañana/tarde) y ya cubro el turno
+        // complementario ese día (ej. trabajo la mañana y se me ofrece la tarde entera).
+        let dobleTurno = false
+        if (pieza.label) {
+          const otro = turnosCanonicos.find(t => t.label !== pieza.label)
+          if (otro && cubreTurno(otro)) dobleTurno = true
+        }
+        // El doble turno tiene prioridad sobre "entra antes / quedate más".
+        if (dobleTurno) contiguoTipo = null
+
         const key = `${pieza.start}-${pieza.end}-${pieza.label}`
-        if (!grupos.has(key)) grupos.set(key, { start: pieza.start, end: pieza.end, label: pieza.label, lanes: [], contiguo: esCorto, contiguoTipo })
+        if (!grupos.has(key)) grupos.set(key, { start: pieza.start, end: pieza.end, label: pieza.label, lanes: [], contiguo: esCorto, contiguoTipo, dobleTurno })
         grupos.get(key)!.lanes.push(gap.lane)
       }
     }
 
-    for (const { start, end, label, lanes, contiguo, contiguoTipo } of grupos.values()) {
+    for (const { start, end, label, lanes, contiguo, contiguoTipo, dobleTurno } of grupos.values()) {
       // Si es hoy y la hora de inicio ya pasó, no lo ofrecemos más
       if (fecha === today && start <= nowMin) continue
 
@@ -207,6 +228,7 @@ export async function getPuestosDisponibles(
         solicitud_id: miSolicitudPendiente?.id ?? null,
         contiguo,
         contiguoTipo,
+        dobleTurno,
       })
     }
   }
