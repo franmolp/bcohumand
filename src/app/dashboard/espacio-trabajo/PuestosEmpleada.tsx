@@ -201,19 +201,26 @@ export default function PuestosEmpleadaView({ soloHorarios = false }: { soloHora
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <p className="text-[13px] font-semibold text-[var(--text)]">{titulo}</p>
-                      {p.turno && (
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${estilo.bg} ${estilo.text} border ${estilo.border}`}>
-                          Turno {p.turno}
-                        </span>
-                      )}
-                      {p.dobleTurno && (
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-100">
-                          Hacé doble turno
-                        </span>
-                      )}
-                      {!p.dobleTurno && p.contiguoTipo && (
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100">
-                          {CONTIGUO_TEXTO[p.contiguoTipo].badge}
+                      {(p.turno || p.dobleTurno || p.contiguoTipo) && (
+                        // Los chips van en su propio grupo (sin cortar entre ellos): si no
+                        // entran junto al título, bajan JUNTOS a la línea de abajo, uno al
+                        // lado del otro, en vez de quedar uno arriba y otro abajo.
+                        <span className="flex items-center gap-1.5">
+                          {p.turno && (
+                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${estilo.bg} ${estilo.text} border ${estilo.border} whitespace-nowrap`}>
+                              Turno {p.turno}
+                            </span>
+                          )}
+                          {p.dobleTurno && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-100 whitespace-nowrap">
+                              Hacé doble turno
+                            </span>
+                          )}
+                          {!p.dobleTurno && p.contiguoTipo && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 whitespace-nowrap">
+                              {CONTIGUO_TEXTO[p.contiguoTipo].badge}
+                            </span>
+                          )}
                         </span>
                       )}
                     </div>
@@ -222,9 +229,6 @@ export default function PuestosEmpleadaView({ soloHorarios = false }: { soloHora
                       <IconClock size={11} />
                       {p.hora_inicio} – {p.hora_fin} · {p.horas}hs disponibles
                     </p>
-                    {p.dobleTurno && (
-                      <p className="text-[11px] text-amber-600 mt-0.5">Ya trabajás ese día — podés sumar el otro turno completo</p>
-                    )}
                     {!p.dobleTurno && p.contiguoTipo && (
                       <p className="text-[11px] text-emerald-600 mt-0.5">{CONTIGUO_TEXTO[p.contiguoTipo].sub}</p>
                     )}
