@@ -284,6 +284,8 @@ export async function GET(req: NextRequest) {
   let efectivo_mes = 0
   let retiros_mes = 0
   let sobres_mes = 0
+  let diferencias_mes = 0      // neto de faltantes/sobrantes de los conteos del mes
+  let dias_con_diferencia = 0  // cuántos días tuvieron alguna diferencia de conteo
   const caja_fuerte = (sobresTotalRes.data ?? []).reduce((s, r) => s + Number(r.monto ?? 0), 0)
   let saldo_actual: number | null = hayTracking ? saldo : null
 
@@ -474,6 +476,8 @@ export async function GET(req: NextRequest) {
       efectivo_mes += efectivo
       retiros_mes += retirosDia.total - retirosDia.sobres
       sobres_mes += retirosDia.sobres
+      diferencias_mes += diferenciaConteoDia
+      if (diferenciaConteoDia !== 0) dias_con_diferencia++
 
       diasDelMes.push({
         fecha: day,
@@ -500,6 +504,6 @@ export async function GET(req: NextRequest) {
     configurado: true,
     config,
     dias: diasDelMes.reverse(), // most recent first
-    kpis: { efectivo_mes, retiros_mes, sobres_mes, saldo_actual, caja_fuerte },
+    kpis: { efectivo_mes, retiros_mes, sobres_mes, saldo_actual, caja_fuerte, diferencias_mes, dias_con_diferencia },
   })
 }

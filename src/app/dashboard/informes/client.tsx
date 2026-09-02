@@ -186,7 +186,7 @@ interface CajaResumen {
   configurado: boolean
   config?: CajaConfig
   dias: DiaData[]
-  kpis: { efectivo_mes: number; retiros_mes: number; sobres_mes: number; saldo_actual: number | null; caja_fuerte: number }
+  kpis: { efectivo_mes: number; retiros_mes: number; sobres_mes: number; saldo_actual: number | null; caja_fuerte: number; diferencias_mes: number; dias_con_diferencia: number }
 }
 
 const EVENTO_CFG: Record<Evento['tipo'], { Icon: typeof IconLock; label: string; color: string }> = {
@@ -493,7 +493,14 @@ function TabCaja({ mes }: { mes: string }) {
           color={kpis.saldo_actual !== null && kpis.saldo_actual < 0 ? 'text-red-500' : 'text-green-600'}
           sub="estimado actual"
         />
-        <KpiCard label="Caja fuerte" value={fmt$(kpis.caja_fuerte)} sub="total histórico en sobres" />
+        <KpiCard
+          label="Diferencia del mes"
+          value={(kpis.diferencias_mes < 0 ? '−' : kpis.diferencias_mes > 0 ? '+' : '') + fmt$(Math.abs(kpis.diferencias_mes))}
+          color={kpis.diferencias_mes < 0 ? 'text-red-500' : 'text-green-600'}
+          sub={kpis.dias_con_diferencia > 0
+            ? `${kpis.diferencias_mes < 0 ? 'faltante' : 'sobrante'} · ${kpis.dias_con_diferencia} día${kpis.dias_con_diferencia !== 1 ? 's' : ''} con diferencia`
+            : 'sin diferencias'}
+        />
       </div>
 
       {/* Alert for discrepancies */}
