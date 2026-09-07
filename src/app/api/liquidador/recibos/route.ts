@@ -27,6 +27,18 @@ export async function GET(request: NextRequest) {
     if (anio) query = query.eq('anio', parseInt(anio))
     if (mes)  query = query.eq('mes', parseInt(mes))
   } else {
+    const nowStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).slice(0, 7)
+    const [cy, cm] = nowStr.split('-').map(Number)
+    // Los 3 meses CERRADOS: se arranca en el mes anterior (el mes en curso todavía no
+    // cerró, no tiene recibo). En septiembre → agosto, julio y junio. Antes se arrancaba
+    // en el mes actual (sep, ago, jul) y junio quedaba afuera, figurando "pendiente".
+    const months: { anio: number; mes: number }[] = []
+    let ty = cy, tm = cm
+    if (--tm === 0) { tm = 12; ty-- } // primer mes cerrado (el anterior al actual)
+    for (let i = 0; i < 3; i++) {
+      months.push({ anio: ty, mes: tm })
+      if (--tm === 0) { tm = 12; ty-- }
+    }
     const nombreNorm = normNombre(session.nombre)
     // Intentar obtener el nombre exacto usado en recibos a través de pagos (por usuario_id)
     const { data: pagoRef } = await supabaseAdmin
@@ -35,14 +47,18 @@ export async function GET(request: NextRequest) {
       .eq('usuario_id', session.id)
       .limit(1)
     const nombreExcel = pagoRef?.[0]?.nombre_excel as string | undefined
+    // Armar OR de nombres: normNombre + nombre_excel (si existe y es distinto)
     const nameFilters = new Set<string>([nombreNorm])
     if (nombreExcel) nameFilters.add(nombreExcel)
-    // Traer TODOS los meses de la empleada (por nombre), no solo los últimos 3: antes
-    // los recibos de meses más viejos figuraban "pendientes" aunque estuvieran cargados,
-    // porque la consulta de pagos devuelve todo el historial y la de recibos lo topeaba
-    // a 3 meses. El nombre (primer nombre + inicial del apellido, o el nombre_excel exacto)
-    // ya alcanza para no cruzar recibos entre empleadas.
-    query = query.in('nombre_empleada', [...nameFilters])
+    // Construir pares (nombre AND mes) para evitar cross-match entre empleadas con igual primer nombre
+    const orParts: string[] = []
+    for (const { anio, mes } of months) {
+      for (const nombre of nameFilters) {
+        orParts.push(`and(nombre_empleada.eq.${nombre},anio.eq.${anio},mes.eq.${mes})`)
+      }
+    }
+    if (!orParts.length) return NextResponse.json([])
+    query = query.or(orParts.join(','))
   }
 
   const { data, error } = await query
