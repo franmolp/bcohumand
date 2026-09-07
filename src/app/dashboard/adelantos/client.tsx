@@ -258,7 +258,13 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
         const d = new Date(a.created_at)
         const fecha = `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`
         const monto = Math.round(Math.abs(a.monto_aprobado ?? a.monto))
-        return [fecha, a.empleado_nombre, 'Adelanto', monto].join('\t')
+        // Los de tipo "servicio" (consumos cargados desde Caja) llevan su descripción
+        // real (ej. "Uñas Luciana (descontar)") en comentario_admin. Los adelantos
+        // puros en efectivo quedan como "Adelanto". Se limpian tabs/saltos para no
+        // romper el TSV que se pega en Excel.
+        const descServicio = a.comentario_admin?.replace(/[\t\n\r]+/g, ' ').trim()
+        const descripcion = a.tipo === 'servicio' && descServicio ? descServicio : 'Adelanto'
+        return [fecha, a.empleado_nombre, descripcion, monto].join('\t')
       })
       .join('\n')
     if (!filas) return
