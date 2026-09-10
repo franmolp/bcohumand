@@ -65,9 +65,19 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
 
   if (isAdmin) {
-    const { usuario_id, empleado_nombre, monto, comentario_admin } = body
+    const { usuario_id, empleado_nombre, monto, comentario_admin, tipo, fecha } = body
     if (!usuario_id || !empleado_nombre || !monto) {
       return NextResponse.json({ error: 'Faltan datos' }, { status: 400 })
+    }
+
+    // Tipo 'servicio' (ej. compra de remera/buzo, o consumo) no cuenta contra el
+    // límite de adelantos en efectivo de la empleada. Cualquier otro valor = efectivo.
+    const tipoFinal = tipo === 'servicio' ? 'servicio' : 'efectivo'
+    // Fecha opcional: se guarda en created_at para que el adelanto caiga en el período
+    // correcto y se muestre esa fecha. Al mediodía ART para no correrse de día por TZ.
+    let createdAt: string | undefined
+    if (typeof fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+      createdAt = new Date(`${fecha}T12:00:00-03:00`).toISOString()
     }
 
     const { data, error } = await supabaseAdmin
@@ -78,10 +88,12 @@ export async function POST(req: NextRequest) {
         monto: Number(monto),
         monto_aprobado: Number(monto),
         estado: 'approved',
+        tipo: tipoFinal,
         comentario_admin: comentario_admin || null,
         aprobado_por: session.id,
         creado_por_admin: true,
         fecha_respuesta: new Date().toISOString(),
+        ...(createdAt ? { created_at: createdAt } : {}),
       })
       .select()
       .single()

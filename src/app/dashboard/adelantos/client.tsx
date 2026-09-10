@@ -34,6 +34,15 @@ const DEFAULT_CONFIG: Config = { monto_minimo: 10000, monto_maximo: 100000, dia_
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 const MESES_CORTOS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
 
+// Precios de indumentaria (editables al cargar por si cambian)
+const PRECIO_REMERA = 18000
+const PRECIO_BUZO = 30000
+
+// Fecha de hoy en Argentina como YYYY-MM-DD (para el input date)
+function todayISO() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+}
+
 function fmtMonto(n: number) { return '$' + Math.round(n).toLocaleString('es-AR') }
 function fmtFecha(iso: string) {
   const d = new Date(iso)
@@ -123,8 +132,20 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
   const [createNombre, setCreateNombre] = useState('')
   const [createMonto, setCreateMonto] = useState('')
   const [createComment, setCreateComment] = useState('')
+  const [createFecha, setCreateFecha] = useState(todayISO())
+  const [createTipo, setCreateTipo] = useState<'efectivo' | 'servicio'>('efectivo')
+  const [createConcepto, setCreateConcepto] = useState<'remera' | 'buzo' | 'otro'>('otro')
   const [createSubmitting, setCreateSubmitting] = useState(false)
   const [createError, setCreateError] = useState('')
+
+  // Elegir concepto en el registro admin: remera/buzo autocompletan monto + nota y
+  // se cargan como "servicio" (no cuentan contra el límite de adelantos en efectivo).
+  function elegirConcepto(c: 'remera' | 'buzo' | 'otro') {
+    setCreateConcepto(c)
+    if (c === 'remera') { setCreateMonto(formatMiles(String(PRECIO_REMERA))); setCreateComment('Remera'); setCreateTipo('servicio') }
+    else if (c === 'buzo') { setCreateMonto(formatMiles(String(PRECIO_BUZO))); setCreateComment('Buzo'); setCreateTipo('servicio') }
+    else { setCreateTipo('efectivo') }
+  }
 
   // Admin: config edit
   const [configEdit, setConfigEdit] = useState<Config>(DEFAULT_CONFIG)
@@ -228,11 +249,12 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
       const res = await fetch('/api/adelantos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usuario_id: createUserId, empleado_nombre: createNombre, monto: Number(createMonto.replace(/\./g, '')), comentario_admin: createComment || null }),
+        body: JSON.stringify({ usuario_id: createUserId, empleado_nombre: createNombre, monto: Number(createMonto.replace(/\./g, '')), comentario_admin: createComment || null, tipo: createTipo, fecha: createFecha }),
       })
       const data = await res.json()
       if (!res.ok) { setCreateError(data.error || 'Error al registrar'); return }
       setShowCreate(false); setCreateUserId(''); setCreateNombre(''); setCreateMonto(''); setCreateComment('')
+      setCreateFecha(todayISO()); setCreateTipo('efectivo'); setCreateConcepto('otro')
       if (tab === 'mes') loadAdelantos()
     } catch { setCreateError('Error de conexión') }
     finally { setCreateSubmitting(false) }
@@ -589,6 +611,17 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
               <form onSubmit={handleCreate}>
                 <div className="p-5 space-y-3">
                   <div>
+                    <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Concepto</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([['remera', 'Remera'], ['buzo', 'Buzo'], ['otro', 'Otro']] as const).map(([val, lbl]) => (
+                        <button key={val} type="button" onClick={() => elegirConcepto(val)}
+                          className={`py-2 rounded-xl text-[13px] font-semibold border cursor-pointer transition-colors ${createConcepto === val ? 'bg-[image:var(--gradient)] text-white border-transparent' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+                          {lbl}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
                     <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Empleado</label>
                     {usuarios.length > 0 ? (
                       <select value={createUserId}
@@ -609,6 +642,11 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
                       <input type="text" inputMode="numeric" value={createMonto} onChange={e => setCreateMonto(formatMiles(e.target.value))} placeholder="0" required
                         className="w-full border border-gray-200 rounded-xl pl-7 pr-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
                     </div>
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Fecha</label>
+                    <input type="date" value={createFecha} onChange={e => setCreateFecha(e.target.value)} required
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] cursor-pointer" />
                   </div>
                   <div>
                     <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Nota (opcional)</label>
