@@ -34,6 +34,11 @@ type Config = {
 
 const PRECIO_REMERA = 18000
 const PRECIO_BUZO = 30000
+const CONCEPTOS = [
+  { val: 'remera' as const, lbl: 'Remera' },
+  { val: 'buzo' as const, lbl: 'Buzo' },
+  { val: 'otro' as const, lbl: 'Otro' },
+]
 const DEFAULT_CONFIG: Config = { monto_minimo: 10000, monto_maximo: 100000, dia_habilitacion: 15, max_por_mes: 1, precio_remera: PRECIO_REMERA, precio_buzo: PRECIO_BUZO }
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 const MESES_CORTOS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
@@ -102,6 +107,9 @@ function TipoBadge({ tipo }: { tipo: 'efectivo' | 'servicio' }) {
 
 export default function AdelantosClient({ user }: { user: SessionUser }) {
   const isAdmin = user.rol === 'admin' || user.rol === 'Admin'
+  const isEncargada = user.rol === 'Encargada'
+  // Admin registra cualquier adelanto; la encargada solo puede cargar remera/buzo.
+  const puedeRegistrar = isAdmin || isEncargada
 
   const [tab, setTab] = useState<'pendientes' | 'mes' | 'ajustes'>('pendientes')
   const [mesFiltro, setMesFiltro] = useState(getMesStr())
@@ -176,9 +184,9 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
   }, [])
 
   useEffect(() => {
-    if (!isAdmin) return
+    if (!puedeRegistrar) return
     fetch('/api/adelantos/usuarios').then(r => r.json()).then(d => { setUsuarios(Array.isArray(d) ? d : []) }).catch(() => {})
-  }, [isAdmin])
+  }, [puedeRegistrar])
 
   function openAction(a: Adelanto, type: 'approve' | 'reject' | 'delete' | 'cancel') {
     setActionAdelanto(a)
@@ -244,12 +252,14 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
     setCreateError('')
+    // La encargada solo puede cargar remera/buzo
+    if (!isAdmin && createConcepto === 'otro') { setCreateError('Elegí remera o buzo'); return }
     setCreateSubmitting(true)
     try {
       const res = await fetch('/api/adelantos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usuario_id: createUserId, empleado_nombre: createNombre, monto: Number(createMonto.replace(/\./g, '')), comentario_admin: createComment || null, tipo: createTipo, fecha: createFecha }),
+        body: JSON.stringify({ usuario_id: createUserId, empleado_nombre: createNombre, monto: Number(createMonto.replace(/\./g, '')), comentario_admin: createComment || null, tipo: createTipo, fecha: createFecha, concepto: createConcepto }),
       })
       const data = await res.json()
       if (!res.ok) { setCreateError(data.error || 'Error al registrar'); return }
@@ -381,6 +391,80 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
               : 'Cancelar solicitud'}
           </button>
         </div>
+      </div>
+    </div>,
+    document.body
+  ) : null
+
+  // Modal de registro (admin: cualquier concepto y monto editable · encargada: solo
+  // remera/buzo, monto fijo del config y sin nota). Se usa en la vista admin y en la
+  // de la encargada.
+  const CreateModal = showCreate ? createPortal(
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowCreate(false)}>
+      <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="text-[16px] font-bold">{isAdmin ? 'Registrar adelanto' : 'Registrar remera / buzo'}</h3>
+          <button onClick={() => setShowCreate(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 cursor-pointer text-gray-400"><IconX size={16} /></button>
+        </div>
+        <form onSubmit={handleCreate}>
+          <div className="p-5 space-y-3">
+            <div>
+              <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Concepto</label>
+              <div className={`grid ${isAdmin ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
+                {CONCEPTOS.filter(c => isAdmin || c.val !== 'otro').map(({ val, lbl }) => (
+                  <button key={val} type="button" onClick={() => elegirConcepto(val)}
+                    className={`py-2 rounded-xl text-[13px] font-semibold border cursor-pointer transition-colors ${createConcepto === val ? 'bg-[image:var(--gradient)] text-white border-transparent' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Empleado</label>
+              {usuarios.length > 0 ? (
+                <select value={createUserId}
+                  onChange={e => { const u = usuarios.find(u => u.id === e.target.value); setCreateUserId(e.target.value); setCreateNombre(u?.nombre ?? '') }}
+                  required className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] bg-white cursor-pointer">
+                  <option value="">Seleccionar empleado</option>
+                  {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+                </select>
+              ) : (
+                <input type="text" value={createNombre} onChange={e => setCreateNombre(e.target.value)} placeholder="Nombre del empleado" required
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
+              )}
+            </div>
+            <div>
+              <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Monto</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-gray-400 font-medium">$</span>
+                <input type="text" inputMode="numeric" value={createMonto} onChange={e => setCreateMonto(formatMiles(e.target.value))} placeholder="0" required
+                  disabled={!isAdmin}
+                  className={`w-full border border-gray-200 rounded-xl pl-7 pr-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] ${!isAdmin ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`} />
+              </div>
+              {!isAdmin && <p className="text-[11px] text-gray-400 mt-1">Precio fijo (se configura en Ajustes)</p>}
+            </div>
+            <div>
+              <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Fecha</label>
+              <input type="date" value={createFecha} onChange={e => setCreateFecha(e.target.value)} required
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] cursor-pointer" />
+              <p className="text-[11px] text-gray-400 mt-1">De cuándo es la prenda. El descuento se aplica en el mes en curso.</p>
+            </div>
+            {isAdmin && (
+              <div>
+                <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Nota (opcional)</label>
+                <input type="text" value={createComment} onChange={e => setCreateComment(e.target.value)} placeholder="Ej: Adelanto quincena"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
+              </div>
+            )}
+            {createError && <p className="text-[12px] text-red-500">{createError}</p>}
+          </div>
+          <div className="flex gap-2 px-5 pb-5 pt-1">
+            <button type="button" onClick={() => setShowCreate(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-[14px] text-gray-500 cursor-pointer hover:bg-gray-50">Cancelar</button>
+            <button type="submit" disabled={createSubmitting} className="flex-1 py-2.5 bg-[image:var(--gradient)] text-white text-[14px] font-semibold rounded-xl cursor-pointer disabled:opacity-60">
+              {createSubmitting ? '...' : 'Registrar'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>,
     document.body
@@ -621,72 +705,7 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
           </form>
         )}
 
-        {/* Create modal */}
-        {showCreate && createPortal(
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowCreate(false)}>
-            <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                <h3 className="text-[16px] font-bold">Registrar adelanto</h3>
-                <button onClick={() => setShowCreate(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 cursor-pointer text-gray-400"><IconX size={16} /></button>
-              </div>
-              <form onSubmit={handleCreate}>
-                <div className="p-5 space-y-3">
-                  <div>
-                    <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Concepto</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {([['remera', 'Remera'], ['buzo', 'Buzo'], ['otro', 'Otro']] as const).map(([val, lbl]) => (
-                        <button key={val} type="button" onClick={() => elegirConcepto(val)}
-                          className={`py-2 rounded-xl text-[13px] font-semibold border cursor-pointer transition-colors ${createConcepto === val ? 'bg-[image:var(--gradient)] text-white border-transparent' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
-                          {lbl}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Empleado</label>
-                    {usuarios.length > 0 ? (
-                      <select value={createUserId}
-                        onChange={e => { const u = usuarios.find(u => u.id === e.target.value); setCreateUserId(e.target.value); setCreateNombre(u?.nombre ?? '') }}
-                        required className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] bg-white cursor-pointer">
-                        <option value="">Seleccionar empleado</option>
-                        {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                      </select>
-                    ) : (
-                      <input type="text" value={createNombre} onChange={e => setCreateNombre(e.target.value)} placeholder="Nombre del empleado" required
-                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
-                    )}
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Monto</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-gray-400 font-medium">$</span>
-                      <input type="text" inputMode="numeric" value={createMonto} onChange={e => setCreateMonto(formatMiles(e.target.value))} placeholder="0" required
-                        className="w-full border border-gray-200 rounded-xl pl-7 pr-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Fecha</label>
-                    <input type="date" value={createFecha} onChange={e => setCreateFecha(e.target.value)} required
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] cursor-pointer" />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Nota (opcional)</label>
-                    <input type="text" value={createComment} onChange={e => setCreateComment(e.target.value)} placeholder="Ej: Adelanto quincena"
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
-                  </div>
-                  {createError && <p className="text-[12px] text-red-500">{createError}</p>}
-                </div>
-                <div className="flex gap-2 px-5 pb-5 pt-1">
-                  <button type="button" onClick={() => setShowCreate(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-[14px] text-gray-500 cursor-pointer hover:bg-gray-50">Cancelar</button>
-                  <button type="submit" disabled={createSubmitting} className="flex-1 py-2.5 bg-[image:var(--gradient)] text-white text-[14px] font-semibold rounded-xl cursor-pointer disabled:opacity-60">
-                    {createSubmitting ? '...' : 'Registrar'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>,
-          document.body
-        )}
+        {CreateModal}
 
         {ActionModal}
       </div>
@@ -716,18 +735,26 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
   return (
     <div className="py-4 fade-in space-y-4">
       <div className="space-y-2.5">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
-            <IconDollar size={18} className="text-white" />
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-[image:var(--gradient)] flex items-center justify-center flex-shrink-0 shadow-sm">
+              <IconDollar size={18} className="text-white" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-[17px] font-bold text-[var(--text)]">Mis Adelantos</h1>
+              {!loading && (
+                <p className="text-xs text-[var(--text-muted)]">
+                  {thisMesUsados} de {config.max_por_mes} adelanto{config.max_por_mes !== 1 ? 's' : ''} usados este mes
+                </p>
+              )}
+            </div>
           </div>
-          <div className="min-w-0">
-            <h1 className="text-[17px] font-bold text-[var(--text)]">Mis Adelantos</h1>
-            {!loading && (
-              <p className="text-xs text-[var(--text-muted)]">
-                {thisMesUsados} de {config.max_por_mes} adelanto{config.max_por_mes !== 1 ? 's' : ''} usados este mes
-              </p>
-            )}
-          </div>
+          {isEncargada && (
+            <button onClick={() => { setShowCreate(true); setCreateError(''); setCreateConcepto('otro'); setCreateMonto(''); setCreateComment('') }}
+              className="flex items-center gap-1.5 px-3 py-2 bg-[image:var(--gradient)] text-white text-[13px] font-semibold rounded-xl cursor-pointer flex-shrink-0">
+              <IconPlus size={15} /> Registrar
+            </button>
+          )}
         </div>
         <div className="inline-flex items-center gap-1.5 text-[12px] text-gray-400 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-100 whitespace-nowrap">
           <IconAlertCircle size={13} className="flex-shrink-0" />
@@ -832,6 +859,7 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
         </div>
       )}
 
+      {CreateModal}
       {ActionModal}
     </div>
   )

@@ -64,20 +64,41 @@ export async function POST(req: NextRequest) {
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
   const body = await req.json()
 
-  if (isAdmin) {
-    const { usuario_id, empleado_nombre, monto, comentario_admin, tipo, fecha } = body
-    if (!usuario_id || !empleado_nombre || !monto) {
+  const isEncargada = session.rol === 'Encargada'
+  if (isAdmin || isEncargada) {
+    const { usuario_id, empleado_nombre, monto, comentario_admin, tipo, fecha, concepto } = body
+    if (!usuario_id || !empleado_nombre) {
       return NextResponse.json({ error: 'Faltan datos' }, { status: 400 })
     }
 
-    // Tipo 'servicio' (ej. compra de remera/buzo, o consumo) no cuenta contra el
-    // límite de adelantos en efectivo de la empleada. Cualquier otro valor = efectivo.
-    const tipoFinal = tipo === 'servicio' ? 'servicio' : 'efectivo'
-    // Fecha opcional: se guarda en created_at para que el adelanto caiga en el período
-    // correcto y se muestre esa fecha. Al mediodía ART para no correrse de día por TZ.
-    let createdAt: string | undefined
+    let montoFinal: number
+    let tipoFinal: 'efectivo' | 'servicio'
+    let nota: string | null
+
+    if (!isAdmin) {
+      // La encargada SOLO puede registrar remera/buzo, y con el precio configurado
+      // (no elige el monto). El precio se resuelve en el servidor, no se confía en el front.
+      const cfg = await getConfig()
+      if (concepto === 'remera') { montoFinal = cfg.precio_remera ?? DEFAULT_CONFIG.precio_remera; nota = 'Remera' }
+      else if (concepto === 'buzo') { montoFinal = cfg.precio_buzo ?? DEFAULT_CONFIG.precio_buzo; nota = 'Buzo' }
+      else return NextResponse.json({ error: 'Solo podés registrar remeras o buzos' }, { status: 403 })
+      tipoFinal = 'servicio'
+    } else {
+      if (!monto) return NextResponse.json({ error: 'Faltan datos' }, { status: 400 })
+      montoFinal = Number(monto)
+      // Tipo 'servicio' (remera/buzo/consumo) no cuenta contra el límite de adelantos
+      // en efectivo de la empleada. Cualquier otro valor = efectivo.
+      tipoFinal = tipo === 'servicio' ? 'servicio' : 'efectivo'
+      nota = comentario_admin || null
+    }
+
+    // La fecha es SOLO informativa (de cuándo es la prenda): el descuento siempre se
+    // aplica en el período en curso, así que created_at queda en "ahora". La fecha se
+    // agrega a la nota para que se sepa de cuándo es el descuento.
+    let notaFinal = nota
     if (typeof fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
-      createdAt = new Date(`${fecha}T12:00:00-03:00`).toISOString()
+      const [yy, mm, dd] = fecha.split('-')
+      notaFinal = [nota, `${Number(dd)}/${Number(mm)}/${yy}`].filter(Boolean).join(' · ')
     }
 
     const { data, error } = await supabaseAdmin
@@ -85,15 +106,14 @@ export async function POST(req: NextRequest) {
       .insert({
         usuario_id,
         empleado_nombre,
-        monto: Number(monto),
-        monto_aprobado: Number(monto),
+        monto: montoFinal,
+        monto_aprobado: montoFinal,
         estado: 'approved',
         tipo: tipoFinal,
-        comentario_admin: comentario_admin || null,
+        comentario_admin: notaFinal || null,
         aprobado_por: session.id,
         creado_por_admin: true,
         fecha_respuesta: new Date().toISOString(),
-        ...(createdAt ? { created_at: createdAt } : {}),
       })
       .select()
       .single()
@@ -103,7 +123,7 @@ export async function POST(req: NextRequest) {
     await crearNotificacion({
       usuario_id,
       titulo: 'Se registró un adelanto',
-      mensaje: `$${Number(monto).toLocaleString('es-AR')}${comentario_admin ? ` · ${comentario_admin}` : ''}`,
+      mensaje: `$${montoFinal.toLocaleString('es-AR')}${notaFinal ? ` · ${notaFinal}` : ''}`,
       tipo: 'adelanto_aprobado',
     })
 

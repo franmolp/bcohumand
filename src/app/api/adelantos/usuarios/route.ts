@@ -5,8 +5,8 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
-  if (!isAdmin) return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
+  const puedeVer = ['admin', 'Admin', 'Encargada'].includes(session.rol)
+  if (!puedeVer) return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
 
   const { data, error } = await supabaseAdmin
     .from('usuarios')
