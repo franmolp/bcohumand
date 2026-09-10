@@ -28,15 +28,15 @@ type Config = {
   monto_maximo: number
   dia_habilitacion: number
   max_por_mes: number
+  precio_remera: number
+  precio_buzo: number
 }
 
-const DEFAULT_CONFIG: Config = { monto_minimo: 10000, monto_maximo: 100000, dia_habilitacion: 15, max_por_mes: 1 }
-const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-const MESES_CORTOS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
-
-// Precios de indumentaria (editables al cargar por si cambian)
 const PRECIO_REMERA = 18000
 const PRECIO_BUZO = 30000
+const DEFAULT_CONFIG: Config = { monto_minimo: 10000, monto_maximo: 100000, dia_habilitacion: 15, max_por_mes: 1, precio_remera: PRECIO_REMERA, precio_buzo: PRECIO_BUZO }
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+const MESES_CORTOS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
 
 // Fecha de hoy en Argentina como YYYY-MM-DD (para el input date)
 function todayISO() {
@@ -142,9 +142,9 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
   // se cargan como "servicio" (no cuentan contra el límite de adelantos en efectivo).
   function elegirConcepto(c: 'remera' | 'buzo' | 'otro') {
     setCreateConcepto(c)
-    if (c === 'remera') { setCreateMonto(formatMiles(String(PRECIO_REMERA))); setCreateComment('Remera'); setCreateTipo('servicio') }
-    else if (c === 'buzo') { setCreateMonto(formatMiles(String(PRECIO_BUZO))); setCreateComment('Buzo'); setCreateTipo('servicio') }
-    else { setCreateTipo('efectivo') }
+    if (c === 'remera') { setCreateMonto(formatMiles(String(config.precio_remera ?? PRECIO_REMERA))); setCreateComment('Remera'); setCreateTipo('servicio') }
+    else if (c === 'buzo') { setCreateMonto(formatMiles(String(config.precio_buzo ?? PRECIO_BUZO))); setCreateComment('Buzo'); setCreateTipo('servicio') }
+    else { setCreateMonto(''); setCreateComment(''); setCreateTipo('efectivo') }
   }
 
   // Admin: config edit
@@ -589,6 +589,27 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
                       onChange={e => setConfigEdit(c => ({ ...c, max_por_mes: Number(e.target.value) }))}
                       min={1} max={10} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
                     <p className="text-[11px] text-gray-400 mt-1">por empleado</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="h-px bg-gray-100" />
+
+              <div>
+                <p className="text-[13px] font-semibold text-gray-700 mb-0.5">Precios de indumentaria</p>
+                <p className="text-[11px] text-gray-400 mb-3">Se cargan por defecto al registrar una remera/buzo (editable en cada carga).</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Remera ($)</label>
+                    <input type="number" value={configEdit.precio_remera ?? PRECIO_REMERA}
+                      onChange={e => setConfigEdit(c => ({ ...c, precio_remera: Number(e.target.value) }))}
+                      min={0} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide mb-1.5 block">Buzo ($)</label>
+                    <input type="number" value={configEdit.precio_buzo ?? PRECIO_BUZO}
+                      onChange={e => setConfigEdit(c => ({ ...c, precio_buzo: Number(e.target.value) }))}
+                      min={0} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]" />
                   </div>
                 </div>
               </div>

@@ -8,6 +8,8 @@ export const DEFAULT_CONFIG = {
   monto_maximo: 100000,
   dia_habilitacion: 15,
   max_por_mes: 1,
+  precio_remera: 18000,
+  precio_buzo: 30000,
 }
 
 export async function GET() {
