@@ -349,9 +349,17 @@ export async function GET(req: NextRequest) {
       // Una asignación explícita a empleada es prioritaria sobre el matching por texto
       const asignadoA = salidasAsignadasMap.get(claveMovimiento(mv.movimiento_en, mv.monto))
       if (asignadoA) return { ...mv, explicado: true, matchTexto: undefined as string | undefined, asignadoA }
-      const match = candidatosSalida.find(c =>
+      let match = candidatosSalida.find(c =>
         !c.usado && Math.abs(c.monto - mv.monto) < 1 && textosRelacionados(mv.comentario ?? '', c.texto)
       )
+      // Fallback por monto único: si el texto no relacionó pero hay UN SOLO sobre/compra
+      // sin usar de ese mismo importe ese día, se empareja igual. Los sobres/compras se
+      // cargan a mano justamente para conciliar la salida del mismo monto; el texto solo
+      // hace falta para desempatar cuando hay varios candidatos del mismo importe.
+      if (!match) {
+        const mismoMonto = candidatosSalida.filter(c => !c.usado && Math.abs(c.monto - mv.monto) < 1)
+        if (mismoMonto.length === 1) match = mismoMonto[0]
+      }
       if (match) {
         match.usado = true
         if (match.kind === 'sobre') sobresFusionados.add(match.refId as string)
