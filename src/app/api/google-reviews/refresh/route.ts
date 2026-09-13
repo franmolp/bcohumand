@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getConcursoConfig, armarEmpleadas, detectarEmpleadas, normalizar } from '@/lib/concurso-google'
 
 type SerpReview = {
+  review_id?: string
+  link?: string
   user?: { name?: string; thumbnail?: string }
   rating?: number
   date?: string
@@ -18,6 +21,98 @@ async function fetchDataId(key: string): Promise<string | null> {
   return (data.local_results?.[0]?.data_id as string) ?? null
 }
 
+// Trae una página de reseñas (opcionalmente con token de paginación) y el token
+// de la siguiente página (null si es la última).
+async function fetchPagina(dataId: string, key: string, token: string | null): Promise<{ reviews: SerpReview[]; next: string | null }> {
+  let url = `https://serpapi.com/search.json?engine=google_maps_reviews&data_id=${dataId}&hl=es&sort_by=newestFirst&api_key=${key}`
+  if (token) url += `&next_page_token=${encodeURIComponent(token)}`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error('serpapi_error')
+  const data = await res.json()
+  const reviews: SerpReview[] = data.reviews ?? data.reviews_results?.reviews ?? []
+  const next = (data.serpapi_pagination?.next_page_token as string) ?? null
+  return { reviews, next }
+}
+
+// Clave estable por reseña: cada persona deja como mucho una reseña por lugar, así
+// que si Google/SerpAPI no da un id, el nombre del autor sirve como clave (y no
+// incluye el texto, que puede cambiar si la clienta edita → así tomamos la original).
+function reviewKey(r: SerpReview): string {
+  return r.review_id || r.link || `autor:${normalizar(r.user?.name ?? '')}`
+}
+
+function mapReview(r: SerpReview) {
+  return {
+    author: r.user?.name ?? 'Cliente',
+    avatar: r.user?.thumbnail ?? null,
+    rating: r.rating ?? 5,
+    text: r.snippet ?? '',
+    date: r.date ?? '',
+  }
+}
+
+// Acumula las reseñas nuevas del mes del concurso (deduplicadas por review_key),
+// detectando qué empleadas nombra cada una. Empieza por la página ya traída para
+// el carrusel y sigue paginando hasta alcanzar reseñas ya guardadas (o tope de
+// seguridad), para no gastar créditos de más.
+async function acumularMenciones(
+  primeraPagina: SerpReview[],
+  primerToken: string | null,
+  dataId: string,
+  key: string,
+  mes: string,
+  aliases: Record<string, string[]>,
+) {
+  const { data: usuarios } = await supabaseAdmin
+    .from('usuarios').select('id, nombre').eq('estado_cuenta', 'activo')
+  const empleadas = armarEmpleadas(usuarios ?? [], aliases)
+
+  const { data: existentes } = await supabaseAdmin
+    .from('google_menciones').select('review_key').eq('mes', mes)
+  const conocidas = new Set((existentes ?? []).map(r => r.review_key as string))
+
+  const nuevas: Record<string, unknown>[] = []
+  let pagina = primeraPagina
+  let token = primerToken
+  let vueltas = 0
+
+  while (true) {
+    let nuevasEnPagina = 0
+    for (const r of pagina) {
+      if ((r.rating ?? 0) < 4 || !r.snippet?.trim()) continue
+      const rk = reviewKey(r)
+      if (conocidas.has(rk)) continue
+      conocidas.add(rk)
+      nuevasEnPagina++
+      const detectados = detectarEmpleadas(r.snippet, empleadas)
+      nuevas.push({
+        review_key: rk,
+        author: r.user?.name ?? 'Cliente',
+        avatar: r.user?.thumbnail ?? null,
+        rating: r.rating ?? 5,
+        texto: r.snippet,
+        fecha_texto: r.date ?? '',
+        mes,
+        asignados: detectados,
+        detectados,
+        revisado: false,
+      })
+    }
+    vueltas++
+    // Newest-first: si una página no trajo nada nuevo, ya alcanzamos lo guardado.
+    if (nuevasEnPagina === 0 || !token || vueltas >= 6) break
+    const sig = await fetchPagina(dataId, key, token)
+    pagina = sig.reviews
+    token = sig.next
+  }
+
+  if (nuevas.length > 0) {
+    // ignoreDuplicates por si otra corrida insertó la misma review_key en paralelo
+    await supabaseAdmin.from('google_menciones').upsert(nuevas, { onConflict: 'review_key', ignoreDuplicates: true })
+  }
+  return nuevas.length
+}
+
 export async function ejecutarGoogleReviewsRefresh() {
   const key = process.env.SERPAPI_KEY
   if (!key) throw new Error('no_key')
@@ -25,30 +120,31 @@ export async function ejecutarGoogleReviewsRefresh() {
   const dataId = await fetchDataId(key)
   if (!dataId) throw new Error('no_place')
 
-  const url = `https://serpapi.com/search.json?engine=google_maps_reviews&data_id=${dataId}&hl=es&sort_by=newestFirst&api_key=${key}`
-  const res = await fetch(url)
-  if (!res.ok) throw new Error('serpapi_error')
+  const { reviews: pagina1, next } = await fetchPagina(dataId, key, null)
 
-  const data = await res.json()
-  const raw: SerpReview[] = data.reviews ?? data.reviews_results?.reviews ?? []
-  const reviews = raw
+  // Snapshot del carrusel (las ~10 más nuevas 4-5★ con texto) — igual que antes
+  const reviews = pagina1
     .filter(r => (r.rating ?? 0) >= 4 && r.snippet?.trim())
-    .map(r => ({
-      author: r.user?.name ?? 'Cliente',
-      avatar: r.user?.thumbnail ?? null,
-      rating: r.rating ?? 5,
-      text: r.snippet ?? '',
-      date: r.date ?? '',
-    }))
+    .map(mapReview)
 
-  if (reviews.length === 0) return { updated: 0 }
+  if (reviews.length > 0) {
+    await supabaseAdmin.from('google_reviews').delete().gt('id', 0)
+    const { error } = await supabaseAdmin.from('google_reviews').insert(reviews)
+    if (error) throw new Error(error.message)
+  }
 
-  // Reemplaza todas las reseñas con el snapshot fresco
-  await supabaseAdmin.from('google_reviews').delete().gt('id', 0)
-  const { error } = await supabaseAdmin.from('google_reviews').insert(reviews)
+  // Concurso de menciones: solo si está activo
+  let mencionesNuevas = 0
+  try {
+    const cfg = await getConcursoConfig()
+    if (cfg.activo && cfg.mes) {
+      mencionesNuevas = await acumularMenciones(pagina1, next, dataId, key, cfg.mes, cfg.aliases)
+    }
+  } catch (e) {
+    console.error('[concurso-google] acumular menciones falló:', e)
+  }
 
-  if (error) throw new Error(error.message)
-  return { updated: reviews.length }
+  return { updated: reviews.length, mencionesNuevas }
 }
 
 // Ruta standalone (debug/manual) — el cron de Vercel llama a /api/cron/diario

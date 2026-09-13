@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import type { SessionUser } from '@/types'
 import {
   IconTrophy, IconCheck, IconX, IconEyeOff, IconChevronLeft, IconChevronRight, IconEdit,
+  IconStar, IconSparkles,
 } from '@/components/ui/Icons'
 
 type Pilar = 'salvavidas' | 'buena_vibra' | 'iniciativa'
@@ -894,14 +895,212 @@ function TabModerar({ onModerado }: { onModerado: () => void }) {
   )
 }
 
+// ─── Estrellas de Google (concurso de menciones) ─────────────────────────────
+type RankingEstrella = { id: string; nombre: string; foto: string | null; menciones: number }
+type PubEstrellas = { activo: boolean; mes?: string; totalReviews?: number; ranking?: RankingEstrella[] }
+type ReviewAdmin = { id: number; author: string; avatar: string | null; rating: number; texto: string; fecha_texto: string; asignados: string[]; detectados: string[]; revisado: boolean }
+type EmpleadaConc = { id: string; nombre: string; foto_perfil: string | null }
+type AdminEstrellas = { config: { activo: boolean; mes: string; aliases: Record<string, string[]> }; mes: string; reviews: ReviewAdmin[]; empleadas: EmpleadaConc[] }
+
+const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+function mesLabelYYYYMM(m: string): string {
+  const [y, mm] = m.split('-').map(Number)
+  return m ? `${MESES_LARGO[(mm || 1) - 1]} ${y}` : ''
+}
+
+function AvatarConc({ foto, nombre, size = 40 }: { foto: string | null; nombre: string; size?: number }) {
+  if (foto) return <img src={foto} alt={nombre} className="rounded-full object-cover flex-shrink-0" style={{ width: size, height: size }} />
+  return (
+    <div className="rounded-full bg-gray-200 text-gray-500 font-semibold flex items-center justify-center flex-shrink-0"
+      style={{ width: size, height: size, fontSize: size * 0.4 }}>
+      {(nombre[0] ?? '?').toUpperCase()}
+    </div>
+  )
+}
+
+function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
+  const [pub, setPub] = useState<PubEstrellas | null>(null)
+  const [admin, setAdmin] = useState<AdminEstrellas | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [gestion, setGestion] = useState(false)
+  const [aliasText, setAliasText] = useState<Record<string, string>>({})
+
+  const cargar = useCallback(async () => {
+    const reqs: Promise<unknown>[] = [fetch('/api/concurso-google').then(r => r.json())]
+    if (isAdmin) reqs.push(fetch('/api/concurso-google/admin').then(r => r.json()))
+    const [p, a] = await Promise.all(reqs) as [PubEstrellas, AdminEstrellas | undefined]
+    setPub(p)
+    if (isAdmin && a) {
+      setAdmin(a)
+      const at: Record<string, string> = {}
+      for (const e of a.empleadas) at[e.id] = (a.config.aliases?.[e.id] ?? []).join(', ')
+      setAliasText(at)
+    }
+    setLoading(false)
+  }, [isAdmin])
+  useEffect(() => { cargar() }, [cargar])
+
+  async function putConfig(body: Record<string, unknown>) {
+    setSaving(true)
+    await fetch('/api/concurso-google/admin', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {})
+    await cargar()
+    setSaving(false)
+  }
+  function guardarApodos() {
+    const aliases: Record<string, string[]> = {}
+    for (const [id, txt] of Object.entries(aliasText)) {
+      const arr = txt.split(',').map(s => s.trim()).filter(Boolean)
+      if (arr.length) aliases[id] = arr
+    }
+    putConfig({ aliases })
+  }
+  async function setAsignados(reviewId: number, asignados: string[]) {
+    setAdmin(prev => prev ? { ...prev, reviews: prev.reviews.map(r => r.id === reviewId ? { ...r, asignados, revisado: true } : r) } : prev)
+    await fetch('/api/concurso-google/admin', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: reviewId, asignados }) }).catch(() => {})
+    fetch('/api/concurso-google').then(r => r.json()).then(setPub).catch(() => {})
+  }
+
+  if (loading) return <div className="py-16 text-center text-[13px] text-gray-400">Cargando…</div>
+
+  const activo = pub?.activo ?? admin?.config.activo ?? false
+  const mes = pub?.mes || admin?.mes || ''
+  const ranking = pub?.ranking ?? []
+  const nombreEmp = new Map((admin?.empleadas ?? []).map(e => [e.id, e.nombre]))
+
+  return (
+    <div className="fade-in space-y-4">
+      {/* Estado apagado */}
+      {!activo && !isAdmin && (
+        <div className="bg-white rounded-2xl border border-gray-100 py-14 text-center px-6">
+          <IconStar size={30} className="mx-auto mb-3 text-gray-200" />
+          <p className="text-sm text-gray-400">El concurso no está activo por ahora</p>
+        </div>
+      )}
+
+      {/* Ranking público */}
+      {activo && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-4 py-3.5 border-b border-gray-50 flex items-center gap-2">
+            <IconStar size={18} className="text-amber-500" />
+            <div>
+              <p className="text-[14px] font-bold text-[var(--text)]">Estrellas de Google · {mesLabelYYYYMM(mes)}</p>
+              <p className="text-[11px] text-gray-400">{pub?.totalReviews ?? 0} reseñas 4-5★ este mes · te suma que te nombren</p>
+            </div>
+          </div>
+          {ranking.length === 0 ? (
+            <p className="text-[13px] text-gray-400 text-center py-10">Todavía nadie fue nombrado este mes</p>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {ranking.map((r, i) => (
+                <div key={r.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <span className={`w-6 text-center text-[15px] font-bold ${i === 0 ? 'text-amber-500' : i === 1 ? 'text-gray-400' : i === 2 ? 'text-amber-700' : 'text-gray-300'}`}>
+                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                  </span>
+                  <AvatarConc foto={r.foto} nombre={r.nombre} size={36} />
+                  <p className="flex-1 min-w-0 text-[14px] font-medium text-[var(--text)] truncate">{r.nombre}</p>
+                  <span className="text-[14px] font-bold text-amber-600">{r.menciones}</span>
+                  <span className="text-[11px] text-gray-400">menc.</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Panel admin */}
+      {isAdmin && admin && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <button onClick={() => setGestion(g => !g)} className="w-full px-4 py-3 flex items-center justify-between cursor-pointer">
+            <span className="text-[13px] font-semibold text-gray-700 flex items-center gap-2"><IconSparkles size={15} className="text-[var(--primary)]" /> Administrar concurso</span>
+            <span className="text-[12px] text-gray-400">{gestion ? 'Ocultar' : 'Abrir'}</span>
+          </button>
+
+          {gestion && (
+            <div className="px-4 pb-4 space-y-4 border-t border-gray-50 pt-3">
+              {/* Switch */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[13px] font-semibold text-gray-700">Concurso activo</p>
+                  <p className="text-[11px] text-gray-400">Apagado: las empleadas no ven nada{admin.config.mes ? ` · mes: ${mesLabelYYYYMM(admin.config.mes)}` : ''}</p>
+                </div>
+                <button onClick={() => putConfig({ activo: !admin.config.activo })} disabled={saving}
+                  className={`w-12 h-7 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${admin.config.activo ? 'bg-green-500' : 'bg-gray-300'}`}>
+                  <span className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all ${admin.config.activo ? 'left-[22px]' : 'left-0.5'}`} />
+                </button>
+              </div>
+
+              {/* Apodos */}
+              <div>
+                <p className="text-[13px] font-semibold text-gray-700 mb-1">Apodos por empleada</p>
+                <p className="text-[11px] text-gray-400 mb-2">Separados por coma (ej. para Luciana: luci, lu). Se detectan además del primer nombre.</p>
+                <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {admin.empleadas.map(e => (
+                    <div key={e.id} className="flex items-center gap-2">
+                      <span className="text-[12px] text-gray-600 w-24 flex-shrink-0 truncate">{e.nombre}</span>
+                      <input value={aliasText[e.id] ?? ''} onChange={ev => setAliasText(a => ({ ...a, [e.id]: ev.target.value }))}
+                        placeholder="apodos…" className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[var(--primary)]" />
+                    </div>
+                  ))}
+                </div>
+                <button onClick={guardarApodos} disabled={saving} className="mt-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[12px] font-semibold rounded-lg cursor-pointer disabled:opacity-60">
+                  {saving ? 'Guardando…' : 'Guardar apodos'}
+                </button>
+              </div>
+
+              {/* Reseñas para revisar */}
+              <div>
+                <p className="text-[13px] font-semibold text-gray-700 mb-2">Reseñas del mes ({admin.reviews.length})</p>
+                <div className="space-y-2">
+                  {admin.reviews.length === 0 && <p className="text-[12px] text-gray-400">Todavía no se capturaron reseñas.</p>}
+                  {admin.reviews.map(rev => {
+                    const sinAsignar = admin.empleadas.filter(e => !rev.asignados.includes(e.id))
+                    return (
+                      <div key={rev.id} className="border border-gray-100 rounded-xl p-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[12px] font-semibold text-gray-700">{rev.author}</span>
+                          <span className="text-[11px] text-amber-500">{'★'.repeat(rev.rating)}</span>
+                          <span className="text-[11px] text-gray-400">{rev.fecha_texto}</span>
+                        </div>
+                        <p className="text-[12px] text-gray-600 mb-2">{rev.texto}</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {rev.asignados.length === 0 && <span className="text-[11px] text-gray-400 italic">Sin mención</span>}
+                          {rev.asignados.map(uid => (
+                            <span key={uid} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100">
+                              {nombreEmp.get(uid) ?? uid}
+                              <button onClick={() => setAsignados(rev.id, rev.asignados.filter(x => x !== uid))} className="cursor-pointer"><IconX size={11} /></button>
+                            </span>
+                          ))}
+                          {sinAsignar.length > 0 && (
+                            <select value="" onChange={e => { if (e.target.value) setAsignados(rev.id, [...rev.asignados, e.target.value]) }}
+                              className="text-[11px] border border-gray-200 rounded-full px-2 py-0.5 bg-white text-gray-500 cursor-pointer outline-none">
+                              <option value="">+ agregar</option>
+                              {sinAsignar.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                            </select>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function ReconocimientosClient({ session }: { session: SessionUser }) {
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
 
-  type Tab = 'mural' | 'medallas' | 'reconocer' | 'moderar'
+  type Tab = 'mural' | 'medallas' | 'reconocer' | 'estrellas' | 'moderar'
   const [tab, setTab] = useState<Tab>('mural')
   const [muralKey, setMuralKey] = useState(0)
   const [pendingCount, setPendingCount] = useState(0)
+  const [concursoActivo, setConcursoActivo] = useState(false)
 
   useEffect(() => {
     if (!isAdmin) return
@@ -911,8 +1110,15 @@ export default function ReconocimientosClient({ session }: { session: SessionUse
       .catch(() => {})
   }, [isAdmin])
 
+  // El concurso de estrellas (menciones en Google) se muestra a todas cuando está
+  // activo; el admin lo ve siempre (para poder prenderlo/administrarlo).
+  useEffect(() => {
+    fetch('/api/concurso-google').then(r => r.json()).then(d => setConcursoActivo(!!d?.activo)).catch(() => {})
+  }, [])
+
   const tabs: { key: Tab; label: string }[] = [
     { key: 'mural',     label: 'Mural' },
+    ...((isAdmin || concursoActivo) ? [{ key: 'estrellas' as Tab, label: 'Estrellas' }] : []),
     { key: 'reconocer', label: 'Reconocer' },
     { key: 'medallas',  label: 'Mis medallas' },
     ...(isAdmin ? [{ key: 'moderar' as Tab, label: 'Moderar' }] : []),
@@ -960,6 +1166,7 @@ export default function ReconocimientosClient({ session }: { session: SessionUse
       {tab === 'mural'     && <TabMural key={muralKey} />}
       {tab === 'medallas'  && <TabMisMedallas />}
       {tab === 'reconocer' && <TabReconocer onEnviado={() => { setMuralKey(k => k + 1); setTab('mural') }} />}
+      {tab === 'estrellas' && <TabEstrellas isAdmin={isAdmin} />}
       {tab === 'moderar'   && isAdmin && <TabModerar onModerado={() => setPendingCount(c => Math.max(0, c - 1))} />}
     </div>
   )
