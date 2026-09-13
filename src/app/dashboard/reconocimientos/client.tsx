@@ -923,6 +923,7 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
   const [admin, setAdmin] = useState<AdminEstrellas | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [trayendo, setTrayendo] = useState(false)
   const [gestion, setGestion] = useState(false)
   const [aliasText, setAliasText] = useState<Record<string, string>>({})
 
@@ -954,6 +955,12 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
       if (arr.length) aliases[id] = arr
     }
     putConfig({ aliases })
+  }
+  async function traerAhora() {
+    setTrayendo(true)
+    await fetch('/api/google-reviews/refresh').catch(() => {})
+    await cargar()
+    setTrayendo(false)
   }
   async function setAsignados(reviewId: number, asignados: string[]) {
     setAdmin(prev => prev ? { ...prev, reviews: prev.reviews.map(r => r.id === reviewId ? { ...r, asignados, revisado: true } : r) } : prev)
@@ -1050,7 +1057,14 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
 
               {/* Reseñas para revisar */}
               <div>
-                <p className="text-[13px] font-semibold text-gray-700 mb-2">Reseñas del mes ({admin.reviews.length})</p>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[13px] font-semibold text-gray-700">Reseñas del mes ({admin.reviews.length})</p>
+                  <button onClick={traerAhora} disabled={trayendo || !admin.config.activo}
+                    title={!admin.config.activo ? 'Activá el concurso primero' : undefined}
+                    className="px-3 py-1.5 bg-[image:var(--gradient)] text-white text-[12px] font-semibold rounded-lg cursor-pointer disabled:opacity-50">
+                    {trayendo ? 'Trayendo…' : 'Traer reseñas ahora'}
+                  </button>
+                </div>
                 <div className="space-y-2">
                   {admin.reviews.length === 0 && <p className="text-[12px] text-gray-400">Todavía no se capturaron reseñas.</p>}
                   {admin.reviews.map(rev => {

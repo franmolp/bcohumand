@@ -31,6 +31,23 @@ export function normalizar(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
+// Heurística sobre la fecha relativa que da Google ("hace una semana", "hace 2
+// meses", "hace un año") para no contar reseñas claramente viejas en la primera
+// carga del mes. Reciente (horas/días/semanas/1 mes) = sí; 2+ meses o años = no.
+// Si no hay fecha o no se reconoce, no se descarta (mejor que el admin la saque).
+export function pareceDelMes(fecha: string): boolean {
+  const f = normalizar(fecha)
+  if (!f) return true
+  if (/(hoy|ayer|minuto|hora|dia|semana)/.test(f)) return true
+  const m = f.match(/hace\s+(\d+|un|una)\s+mes/)
+  if (m) {
+    const n = (m[1] === 'un' || m[1] === 'una') ? 1 : parseInt(m[1])
+    return n <= 1
+  }
+  if (/(ano|year)/.test(f)) return false
+  return true
+}
+
 export type EmpleadaConcurso = { id: string; nombre: string; nombres: string[] }
 
 // Arma, por empleada, los "nombres a buscar": primer nombre + apodos configurados.

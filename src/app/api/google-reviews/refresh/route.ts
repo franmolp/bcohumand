@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getConcursoConfig, armarEmpleadas, detectarEmpleadas, normalizar } from '@/lib/concurso-google'
+import { getConcursoConfig, armarEmpleadas, detectarEmpleadas, normalizar, pareceDelMes } from '@/lib/concurso-google'
 
 type SerpReview = {
   review_id?: string
@@ -80,6 +80,7 @@ async function acumularMenciones(
     let nuevasEnPagina = 0
     for (const r of pagina) {
       if ((r.rating ?? 0) < 4 || !r.snippet?.trim()) continue
+      if (!pareceDelMes(r.date ?? '')) continue // descarta reseñas claramente viejas
       const rk = reviewKey(r)
       if (conocidas.has(rk)) continue
       conocidas.add(rk)
