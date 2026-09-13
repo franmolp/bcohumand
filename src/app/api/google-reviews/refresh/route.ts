@@ -75,6 +75,7 @@ async function acumularMenciones(
   let token = primerToken
   let vueltas = 0
   let total = 0
+  let error: string | null = null
 
   while (true) {
     const nuevas: Record<string, unknown>[] = []
@@ -101,7 +102,8 @@ async function acumularMenciones(
     // Se inserta página por página para no perder lo traído si el request se corta.
     // ignoreDuplicates por si otra corrida insertó la misma review_key en paralelo.
     if (nuevas.length > 0) {
-      await supabaseAdmin.from('google_menciones').upsert(nuevas, { onConflict: 'review_key', ignoreDuplicates: true })
+      const { error: upErr } = await supabaseAdmin.from('google_menciones').upsert(nuevas, { onConflict: 'review_key', ignoreDuplicates: true })
+      if (upErr) { error = upErr.message; break }
       total += nuevas.length
     }
     vueltas++
@@ -112,7 +114,7 @@ async function acumularMenciones(
     token = sig.next
   }
 
-  return total
+  return { insertadas: total, error }
 }
 
 export async function ejecutarGoogleReviewsRefresh() {
@@ -137,16 +139,24 @@ export async function ejecutarGoogleReviewsRefresh() {
 
   // Concurso de menciones: solo si está activo
   let mencionesNuevas = 0
+  let mencionesTotal = 0
+  let mencionesError: string | null = null
   try {
     const cfg = await getConcursoConfig()
     if (cfg.activo && cfg.mes) {
-      mencionesNuevas = await acumularMenciones(pagina1, next, dataId, key, cfg.mes, cfg.aliases)
+      const r = await acumularMenciones(pagina1, next, dataId, key, cfg.mes, cfg.aliases)
+      mencionesNuevas = r.insertadas
+      mencionesError = r.error
+      const { count } = await supabaseAdmin
+        .from('google_menciones').select('*', { count: 'exact', head: true }).eq('mes', cfg.mes)
+      mencionesTotal = count ?? 0
     }
   } catch (e) {
+    mencionesError = e instanceof Error ? e.message : String(e)
     console.error('[concurso-google] acumular menciones falló:', e)
   }
 
-  return { updated: reviews.length, mencionesNuevas }
+  return { updated: reviews.length, mencionesNuevas, mencionesTotal, mencionesError }
 }
 
 // Ruta standalone (debug/manual) — el cron de Vercel llama a /api/cron/diario

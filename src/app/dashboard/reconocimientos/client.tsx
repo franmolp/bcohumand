@@ -963,7 +963,8 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
       const res = await fetch('/api/google-reviews/refresh')
       const d = await res.json().catch(() => ({}))
       if (!res.ok || d.error) setTraerMsg(`Error: ${d.error ?? res.status}`)
-      else setTraerMsg(`Leídas ${d.updated ?? 0} reseñas · ${d.mencionesNuevas ?? 0} nuevas al concurso`)
+      else if (d.mencionesError) setTraerMsg(`Error al guardar: ${d.mencionesError}`)
+      else setTraerMsg(`Leídas ${d.updated ?? 0} · ${d.mencionesNuevas ?? 0} nuevas · ${d.mencionesTotal ?? 0} en total este mes`)
     } catch { setTraerMsg('No se pudo conectar con el servidor') }
     await cargar()
     setTrayendo(false)
