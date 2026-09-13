@@ -925,7 +925,6 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
   const [saving, setSaving] = useState(false)
   const [trayendo, setTrayendo] = useState(false)
   const [traerMsg, setTraerMsg] = useState('')
-  const [gestion, setGestion] = useState(false)
   const [aliasText, setAliasText] = useState<Record<string, string>>({})
 
   const cargar = useCallback(async () => {
@@ -1025,13 +1024,13 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
       {/* Panel admin */}
       {isAdmin && admin && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <button onClick={() => setGestion(g => !g)} className="w-full px-4 py-3 flex items-center justify-between cursor-pointer">
-            <span className="text-[13px] font-semibold text-gray-700 flex items-center gap-2"><IconSparkles size={15} className="text-[var(--primary)]" /> Administrar concurso</span>
-            <span className="text-[12px] text-gray-400">{gestion ? 'Ocultar' : 'Abrir'}</span>
-          </button>
+          <div className="px-4 py-3 flex items-center gap-2 border-b border-gray-50">
+            <IconSparkles size={15} className="text-[var(--primary)]" />
+            <span className="text-[13px] font-semibold text-gray-700">Administrar concurso</span>
+          </div>
 
-          {gestion && (
-            <div className="px-4 pb-4 space-y-4 border-t border-gray-50 pt-3">
+          {(
+            <div className="px-4 pb-4 space-y-4 pt-3">
               {/* Switch */}
               <div className="flex items-center justify-between">
                 <div>

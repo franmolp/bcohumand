@@ -26,3 +26,5 @@ CREATE INDEX IF NOT EXISTS idx_google_menciones_mes ON google_menciones(mes);
 GRANT ALL ON TABLE google_menciones TO authenticated;
 GRANT ALL ON TABLE google_menciones TO service_role;
 GRANT USAGE, SELECT ON SEQUENCE google_menciones_id_seq TO authenticated;
+-- El insert lo hace supabaseAdmin (service_role), así que también necesita la secuencia.
+GRANT USAGE, SELECT ON SEQUENCE google_menciones_id_seq TO service_role;
