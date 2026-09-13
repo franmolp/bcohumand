@@ -26,6 +26,31 @@ export async function setConcursoConfig(cfg: ConcursoConfig): Promise<void> {
   await supabaseAdmin.from('configuracion').upsert({ clave: CLAVE, valor: cfg }, { onConflict: 'clave' })
 }
 
+// Resumen liviano para la card del home: si está activo, el/la líder y totales.
+export type ConcursoResumen =
+  | { activo: false }
+  | { activo: true; mes: string; total: number; lider: { nombre: string; foto: string | null; menciones: number } | null }
+
+export async function getConcursoResumen(): Promise<ConcursoResumen> {
+  const cfg = await getConcursoConfig()
+  if (!cfg.activo || !cfg.mes) return { activo: false }
+
+  const { data: menciones } = await supabaseAdmin.from('google_menciones').select('asignados').eq('mes', cfg.mes)
+  const counts = new Map<string, number>()
+  let total = 0
+  for (const m of menciones ?? []) {
+    total++
+    for (const uid of ((m.asignados as string[]) ?? [])) counts.set(uid, (counts.get(uid) ?? 0) + 1)
+  }
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]
+  let lider: { nombre: string; foto: string | null; menciones: number } | null = null
+  if (top) {
+    const { data: u } = await supabaseAdmin.from('usuarios').select('nombre, foto_perfil').eq('id', top[0]).maybeSingle()
+    lider = { nombre: u?.nombre ?? '—', foto: u?.foto_perfil ?? null, menciones: top[1] }
+  }
+  return { activo: true, mes: cfg.mes, total, lider }
+}
+
 // minúsculas, sin acentos, signos → espacio (para tokenizar por palabra)
 export function normalizar(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()

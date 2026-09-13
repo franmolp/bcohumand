@@ -997,8 +997,8 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
           <div className="px-4 py-3.5 border-b border-gray-50 flex items-center gap-2">
             <IconStar size={18} className="text-amber-500" />
             <div>
-              <p className="text-[14px] font-bold text-[var(--text)]">Estrellas de Google · {mesLabelYYYYMM(mes)}</p>
-              <p className="text-[11px] text-gray-400">{pub?.totalReviews ?? 0} reseñas 4-5★ este mes · te suma que te nombren</p>
+              <p className="text-[14px] font-bold text-[var(--text)]">Reseñas de clientas · {mesLabelYYYYMM(mes)}</p>
+              <p className="text-[11px] text-gray-400">{pub?.totalReviews ?? 0} reseñas 4-5★ en Google este mes · te suma que te nombren</p>
             </div>
           </div>
           {ranking.length === 0 ? (
@@ -1115,14 +1115,21 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-export default function ReconocimientosClient({ session }: { session: SessionUser }) {
+export default function ReconocimientosClient({ session, concursoActivo = false }: { session: SessionUser; concursoActivo?: boolean }) {
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+  const verResenas = isAdmin || concursoActivo
 
-  type Tab = 'mural' | 'medallas' | 'reconocer' | 'estrellas' | 'moderar'
-  const [tab, setTab] = useState<Tab>('mural')
+  type Seccion = 'companeras' | 'resenas'
+  type SubComp = 'mural' | 'reconocer' | 'medallas' | 'moderar'
+  const [seccion, setSeccion] = useState<Seccion>('companeras')
+  const [sub, setSub] = useState<SubComp>('mural')
   const [muralKey, setMuralKey] = useState(0)
   const [pendingCount, setPendingCount] = useState(0)
-  const [concursoActivo, setConcursoActivo] = useState(false)
+
+  // Abrir directo en "Reseñas de clientas" si viene ?tab=resenas (desde la card del home)
+  useEffect(() => {
+    if (verResenas && new URLSearchParams(window.location.search).get('tab') === 'resenas') setSeccion('resenas')
+  }, [verResenas])
 
   useEffect(() => {
     if (!isAdmin) return
@@ -1132,18 +1139,15 @@ export default function ReconocimientosClient({ session }: { session: SessionUse
       .catch(() => {})
   }, [isAdmin])
 
-  // El concurso de estrellas (menciones en Google) se muestra a todas cuando está
-  // activo; el admin lo ve siempre (para poder prenderlo/administrarlo).
-  useEffect(() => {
-    fetch('/api/concurso-google').then(r => r.json()).then(d => setConcursoActivo(!!d?.activo)).catch(() => {})
-  }, [])
-
-  const tabs: { key: Tab; label: string }[] = [
+  const secciones: { key: Seccion; label: string }[] = [
+    { key: 'companeras', label: 'Entre compañeras' },
+    ...(verResenas ? [{ key: 'resenas' as Seccion, label: 'Reseñas de clientas' }] : []),
+  ]
+  const subs: { key: SubComp; label: string }[] = [
     { key: 'mural',     label: 'Mural' },
-    ...((isAdmin || concursoActivo) ? [{ key: 'estrellas' as Tab, label: 'Estrellas' }] : []),
     { key: 'reconocer', label: 'Reconocer' },
     { key: 'medallas',  label: 'Mis medallas' },
-    ...(isAdmin ? [{ key: 'moderar' as Tab, label: 'Moderar' }] : []),
+    ...(isAdmin ? [{ key: 'moderar' as SubComp, label: 'Moderar' }] : []),
   ]
 
   return (
@@ -1154,42 +1158,59 @@ export default function ReconocimientosClient({ session }: { session: SessionUse
         </div>
         <div>
           <h1 className="text-[17px] font-bold text-[var(--text)]">Reconocimientos</h1>
-          <p className="text-xs text-[var(--text-sub)]">Reconocé el trabajo de tus compañeros</p>
+          <p className="text-xs text-[var(--text-sub)]">Medallas entre compañeras y reseñas de clientas</p>
         </div>
       </div>
 
-      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-5">
-        {tabs.map(t => {
-          const isReco = t.key === 'reconocer'
-          return (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className={`relative flex-1 py-2 text-[13px] rounded-[10px] cursor-pointer transition-all ${
-                isReco
-                  ? 'font-semibold text-white'
-                  : tab === t.key
-                  ? 'bg-white text-gray-900 shadow-sm font-medium'
-                  : 'text-gray-500 font-medium'
-              }`}
-              style={isReco ? {
-                background: 'linear-gradient(135deg, #eab308, #ca8a04)',
-                boxShadow: '0 4px 10px rgba(202,138,4,0.45)',
-              } : undefined}>
-              {t.label}
-              {t.key === 'moderar' && pendingCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
-                  {pendingCount}
-                </span>
-              )}
+      {/* Secciones */}
+      {secciones.length > 1 && (
+        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-4">
+          {secciones.map(s => (
+            <button key={s.key} onClick={() => setSeccion(s.key)}
+              className={`flex-1 py-2 text-[13px] rounded-[10px] cursor-pointer transition-all ${seccion === s.key ? 'bg-white text-gray-900 shadow-sm font-semibold' : 'text-gray-500 font-medium'}`}>
+              {s.label}
             </button>
-          )
-        })}
-      </div>
+          ))}
+        </div>
+      )}
 
-      {tab === 'mural'     && <TabMural key={muralKey} />}
-      {tab === 'medallas'  && <TabMisMedallas />}
-      {tab === 'reconocer' && <TabReconocer onEnviado={() => { setMuralKey(k => k + 1); setTab('mural') }} />}
-      {tab === 'estrellas' && <TabEstrellas isAdmin={isAdmin} />}
-      {tab === 'moderar'   && isAdmin && <TabModerar onModerado={() => setPendingCount(c => Math.max(0, c - 1))} />}
+      {seccion === 'companeras' && (
+        <>
+          <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-5">
+            {subs.map(t => {
+              const isReco = t.key === 'reconocer'
+              return (
+                <button key={t.key} onClick={() => setSub(t.key)}
+                  className={`relative flex-1 py-2 text-[13px] rounded-[10px] cursor-pointer transition-all ${
+                    isReco
+                      ? 'font-semibold text-white'
+                      : sub === t.key
+                      ? 'bg-white text-gray-900 shadow-sm font-medium'
+                      : 'text-gray-500 font-medium'
+                  }`}
+                  style={isReco ? {
+                    background: 'linear-gradient(135deg, #eab308, #ca8a04)',
+                    boxShadow: '0 4px 10px rgba(202,138,4,0.45)',
+                  } : undefined}>
+                  {t.label}
+                  {t.key === 'moderar' && pendingCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                      {pendingCount}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
+          {sub === 'mural'     && <TabMural key={muralKey} />}
+          {sub === 'medallas'  && <TabMisMedallas />}
+          {sub === 'reconocer' && <TabReconocer onEnviado={() => { setMuralKey(k => k + 1); setSub('mural') }} />}
+          {sub === 'moderar'   && isAdmin && <TabModerar onModerado={() => setPendingCount(c => Math.max(0, c - 1))} />}
+        </>
+      )}
+
+      {seccion === 'resenas' && <TabEstrellas isAdmin={isAdmin} />}
     </div>
   )
 }

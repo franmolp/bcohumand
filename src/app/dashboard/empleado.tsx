@@ -6,6 +6,7 @@ import { IconCalendar, IconBell, IconAlertCircle, IconChevronRight, IconStar, Ic
 import GoogleReviewsCarousel from '@/components/GoogleReviewsCarousel'
 import ListaPreciosCard from '@/components/ListaPreciosCard'
 import { getPuestosDisponibles } from '@/lib/puestos'
+import { getConcursoResumen } from '@/lib/concurso-google'
 import { fmtFechaLarga } from '@/lib/fecha'
 
 const VACACIONES_DEFAULT = 14
@@ -299,6 +300,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   const muralTop = Object.values(muralMapa).sort((a, b) => b.total - a.total)
   const hayRecoMes = muralTop.length > 0
   const textoReco = TEXTOS_RECO[Math.floor(Math.random() * TEXTOS_RECO.length)]
+  const concurso = await getConcursoResumen()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const vacTotal  = (configRes.data as any)?.dias_vacaciones ?? VACACIONES_DEFAULT
   const vacRest   = vacTotal - vacUsadas
@@ -493,6 +495,26 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
               <p className="text-[13px] text-gray-600 line-clamp-3 leading-snug">{muroPost.contenido}</p>
               <p className="text-[11px] text-gray-400 mt-1">{timeAgo(muroPost.created_at)}</p>
             </div>
+          </div>
+        </Link>
+      )}
+
+      {/* Reseñas de clientas (concurso Google) — arriba de reconocimientos */}
+      {concurso.activo && (
+        <Link href="/dashboard/reconocimientos?tab=resenas"
+          className="block rounded-2xl shadow-sm hover:opacity-95 transition-opacity overflow-hidden"
+          style={{ background: 'linear-gradient(135deg, #ec4899, #db2777)' }}>
+          <div className="flex items-center gap-3 p-4">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <IconStar size={20} className="text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[14px] font-bold text-white">Reseñas de clientas</p>
+              {concurso.lider
+                ? <p className="text-[12px] text-white/85 mt-0.5">🥇 {concurso.lider.nombre.split(' ')[0]} lidera con {concurso.lider.menciones} mención{concurso.lider.menciones !== 1 ? 'es' : ''} este mes</p>
+                : <p className="text-[12px] text-white/80 mt-0.5">Que te nombren en Google suma. ¡Ganá el mes!</p>}
+            </div>
+            <IconChevronRight size={14} className="text-white/60" />
           </div>
         </Link>
       )}

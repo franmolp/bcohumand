@@ -2,7 +2,8 @@ import React from 'react'
 import Link from 'next/link'
 import type { SessionUser } from '@/types'
 import { supabase, supabaseAdmin } from '@/lib/supabase'
-import { IconUsers, IconFileText, IconCalendar, IconChevronRight, IconCheck, IconX, IconAlertCircle, IconWall, IconShoppingBag, IconDollar, IconCamera, IconWrench, IconTrophy } from '@/components/ui/Icons'
+import { IconUsers, IconFileText, IconCalendar, IconChevronRight, IconCheck, IconX, IconAlertCircle, IconWall, IconShoppingBag, IconDollar, IconCamera, IconWrench, IconTrophy, IconStar } from '@/components/ui/Icons'
+import { getConcursoResumen } from '@/lib/concurso-google'
 import GoogleReviewsCarousel from '@/components/GoogleReviewsCarousel'
 import AdminKpiCard from './AdminKpiCard'
 
@@ -153,6 +154,7 @@ export default async function AdminDashboard({ session }: { session: SessionUser
   const repPendientes      = repData.data?.length ?? 0
   const recoPendientes     = recoData.data?.length ?? 0
   const adelantosPendientes = adelantosData.data?.length ?? 0
+  const concurso = await getConcursoResumen()
   const TIPOS_AUSENCIA = ['Ausencia por Salud', 'Ausencia Injustificada', 'Vacaciones', 'Solicitud de Días', 'Cambio de horario/día']
   const ausentesHoyList = (ausentesData.data ?? []).filter(r => {
     if (!TIPOS_AUSENCIA.includes(r.tipo)) return false
@@ -357,6 +359,22 @@ export default async function AdminDashboard({ session }: { session: SessionUser
             </div>
             <p className="text-[32px] font-bold leading-none mb-1">{repPendientes}</p>
             <p className="text-[11px] text-white/70">Reparaciones pend.</p>
+          </Link>
+        )}
+
+        {/* Reseñas de clientas (concurso Google) — solo admin, cuando está activo */}
+        {isAdminRole && concurso.activo && (
+          <Link href="/dashboard/reconocimientos?tab=resenas"
+            className="lg:col-span-1 rounded-2xl p-4 text-white shadow-sm hover:opacity-90 transition-opacity cursor-pointer"
+            style={{ background: 'linear-gradient(135deg, #ec4899, #db2777)' }}>
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-8 h-8 bg-white/15 rounded-xl flex items-center justify-center">
+                <IconStar size={16} className="text-white" />
+              </div>
+              <IconChevronRight size={14} className="text-white/50 mt-1" />
+            </div>
+            <p className="text-[32px] font-bold leading-none mb-1">{concurso.total}</p>
+            <p className="text-[11px] text-white/70">Reseñas Google</p>
           </Link>
         )}
 
