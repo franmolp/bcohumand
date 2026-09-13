@@ -924,6 +924,7 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [trayendo, setTrayendo] = useState(false)
+  const [traerMsg, setTraerMsg] = useState('')
   const [gestion, setGestion] = useState(false)
   const [aliasText, setAliasText] = useState<Record<string, string>>({})
 
@@ -957,8 +958,13 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
     putConfig({ aliases })
   }
   async function traerAhora() {
-    setTrayendo(true)
-    await fetch('/api/google-reviews/refresh').catch(() => {})
+    setTrayendo(true); setTraerMsg('')
+    try {
+      const res = await fetch('/api/google-reviews/refresh')
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok || d.error) setTraerMsg(`Error: ${d.error ?? res.status}`)
+      else setTraerMsg(`Leídas ${d.updated ?? 0} reseñas · ${d.mencionesNuevas ?? 0} nuevas al concurso`)
+    } catch { setTraerMsg('No se pudo conectar con el servidor') }
     await cargar()
     setTrayendo(false)
   }
@@ -1065,6 +1071,8 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
                     {trayendo ? 'Trayendo…' : 'Traer reseñas ahora'}
                   </button>
                 </div>
+                {!admin.config.activo && <p className="text-[11px] text-amber-600 mb-2">Activá el concurso (switch de arriba) para poder traer reseñas.</p>}
+                {traerMsg && <p className="text-[11px] text-gray-500 mb-2">{traerMsg}</p>}
                 <div className="space-y-2">
                   {admin.reviews.length === 0 && <p className="text-[12px] text-gray-400">Todavía no se capturaron reseñas.</p>}
                   {admin.reviews.map(rev => {

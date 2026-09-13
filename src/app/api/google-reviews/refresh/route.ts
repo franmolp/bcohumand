@@ -71,20 +71,19 @@ async function acumularMenciones(
     .from('google_menciones').select('review_key').eq('mes', mes)
   const conocidas = new Set((existentes ?? []).map(r => r.review_key as string))
 
-  const nuevas: Record<string, unknown>[] = []
   let pagina = primeraPagina
   let token = primerToken
   let vueltas = 0
+  let total = 0
 
   while (true) {
-    let nuevasEnPagina = 0
+    const nuevas: Record<string, unknown>[] = []
     for (const r of pagina) {
       if ((r.rating ?? 0) < 4 || !r.snippet?.trim()) continue
       if (!pareceDelMes(r.date ?? '')) continue // descarta reseñas claramente viejas
       const rk = reviewKey(r)
       if (conocidas.has(rk)) continue
       conocidas.add(rk)
-      nuevasEnPagina++
       const detectados = detectarEmpleadas(r.snippet, empleadas)
       nuevas.push({
         review_key: rk,
@@ -99,19 +98,21 @@ async function acumularMenciones(
         revisado: false,
       })
     }
+    // Se inserta página por página para no perder lo traído si el request se corta.
+    // ignoreDuplicates por si otra corrida insertó la misma review_key en paralelo.
+    if (nuevas.length > 0) {
+      await supabaseAdmin.from('google_menciones').upsert(nuevas, { onConflict: 'review_key', ignoreDuplicates: true })
+      total += nuevas.length
+    }
     vueltas++
     // Newest-first: si una página no trajo nada nuevo, ya alcanzamos lo guardado.
-    if (nuevasEnPagina === 0 || !token || vueltas >= 6) break
+    if (nuevas.length === 0 || !token || vueltas >= 6) break
     const sig = await fetchPagina(dataId, key, token)
     pagina = sig.reviews
     token = sig.next
   }
 
-  if (nuevas.length > 0) {
-    // ignoreDuplicates por si otra corrida insertó la misma review_key en paralelo
-    await supabaseAdmin.from('google_menciones').upsert(nuevas, { onConflict: 'review_key', ignoreDuplicates: true })
-  }
-  return nuevas.length
+  return total
 }
 
 export async function ejecutarGoogleReviewsRefresh() {
