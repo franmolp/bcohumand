@@ -8,6 +8,7 @@ type SerpReview = {
   user?: { name?: string; thumbnail?: string }
   rating?: number
   date?: string
+  iso_date?: string
   snippet?: string
 }
 
@@ -81,11 +82,20 @@ async function acumularMenciones(
 
   while (true) {
     const nuevas: Record<string, unknown>[] = []
+    const backfill: { rk: string; iso: string }[] = []
+    let vistaVieja = false // alguna reseña ANTERIOR al mes del concurso (newest-first → frenar)
     for (const r of pagina) {
       if ((r.rating ?? 0) < 4 || !r.snippet?.trim()) continue
-      if (!esDelMesContest(r.date ?? '', mes, hoyISO)) continue // solo las del mes del concurso
+      const iso = typeof r.iso_date === 'string' && r.iso_date ? r.iso_date : null
+      if (iso) {
+        const m = iso.slice(0, 7)
+        if (m > mes) continue                        // más nueva que el mes objetivo → seguir bajando
+        if (m < mes) { vistaVieja = true; continue }  // más vieja → frenar después de esta página
+      } else if (!esDelMesContest(r.date ?? '', mes, hoyISO)) {
+        vistaVieja = true; continue
+      }
       const rk = reviewKey(r)
-      if (conocidas.has(rk)) continue
+      if (conocidas.has(rk)) { if (iso) backfill.push({ rk, iso }); continue }
       conocidas.add(rk)
       const detectados = detectarEmpleadas(r.snippet, empleadas)
       nuevas.push({
@@ -95,6 +105,7 @@ async function acumularMenciones(
         rating: r.rating ?? 5,
         texto: r.snippet,
         fecha_texto: r.date ?? '',
+        fecha_iso: iso,
         mes,
         asignados: detectados,
         detectados,
@@ -108,9 +119,13 @@ async function acumularMenciones(
       if (upErr) { error = upErr.message; break }
       total += nuevas.length
     }
+    // Backfill de la fecha exacta en reseñas ya guardadas sin ella (capturadas antes de tener iso_date).
+    for (const b of backfill) {
+      await supabaseAdmin.from('google_menciones').update({ fecha_iso: b.iso }).eq('review_key', b.rk).is('fecha_iso', null)
+    }
     vueltas++
-    // Newest-first: si una página no trajo nada nuevo, ya alcanzamos lo guardado.
-    if (nuevas.length === 0 || !token || vueltas >= 6) break
+    // Se frena al llegar a reseñas anteriores al mes (newest-first), sin token, o al tope.
+    if (vistaVieja || !token || vueltas >= 6) break
     const sig = await fetchPagina(dataId, key, token)
     pagina = sig.reviews
     token = sig.next

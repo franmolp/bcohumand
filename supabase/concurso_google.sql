@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS google_menciones (
   rating INT,
   texto TEXT,
   fecha_texto TEXT,                     -- fecha relativa que devuelve Google ("hace una semana")
+  fecha_iso TIMESTAMPTZ,                -- fecha exacta de la reseña (iso_date de SerpAPI), si está
   mes TEXT NOT NULL,                    -- 'YYYY-MM' del concurso al que cuenta
   asignados JSONB NOT NULL DEFAULT '[]'::jsonb,   -- usuario_id[] confirmados (lo que cuenta)
   detectados JSONB NOT NULL DEFAULT '[]'::jsonb,  -- usuario_id[] auto-detectados (referencia)

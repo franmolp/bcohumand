@@ -898,7 +898,7 @@ function TabModerar({ onModerado }: { onModerado: () => void }) {
 // ─── Estrellas de Google (concurso de menciones) ─────────────────────────────
 type RankingEstrella = { id: string; nombre: string; foto: string | null; menciones: number }
 type PubEstrellas = { activo: boolean; mes?: string; totalReviews?: number; ranking?: RankingEstrella[] }
-type ReviewAdmin = { id: number; author: string; avatar: string | null; rating: number; texto: string; fecha_texto: string; asignados: string[]; detectados: string[]; revisado: boolean; delMes?: boolean; fechaAprox?: string | null }
+type ReviewAdmin = { id: number; author: string; avatar: string | null; rating: number; texto: string; fecha_texto: string; asignados: string[]; detectados: string[]; revisado: boolean; delMes?: boolean; fecha?: string | null; exacta?: boolean }
 type EmpleadaConc = { id: string; nombre: string; foto_perfil: string | null }
 type AdminEstrellas = { config: { activo: boolean; mes: string; aliases: Record<string, string[]> }; mes: string; reviews: ReviewAdmin[]; empleadas: EmpleadaConc[] }
 
@@ -1113,7 +1113,7 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-[12px] font-semibold text-gray-700">{rev.author}</span>
                           <span className="text-[11px] text-amber-500">{'★'.repeat(rev.rating)}</span>
-                          <span className="text-[11px] text-gray-400">{rev.fechaAprox ? `≈ ${rev.fechaAprox}` : rev.fecha_texto}</span>
+                          <span className="text-[11px] text-gray-400">{rev.fecha ? `${rev.exacta ? '' : '≈ '}${rev.fecha}` : rev.fecha_texto}</span>
                           {rev.delMes === false && <span className="text-[10px] font-semibold text-red-500 bg-red-50 px-1.5 py-0.5 rounded-full">mes anterior</span>}
                           <button onClick={() => quitarReview(rev.id)} className="ml-auto text-gray-300 hover:text-red-400 cursor-pointer" title="Quitar del concurso"><IconX size={13} /></button>
                         </div>

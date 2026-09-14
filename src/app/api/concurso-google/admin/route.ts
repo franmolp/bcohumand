@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getConcursoConfig, setConcursoConfig, mesActual, edadRelativaDias, esDelMesContest, type ConcursoConfig } from '@/lib/concurso-google'
+import { getConcursoConfig, setConcursoConfig, mesActual, edadRelativaDias, type ConcursoConfig } from '@/lib/concurso-google'
 
 function esAdmin(rol: string) { return rol === 'admin' || rol === 'Admin' }
 
@@ -17,7 +17,7 @@ export async function GET() {
   const [{ data: reviews }, { data: empleadas }] = await Promise.all([
     supabaseAdmin
       .from('google_menciones')
-      .select('id, review_key, author, avatar, rating, texto, fecha_texto, asignados, detectados, revisado')
+      .select('id, review_key, author, avatar, rating, texto, fecha_texto, fecha_iso, asignados, detectados, revisado')
       .eq('mes', mes),
     supabaseAdmin
       .from('usuarios')
@@ -26,24 +26,29 @@ export async function GET() {
       .order('nombre'),
   ])
 
-  // Orden: las más nuevas arriba (por la fecha relativa de Google); a igual
-  // antigüedad, las capturadas más recientemente (id mayor) primero. Y se marca
-  // cada una si cae en el mes del concurso (para señalar las de meses anteriores).
-  const hoyISO = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-  const fechaAprox = (fechaTexto: string): string | null => {
-    const dias = edadRelativaDias(fechaTexto)
-    if (dias === null) return null
-    const d = new Date(hoyISO + 'T12:00:00Z')
-    d.setUTCDate(d.getUTCDate() - dias)
-    return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`
+  // Info de fecha por reseña: exacta (iso_date de SerpAPI) si está, o aproximada
+  // desde la fecha relativa. Se usa para mostrarla, ordenar (más nuevas arriba) y
+  // marcar si cae en el mes del concurso.
+  const TZ = 'America/Argentina/Buenos_Aires'
+  const hoyISO = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
+  type Info = { fecha: string | null; exacta: boolean; delMes: boolean; ord: number }
+  const infoFecha = (r: { fecha_iso?: string | null; fecha_texto?: string | null }): Info => {
+    if (r.fecha_iso) {
+      const ymd = new Date(r.fecha_iso).toLocaleDateString('en-CA', { timeZone: TZ }) // YYYY-MM-DD
+      const [y, m, d] = ymd.split('-')
+      return { fecha: `${d}/${m}/${y}`, exacta: true, delMes: ymd.slice(0, 7) === mes, ord: new Date(r.fecha_iso).getTime() }
+    }
+    const dias = edadRelativaDias(r.fecha_texto ?? '')
+    if (dias === null) return { fecha: null, exacta: false, delMes: true, ord: -1 }
+    const dt = new Date(hoyISO + 'T12:00:00Z'); dt.setUTCDate(dt.getUTCDate() - dias)
+    const ymd = dt.toISOString().slice(0, 10)
+    const [y, m, d] = ymd.split('-')
+    return { fecha: `${d}/${m}/${y}`, exacta: false, delMes: ymd.slice(0, 7) === mes, ord: dt.getTime() }
   }
   const ordenadas = [...(reviews ?? [])]
-    .sort((a, b) => {
-      const da = edadRelativaDias(a.fecha_texto ?? '') ?? 99999
-      const db = edadRelativaDias(b.fecha_texto ?? '') ?? 99999
-      return da - db || (b.id as number) - (a.id as number)
-    })
-    .map(r => ({ ...r, delMes: esDelMesContest(r.fecha_texto ?? '', mes, hoyISO), fechaAprox: fechaAprox(r.fecha_texto ?? '') }))
+    .map(r => ({ r, info: infoFecha(r) }))
+    .sort((a, b) => b.info.ord - a.info.ord || (b.r.id as number) - (a.r.id as number))
+    .map(({ r, info }) => ({ ...r, fecha: info.fecha, exacta: info.exacta, delMes: info.delMes }))
 
   return NextResponse.json({ config: cfg, mes, reviews: ordenadas, empleadas: empleadas ?? [] })
 }
