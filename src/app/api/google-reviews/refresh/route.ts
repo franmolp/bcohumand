@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getConcursoConfig, armarEmpleadas, detectarEmpleadas, normalizar, pareceDelMes } from '@/lib/concurso-google'
+import { getConcursoConfig, armarEmpleadas, detectarEmpleadas, normalizar, esDelMesContest } from '@/lib/concurso-google'
 
 type SerpReview = {
   review_id?: string
@@ -71,6 +71,8 @@ async function acumularMenciones(
     .from('google_menciones').select('review_key').eq('mes', mes)
   const conocidas = new Set((existentes ?? []).map(r => r.review_key as string))
 
+  const hoyISO = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+
   let pagina = primeraPagina
   let token = primerToken
   let vueltas = 0
@@ -81,7 +83,7 @@ async function acumularMenciones(
     const nuevas: Record<string, unknown>[] = []
     for (const r of pagina) {
       if ((r.rating ?? 0) < 4 || !r.snippet?.trim()) continue
-      if (!pareceDelMes(r.date ?? '')) continue // descarta reseñas claramente viejas
+      if (!esDelMesContest(r.date ?? '', mes, hoyISO)) continue // solo las del mes del concurso
       const rk = reviewKey(r)
       if (conocidas.has(rk)) continue
       conocidas.add(rk)

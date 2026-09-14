@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getConcursoConfig, setConcursoConfig, mesActual, type ConcursoConfig } from '@/lib/concurso-google'
+import { getConcursoConfig, setConcursoConfig, mesActual, edadRelativaDias, type ConcursoConfig } from '@/lib/concurso-google'
 
 function esAdmin(rol: string) { return rol === 'admin' || rol === 'Admin' }
 
@@ -18,8 +18,7 @@ export async function GET() {
     supabaseAdmin
       .from('google_menciones')
       .select('id, review_key, author, avatar, rating, texto, fecha_texto, asignados, detectados, revisado')
-      .eq('mes', mes)
-      .order('created_at', { ascending: false }),
+      .eq('mes', mes),
     supabaseAdmin
       .from('usuarios')
       .select('id, nombre, foto_perfil')
@@ -27,7 +26,15 @@ export async function GET() {
       .order('nombre'),
   ])
 
-  return NextResponse.json({ config: cfg, mes, reviews: reviews ?? [], empleadas: empleadas ?? [] })
+  // Orden: las más nuevas arriba (por la fecha relativa de Google); a igual
+  // antigüedad, las capturadas más recientemente (id mayor) primero.
+  const ordenadas = [...(reviews ?? [])].sort((a, b) => {
+    const da = edadRelativaDias(a.fecha_texto ?? '') ?? 99999
+    const db = edadRelativaDias(b.fecha_texto ?? '') ?? 99999
+    return da - db || (b.id as number) - (a.id as number)
+  })
+
+  return NextResponse.json({ config: cfg, mes, reviews: ordenadas, empleadas: empleadas ?? [] })
 }
 
 // Actualiza la configuración: activar/desactivar, mes y apodos.
@@ -61,6 +68,20 @@ export async function PATCH(req: NextRequest) {
     .update({ asignados, revisado: true })
     .eq('id', id)
 
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
+
+// Quita una reseña del concurso (ej. quedó de un mes anterior o es spam).
+export async function DELETE(req: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  if (!esAdmin(session.rol)) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
+
+  const { id } = await req.json().catch(() => ({})) as { id?: number }
+  if (!id) return NextResponse.json({ error: 'Falta id' }, { status: 400 })
+
+  const { error } = await supabaseAdmin.from('google_menciones').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

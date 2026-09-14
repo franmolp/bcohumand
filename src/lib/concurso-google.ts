@@ -77,21 +77,33 @@ export function normalizar(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
-// Heurística sobre la fecha relativa que da Google ("hace una semana", "hace 2
-// meses", "hace un año") para no contar reseñas claramente viejas en la primera
-// carga del mes. Reciente (horas/días/semanas/1 mes) = sí; 2+ meses o años = no.
-// Si no hay fecha o no se reconoce, no se descarta (mejor que el admin la saque).
-export function pareceDelMes(fecha: string): boolean {
+// Convierte la fecha relativa de Google ("hoy", "ayer", "hace 3 días", "hace una
+// semana", "hace un mes") a una antigüedad aproximada en días. null si no se
+// reconoce (para no descartar reseñas por las dudas).
+export function edadRelativaDias(fecha: string): number | null {
   const f = normalizar(fecha)
-  if (!f) return true
-  if (/(hoy|ayer|minuto|hora|dia|semana)/.test(f)) return true
-  const m = f.match(/hace\s+(\d+|un|una)\s+mes/)
-  if (m) {
-    const n = (m[1] === 'un' || m[1] === 'una') ? 1 : parseInt(m[1])
-    return n <= 1
-  }
-  if (/(ano|year)/.test(f)) return false
-  return true
+  if (!f) return null
+  if (/(hoy|minuto|hora)/.test(f)) return 0
+  if (/ayer/.test(f)) return 1
+  const m = f.match(/hace\s+(\d+|un|una)\s+(dia|semana|mes|ano)/)
+  if (!m) return null
+  const n = (m[1] === 'un' || m[1] === 'una') ? 1 : parseInt(m[1])
+  const u = m[2]
+  if (u === 'dia') return n
+  if (u === 'semana') return n * 7
+  if (u === 'mes') return n * 30
+  return n * 365 // año
+}
+
+// ¿La reseña (por su fecha relativa) cae en el mes del concurso? Se calcula la fecha
+// aproximada (hoy − antigüedad) y se compara el mes. Si no se reconoce la fecha, no
+// se descarta. Así una reseña "hace un mes" (≈ mes pasado) no cuenta para este mes.
+export function esDelMesContest(fecha: string, mes: string, hoyISO: string): boolean {
+  const dias = edadRelativaDias(fecha)
+  if (dias === null) return true
+  const d = new Date(hoyISO + 'T12:00:00Z')
+  d.setUTCDate(d.getUTCDate() - dias)
+  return d.toISOString().slice(0, 7) === mes
 }
 
 export type EmpleadaConcurso = { id: string; nombre: string; nombres: string[] }

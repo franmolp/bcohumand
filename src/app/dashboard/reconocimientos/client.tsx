@@ -985,6 +985,11 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
     await fetch('/api/concurso-google/admin', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: reviewId, asignados }) }).catch(() => {})
     fetch('/api/concurso-google').then(r => r.json()).then(setPub).catch(() => {})
   }
+  async function quitarReview(reviewId: number) {
+    setAdmin(prev => prev ? { ...prev, reviews: prev.reviews.filter(r => r.id !== reviewId) } : prev)
+    await fetch('/api/concurso-google/admin', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: reviewId }) }).catch(() => {})
+    fetch('/api/concurso-google').then(r => r.json()).then(setPub).catch(() => {})
+  }
 
   if (loading) return <div className="py-16 text-center text-[13px] text-gray-400">Cargando…</div>
 
@@ -1109,6 +1114,7 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
                           <span className="text-[12px] font-semibold text-gray-700">{rev.author}</span>
                           <span className="text-[11px] text-amber-500">{'★'.repeat(rev.rating)}</span>
                           <span className="text-[11px] text-gray-400">{rev.fecha_texto}</span>
+                          <button onClick={() => quitarReview(rev.id)} className="ml-auto text-gray-300 hover:text-red-400 cursor-pointer" title="Quitar del concurso"><IconX size={13} /></button>
                         </div>
                         <p className="text-[12px] text-gray-600 mb-2">{rev.texto}</p>
                         <div className="flex flex-wrap items-center gap-1.5">
