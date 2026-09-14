@@ -26,12 +26,14 @@ export async function setConcursoConfig(cfg: ConcursoConfig): Promise<void> {
   await supabaseAdmin.from('configuracion').upsert({ clave: CLAVE, valor: cfg }, { onConflict: 'clave' })
 }
 
-// Resumen liviano para la card del home: si está activo, el/la líder y totales.
+// Resumen para la card del home: si está activo, el top 3 (con foto) y — si se
+// pasa usuarioId — la posición de esa persona en el ranking.
+export type TopMencion = { id: string; nombre: string; foto: string | null; menciones: number }
 export type ConcursoResumen =
   | { activo: false }
-  | { activo: true; mes: string; total: number; lider: { nombre: string; foto: string | null; menciones: number } | null }
+  | { activo: true; mes: string; total: number; top: TopMencion[]; yo: { menciones: number; puesto: number } | null }
 
-export async function getConcursoResumen(): Promise<ConcursoResumen> {
+export async function getConcursoResumen(usuarioId?: string): Promise<ConcursoResumen> {
   const cfg = await getConcursoConfig()
   if (!cfg.activo || !cfg.mes) return { activo: false }
 
@@ -42,13 +44,24 @@ export async function getConcursoResumen(): Promise<ConcursoResumen> {
     total++
     for (const uid of ((m.asignados as string[]) ?? [])) counts.set(uid, (counts.get(uid) ?? 0) + 1)
   }
-  const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]
-  let lider: { nombre: string; foto: string | null; menciones: number } | null = null
-  if (top) {
-    const { data: u } = await supabaseAdmin.from('usuarios').select('nombre, foto_perfil').eq('id', top[0]).maybeSingle()
-    lider = { nombre: u?.nombre ?? '—', foto: u?.foto_perfil ?? null, menciones: top[1] }
+  const ordenado = [...counts.entries()].sort((a, b) => b[1] - a[1]) // [usuario_id, menciones]
+
+  const ids = ordenado.slice(0, 3).map(([id]) => id)
+  const { data: usuarios } = ids.length
+    ? await supabaseAdmin.from('usuarios').select('id, nombre, foto_perfil').in('id', ids)
+    : { data: [] as { id: string; nombre: string; foto_perfil: string | null }[] }
+  const umap = new Map((usuarios ?? []).map(u => [u.id, u]))
+  const top: TopMencion[] = ordenado.slice(0, 3).map(([id, menciones]) => ({
+    id, nombre: umap.get(id)?.nombre ?? '—', foto: umap.get(id)?.foto_perfil ?? null, menciones,
+  }))
+
+  let yo: { menciones: number; puesto: number } | null = null
+  if (usuarioId) {
+    const idx = ordenado.findIndex(([id]) => id === usuarioId)
+    if (idx >= 0) yo = { menciones: ordenado[idx][1], puesto: idx + 1 }
   }
-  return { activo: true, mes: cfg.mes, total, lider }
+
+  return { activo: true, mes: cfg.mes, total, top, yo }
 }
 
 // minúsculas, sin acentos, signos → espacio (para tokenizar por palabra)

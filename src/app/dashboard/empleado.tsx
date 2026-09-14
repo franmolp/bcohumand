@@ -300,7 +300,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   const muralTop = Object.values(muralMapa).sort((a, b) => b.total - a.total)
   const hayRecoMes = muralTop.length > 0
   const textoReco = TEXTOS_RECO[Math.floor(Math.random() * TEXTOS_RECO.length)]
-  const concurso = await getConcursoResumen()
+  const concurso = await getConcursoResumen(session.id)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const vacTotal  = (configRes.data as any)?.dias_vacaciones ?? VACACIONES_DEFAULT
   const vacRest   = vacTotal - vacUsadas
@@ -504,17 +504,40 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
         <Link href="/dashboard/reconocimientos?tab=resenas"
           className="block rounded-2xl shadow-sm hover:opacity-95 transition-opacity overflow-hidden"
           style={{ background: 'linear-gradient(135deg, #ec4899, #db2777)' }}>
-          <div className="flex items-center gap-3 p-4">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
-              <IconStar size={20} className="text-white" />
+          <div className="flex items-center gap-2.5 px-4 pt-4 pb-2">
+            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <IconStar size={16} className="text-white" />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[14px] font-bold text-white">Reseñas de clientas</p>
-              {concurso.lider
-                ? <p className="text-[12px] text-white/85 mt-0.5">🥇 {concurso.lider.nombre.split(' ')[0]} lidera con {concurso.lider.menciones} mención{concurso.lider.menciones !== 1 ? 'es' : ''} este mes</p>
-                : <p className="text-[12px] text-white/80 mt-0.5">Que te nombren en Google suma. ¡Ganá el mes!</p>}
-            </div>
+            <p className="text-[14px] font-bold text-white flex-1">Reseñas de clientas</p>
             <IconChevronRight size={14} className="text-white/60" />
+          </div>
+
+          {concurso.top.length > 0 ? (
+            <div className="flex gap-5 px-4 pt-2 pb-3">
+              {concurso.top.map((e, i) => {
+                const initials = e.nombre.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+                return (
+                  <div key={e.id} className="flex flex-col items-center flex-shrink-0">
+                    <div className="relative mb-2">
+                      {e.foto
+                        ? <img src={e.foto} alt={e.nombre} className="w-12 h-12 rounded-full object-cover ring-2 ring-white/40" />
+                        : <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center ring-2 ring-white/40"><span className="text-[12px] font-bold text-white">{initials}</span></div>}
+                      <span className="absolute -bottom-1.5 -right-1 text-[14px] leading-none">{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</span>
+                    </div>
+                    <p className="text-[10px] text-white/90 text-center max-w-[56px] truncate leading-tight">{e.nombre.split(' ')[0]}</p>
+                    <p className="text-[11px] font-bold text-white leading-tight">{e.menciones} menc.</p>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="px-4 pt-1 pb-3 text-[12px] text-white/80">Todavía nadie fue nombrado. ¡Que te nombren suma!</p>
+          )}
+
+          <div className="px-4 py-2 bg-black/10 text-[12px] text-white">
+            {concurso.yo
+              ? <>Vos: <span className="font-bold">{concurso.yo.menciones} {concurso.yo.menciones === 1 ? 'mención' : 'menciones'}</span> · {concurso.yo.puesto}° puesto</>
+              : 'Todavía no te nombraron este mes'}
           </div>
         </Link>
       )}
