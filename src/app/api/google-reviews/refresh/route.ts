@@ -105,8 +105,9 @@ async function acumularMenciones(
       if (!(typeof r.snippet === 'string' && r.snippet.trim()) && camposSinComentario.length === 0) {
         camposSinComentario = Object.keys(r) // primera reseña sin comentario que aparece
       }
+      // Comentario + campos estructurados. Puede quedar vacío (reseña de solo estrellas):
+      // igual se trae, para que el admin la vea y, comparando con Google, la asigne a mano.
       const texto = textoDeReview(r)
-      if (!texto) continue // ni comentario ni campos estructurados → nada que contar
       const iso = typeof r.iso_date === 'string' && r.iso_date ? r.iso_date : null
       if (iso) {
         const m = iso.slice(0, 7)

@@ -927,9 +927,6 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
   const [traerMsg, setTraerMsg] = useState('')
   const [enviandoRec, setEnviandoRec] = useState(false)
   const [recMsg, setRecMsg] = useState('')
-  const [manualUser, setManualUser] = useState('')
-  const [manualNota, setManualNota] = useState('')
-  const [agregandoManual, setAgregandoManual] = useState(false)
   const [aliasText, setAliasText] = useState<Record<string, string>>({})
 
   const cargar = useCallback(async () => {
@@ -987,15 +984,6 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
     setAdmin(prev => prev ? { ...prev, reviews: prev.reviews.map(r => r.id === reviewId ? { ...r, asignados, revisado: true } : r) } : prev)
     await fetch('/api/concurso-google/admin', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: reviewId, asignados }) }).catch(() => {})
     fetch('/api/concurso-google').then(r => r.json()).then(setPub).catch(() => {})
-  }
-  async function agregarManual() {
-    if (!manualUser) return
-    setAgregandoManual(true)
-    await fetch('/api/concurso-google/admin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ usuario_id: manualUser, nota: manualNota }) }).catch(() => {})
-    setManualUser(''); setManualNota('')
-    await cargar()
-    fetch('/api/concurso-google').then(r => r.json()).then(setPub).catch(() => {})
-    setAgregandoManual(false)
   }
   async function quitarReview(reviewId: number) {
     setAdmin(prev => prev ? { ...prev, reviews: prev.reviews.filter(r => r.id !== reviewId) } : prev)
@@ -1104,25 +1092,6 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
                 </button>
               </div>
 
-              {/* Agregar mención a mano */}
-              <div>
-                <p className="text-[13px] font-semibold text-gray-700 mb-1">Agregar mención a mano</p>
-                <p className="text-[11px] text-gray-400 mb-2">Para reseñas sin comentario que en Google nombran a alguien (ej. &quot;Estilista: X&quot;) — Google no las manda con texto.</p>
-                <div className="flex gap-2">
-                  <select value={manualUser} onChange={e => setManualUser(e.target.value)}
-                    className="flex-1 min-w-0 border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[var(--primary)] bg-white cursor-pointer">
-                    <option value="">Elegir empleada…</option>
-                    {admin.empleadas.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-                  </select>
-                  <input value={manualNota} onChange={e => setManualNota(e.target.value)} placeholder="nota (opcional)"
-                    className="flex-1 min-w-0 border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[var(--primary)]" />
-                  <button onClick={agregarManual} disabled={!manualUser || agregandoManual}
-                    className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[12px] font-semibold rounded-lg cursor-pointer disabled:opacity-50 flex-shrink-0">
-                    {agregandoManual ? '…' : 'Agregar'}
-                  </button>
-                </div>
-              </div>
-
               {/* Reseñas para revisar */}
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -1148,7 +1117,7 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
                           {rev.delMes === false && <span className="text-[10px] font-semibold text-red-500 bg-red-50 px-1.5 py-0.5 rounded-full">mes anterior</span>}
                           <button onClick={() => quitarReview(rev.id)} className="ml-auto text-gray-300 hover:text-red-400 cursor-pointer" title="Quitar del concurso"><IconX size={13} /></button>
                         </div>
-                        <p className="text-[12px] text-gray-600 mb-2">{rev.texto}</p>
+                        <p className="text-[12px] text-gray-600 mb-2">{rev.texto || <span className="italic text-gray-400">Sin texto — buscala en Google por el nombre y la fecha</span>}</p>
                         <div className="flex flex-wrap items-center gap-1.5">
                           {rev.asignados.length === 0 && <span className="text-[11px] text-gray-400 italic">Sin mención</span>}
                           {rev.asignados.map(uid => (
