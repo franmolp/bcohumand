@@ -94,6 +94,7 @@ async function acumularMenciones(
   let vueltas = 0
   let total = 0
   let error: string | null = null
+  let camposSinComentario: string[] = [] // diagnóstico: campos de una reseña sin comentario libre
 
   while (true) {
     const nuevas: Record<string, unknown>[] = []
@@ -101,6 +102,9 @@ async function acumularMenciones(
     let vistaVieja = false // alguna reseña ANTERIOR al mes del concurso (newest-first → frenar)
     for (const r of pagina) {
       if ((r.rating ?? 0) < 4) continue
+      if (!(typeof r.snippet === 'string' && r.snippet.trim()) && camposSinComentario.length === 0) {
+        camposSinComentario = Object.keys(r) // primera reseña sin comentario que aparece
+      }
       const texto = textoDeReview(r)
       if (!texto) continue // ni comentario ni campos estructurados → nada que contar
       const iso = typeof r.iso_date === 'string' && r.iso_date ? r.iso_date : null
@@ -148,7 +152,7 @@ async function acumularMenciones(
     token = sig.next
   }
 
-  return { insertadas: total, error }
+  return { insertadas: total, error, camposSinComentario }
 }
 
 export async function ejecutarGoogleReviewsRefresh() {
@@ -175,12 +179,14 @@ export async function ejecutarGoogleReviewsRefresh() {
   let mencionesNuevas = 0
   let mencionesTotal = 0
   let mencionesError: string | null = null
+  let camposSinComentario: string[] = []
   try {
     const cfg = await getConcursoConfig()
     if (cfg.activo && cfg.mes) {
       const r = await acumularMenciones(pagina1, next, dataId, key, cfg.mes, cfg.aliases)
       mencionesNuevas = r.insertadas
       mencionesError = r.error
+      camposSinComentario = r.camposSinComentario
       const { count } = await supabaseAdmin
         .from('google_menciones').select('*', { count: 'exact', head: true }).eq('mes', cfg.mes)
       mencionesTotal = count ?? 0
@@ -189,11 +195,6 @@ export async function ejecutarGoogleReviewsRefresh() {
     mencionesError = e instanceof Error ? e.message : String(e)
     console.error('[concurso-google] acumular menciones falló:', e)
   }
-
-  // Diagnóstico: qué campos trae una reseña SIN comentario libre (para saber dónde
-  // vienen los datos estructurados tipo "Estilista: Claudia").
-  const ejemploSinComentario = pagina1.find(r => !(typeof r.snippet === 'string' && r.snippet.trim()))
-  const camposSinComentario = ejemploSinComentario ? Object.keys(ejemploSinComentario) : []
 
   return { updated: reviews.length, mencionesNuevas, mencionesTotal, mencionesError, camposSinComentario }
 }
