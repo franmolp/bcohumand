@@ -88,6 +88,35 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json({ ok: true })
 }
 
+// Agrega una mención a mano (para reseñas sin comentario que Google muestra con
+// "Estilista: X" pero que SerpAPI no devuelve como texto).
+export async function POST(req: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  if (!esAdmin(session.rol)) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
+
+  const { usuario_id, nota } = await req.json().catch(() => ({})) as { usuario_id?: string; nota?: string }
+  if (!usuario_id) return NextResponse.json({ error: 'Falta empleada' }, { status: 400 })
+
+  const cfg = await getConcursoConfig()
+  const mes = cfg.mes || mesActual()
+
+  const { error } = await supabaseAdmin.from('google_menciones').insert({
+    review_key: `manual:${Date.now()}:${usuario_id}`,
+    author: 'Cargada a mano',
+    rating: 5,
+    texto: nota?.trim() || 'Reseña sin comentario (cargada a mano)',
+    fecha_texto: '',
+    fecha_iso: new Date().toISOString(),
+    mes,
+    asignados: [usuario_id],
+    detectados: [],
+    revisado: true,
+  })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
+
 // Quita una reseña del concurso (ej. quedó de un mes anterior o es spam).
 export async function DELETE(req: NextRequest) {
   const session = await getSession()
