@@ -92,6 +92,7 @@ async function acumularMenciones(
   let pagina = primeraPagina
   let token = primerToken
   let vueltas = 0
+  let leidas = 0 // diagnóstico: reseñas escaneadas en total
   let total = 0
   let error: string | null = null
   let camposSinComentario: string[] = [] // diagnóstico: campos de una reseña sin comentario libre
@@ -99,8 +100,13 @@ async function acumularMenciones(
   while (true) {
     const nuevas: Record<string, unknown>[] = []
     const backfill: { rk: string; iso: string }[] = []
-    let vistaVieja = false // alguna reseña ANTERIOR al mes del concurso (newest-first → frenar)
+    // Se frena SOLO cuando una página entera no tiene ninguna reseña del mes (o más
+    // nueva). Antes se frenaba apenas aparecía una reseña vieja, pero como Google no
+    // siempre viene 100% ordenado (y algunas reseñas no traen iso_date), eso dejaba
+    // afuera reseñas del mes que venían un poco más abajo.
+    let hayDelMesEnPagina = false
     for (const r of pagina) {
+      leidas++
       if ((r.rating ?? 0) < 4) continue
       if (!(typeof r.snippet === 'string' && r.snippet.trim()) && camposSinComentario.length === 0) {
         camposSinComentario = Object.keys(r) // primera reseña sin comentario que aparece
@@ -111,10 +117,13 @@ async function acumularMenciones(
       const iso = typeof r.iso_date === 'string' && r.iso_date ? r.iso_date : null
       if (iso) {
         const m = iso.slice(0, 7)
-        if (m > mes) continue                        // más nueva que el mes objetivo → seguir bajando
-        if (m < mes) { vistaVieja = true; continue }  // más vieja → frenar después de esta página
-      } else if (!esDelMesContest(r.date ?? '', mes, hoyISO)) {
-        vistaVieja = true; continue
+        if (m > mes) { hayDelMesEnPagina = true; continue } // más nueva → seguir bajando, no frenar
+        if (m < mes) continue                                // más vieja → saltarla (no cuenta ni frena sola)
+        hayDelMesEnPagina = true                             // del mes exacto
+      } else if (esDelMesContest(r.date ?? '', mes, hoyISO)) {
+        hayDelMesEnPagina = true
+      } else {
+        continue // sin iso y fecha relativa fuera del mes → saltarla
       }
       const rk = reviewKey(r)
       if (conocidas.has(rk)) { if (iso) backfill.push({ rk, iso }); continue }
@@ -146,14 +155,15 @@ async function acumularMenciones(
       await supabaseAdmin.from('google_menciones').update({ fecha_iso: b.iso }).eq('review_key', b.rk).is('fecha_iso', null)
     }
     vueltas++
-    // Se frena al llegar a reseñas anteriores al mes (newest-first), sin token, o al tope.
-    if (vistaVieja || !token || vueltas >= 6) break
+    // Se frena cuando una página entera ya no tiene reseñas del mes (newest-first, así que
+    // más abajo solo hay más viejas), sin token, o al tope de seguridad.
+    if (!hayDelMesEnPagina || !token || vueltas >= 10) break
     const sig = await fetchPagina(dataId, key, token)
     pagina = sig.reviews
     token = sig.next
   }
 
-  return { insertadas: total, error, camposSinComentario }
+  return { insertadas: total, error, camposSinComentario, leidas, paginas: vueltas }
 }
 
 export async function ejecutarGoogleReviewsRefresh() {
@@ -181,6 +191,8 @@ export async function ejecutarGoogleReviewsRefresh() {
   let mencionesTotal = 0
   let mencionesError: string | null = null
   let camposSinComentario: string[] = []
+  let leidas = 0
+  let paginas = 0
   try {
     const cfg = await getConcursoConfig()
     if (cfg.activo && cfg.mes) {
@@ -188,6 +200,8 @@ export async function ejecutarGoogleReviewsRefresh() {
       mencionesNuevas = r.insertadas
       mencionesError = r.error
       camposSinComentario = r.camposSinComentario
+      leidas = r.leidas
+      paginas = r.paginas
       const { count } = await supabaseAdmin
         .from('google_menciones').select('*', { count: 'exact', head: true }).eq('mes', cfg.mes)
       mencionesTotal = count ?? 0
@@ -197,7 +211,7 @@ export async function ejecutarGoogleReviewsRefresh() {
     console.error('[concurso-google] acumular menciones falló:', e)
   }
 
-  return { updated: reviews.length, mencionesNuevas, mencionesTotal, mencionesError, camposSinComentario }
+  return { updated: reviews.length, mencionesNuevas, mencionesTotal, mencionesError, camposSinComentario, leidas, paginas }
 }
 
 // Ruta standalone (debug/manual) — el cron de Vercel llama a /api/cron/diario

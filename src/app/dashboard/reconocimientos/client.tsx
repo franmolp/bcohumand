@@ -975,7 +975,7 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
       const d = await res.json().catch(() => ({}))
       if (!res.ok || d.error) setTraerMsg(`Error: ${d.error ?? res.status}`)
       else if (d.mencionesError) setTraerMsg(`Error al guardar: ${d.mencionesError}`)
-      else setTraerMsg(`Leídas ${d.updated ?? 0} · ${d.mencionesNuevas ?? 0} nuevas · ${d.mencionesTotal ?? 0} en total este mes`)
+      else setTraerMsg(`Escaneadas ${d.leidas ?? 0} reseñas (${d.paginas ?? 0} págs) · ${d.mencionesNuevas ?? 0} nuevas · ${d.mencionesTotal ?? 0} en total este mes`)
     } catch { setTraerMsg('No se pudo conectar con el servidor') }
     await cargar()
     setTrayendo(false)
