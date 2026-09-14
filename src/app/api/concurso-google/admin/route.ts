@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getConcursoConfig, setConcursoConfig, mesActual, edadRelativaDias, type ConcursoConfig } from '@/lib/concurso-google'
+import { getConcursoConfig, setConcursoConfig, mesActual, edadRelativaDias, esDelMesContest, type ConcursoConfig } from '@/lib/concurso-google'
 
 function esAdmin(rol: string) { return rol === 'admin' || rol === 'Admin' }
 
@@ -27,12 +27,23 @@ export async function GET() {
   ])
 
   // Orden: las más nuevas arriba (por la fecha relativa de Google); a igual
-  // antigüedad, las capturadas más recientemente (id mayor) primero.
-  const ordenadas = [...(reviews ?? [])].sort((a, b) => {
-    const da = edadRelativaDias(a.fecha_texto ?? '') ?? 99999
-    const db = edadRelativaDias(b.fecha_texto ?? '') ?? 99999
-    return da - db || (b.id as number) - (a.id as number)
-  })
+  // antigüedad, las capturadas más recientemente (id mayor) primero. Y se marca
+  // cada una si cae en el mes del concurso (para señalar las de meses anteriores).
+  const hoyISO = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+  const fechaAprox = (fechaTexto: string): string | null => {
+    const dias = edadRelativaDias(fechaTexto)
+    if (dias === null) return null
+    const d = new Date(hoyISO + 'T12:00:00Z')
+    d.setUTCDate(d.getUTCDate() - dias)
+    return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`
+  }
+  const ordenadas = [...(reviews ?? [])]
+    .sort((a, b) => {
+      const da = edadRelativaDias(a.fecha_texto ?? '') ?? 99999
+      const db = edadRelativaDias(b.fecha_texto ?? '') ?? 99999
+      return da - db || (b.id as number) - (a.id as number)
+    })
+    .map(r => ({ ...r, delMes: esDelMesContest(r.fecha_texto ?? '', mes, hoyISO), fechaAprox: fechaAprox(r.fecha_texto ?? '') }))
 
   return NextResponse.json({ config: cfg, mes, reviews: ordenadas, empleadas: empleadas ?? [] })
 }
