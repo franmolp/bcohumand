@@ -4,10 +4,18 @@ export type ConcursoConfig = {
   activo: boolean
   mes: string                       // 'YYYY-MM'
   aliases: Record<string, string[]> // usuario_id → apodos extra (además del primer nombre)
+  recordatorioIdx: number           // índice del próximo mensaje cíclico de recordatorio
 }
 
 const CLAVE = 'concurso_google'
-const DEFAULT_CONFIG: ConcursoConfig = { activo: false, mes: '', aliases: {} }
+const DEFAULT_CONFIG: ConcursoConfig = { activo: false, mes: '', aliases: {}, recordatorioIdx: 0 }
+
+// Mensajes cíclicos del recordatorio del juego (rotan en cada envío).
+export const MENSAJES_RECORDATORIO = [
+  'Pediles a tus clientas que te nombren en su reseña de Google. ¡Cada mención suma para el premio! ⭐',
+  'Sigue el concurso de reseñas: una clienta que te nombra en Google = un punto para vos. ¡Dale que se puede! 🏆',
+  '¿Ya pediste hoy que te nombren en Google? Mientras mejor te trates a las clientas, más cerca del premio 💪',
+]
 
 export function mesActual(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).slice(0, 7)

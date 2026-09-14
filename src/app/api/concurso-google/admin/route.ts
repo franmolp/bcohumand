@@ -43,7 +43,7 @@ export async function PUT(req: NextRequest) {
   const mes = body.mes || actual.mes || (activo ? mesActual() : '')
   const aliases = body.aliases ?? actual.aliases
 
-  await setConcursoConfig({ activo, mes, aliases })
+  await setConcursoConfig({ activo, mes, aliases, recordatorioIdx: actual.recordatorioIdx ?? 0 })
   return NextResponse.json({ ok: true, config: { activo, mes, aliases } })
 }
 

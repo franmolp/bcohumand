@@ -60,6 +60,7 @@ function tipoConfig(tipo: string) {
     reconocimiento_pendiente:      { icon: <IconTrophy size={14} />,  bg: 'bg-yellow-100',  color: 'text-yellow-600',  href: '/dashboard/reconocimientos' },
     reconocimiento_aprobado:       { icon: <IconTrophy size={14} />,  bg: 'bg-yellow-100',  color: 'text-yellow-600',  href: '/dashboard/reconocimientos' },
     reconocimiento_recordatorio:   { icon: <IconTrophy size={14} />,  bg: 'bg-yellow-100',  color: 'text-yellow-600',  href: '/dashboard/reconocimientos' },
+    concurso_google:               { icon: <IconTrophy size={14} />,  bg: 'bg-pink-100',    color: 'text-pink-600',    href: '/dashboard/reconocimientos?tab=resenas' },
     pedido_recordatorio:           { icon: <IconBottle size={14} />, bg: 'bg-purple-100', color: 'text-purple-600', href: '/dashboard/pedidos' },
     puesto_solicitado:             { icon: <IconLayoutGrid size={14} />, bg: 'bg-sky-100',     color: 'text-sky-600',     href: '/dashboard/espacio-trabajo' },
     puesto_aprobado:               { icon: <IconLayoutGrid size={14} />, bg: 'bg-green-100',   color: 'text-green-600',   href: '/dashboard/espacio-trabajo' },

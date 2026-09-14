@@ -513,19 +513,19 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
           </div>
 
           {concurso.top.length > 0 ? (
-            <div className="flex gap-5 px-4 pt-2 pb-3">
+            <div className="grid grid-cols-3 gap-2 px-2 pt-2 pb-3">
               {concurso.top.map((e, i) => {
                 const initials = e.nombre.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
                 return (
-                  <div key={e.id} className="flex flex-col items-center flex-shrink-0">
+                  <div key={e.id} className="flex flex-col items-center">
                     <div className="relative mb-2">
                       {e.foto
-                        ? <img src={e.foto} alt={e.nombre} className="w-12 h-12 rounded-full object-cover ring-2 ring-white/40" />
-                        : <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center ring-2 ring-white/40"><span className="text-[12px] font-bold text-white">{initials}</span></div>}
-                      <span className="absolute -bottom-1.5 -right-1 text-[14px] leading-none">{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</span>
+                        ? <img src={e.foto} alt={e.nombre} className="w-16 h-16 rounded-full object-cover ring-2 ring-white/40" />
+                        : <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center ring-2 ring-white/40"><span className="text-[15px] font-bold text-white">{initials}</span></div>}
+                      <span className="absolute -bottom-1 -right-0.5 text-[17px] leading-none">{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</span>
                     </div>
-                    <p className="text-[10px] text-white/90 text-center max-w-[56px] truncate leading-tight">{e.nombre.split(' ')[0]}</p>
-                    <p className="text-[11px] font-bold text-white leading-tight">{e.menciones} menc.</p>
+                    <p className="text-[11px] text-white/90 text-center max-w-[72px] truncate leading-tight">{e.nombre.split(' ')[0]}</p>
+                    <p className="text-[12px] font-bold text-white leading-tight">{e.menciones} menc.</p>
                   </div>
                 )
               })}

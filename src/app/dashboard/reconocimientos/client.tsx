@@ -925,6 +925,8 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
   const [saving, setSaving] = useState(false)
   const [trayendo, setTrayendo] = useState(false)
   const [traerMsg, setTraerMsg] = useState('')
+  const [enviandoRec, setEnviandoRec] = useState(false)
+  const [recMsg, setRecMsg] = useState('')
   const [aliasText, setAliasText] = useState<Record<string, string>>({})
 
   const cargar = useCallback(async () => {
@@ -955,6 +957,16 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
       if (arr.length) aliases[id] = arr
     }
     putConfig({ aliases })
+  }
+  async function enviarRecordatorio() {
+    setEnviandoRec(true); setRecMsg('')
+    try {
+      const res = await fetch('/api/concurso-google/recordatorio', { method: 'POST' })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok || d.error) setRecMsg(d.error ?? 'No se pudo enviar')
+      else setRecMsg(`Enviado a ${d.enviados} empleadas ✓`)
+    } catch { setRecMsg('Error de conexión') }
+    setEnviandoRec(false)
   }
   async function traerAhora() {
     setTrayendo(true); setTraerMsg('')
@@ -1040,6 +1052,20 @@ function TabEstrellas({ isAdmin }: { isAdmin: boolean }) {
                 <button onClick={() => putConfig({ activo: !admin.config.activo })} disabled={saving}
                   className={`w-12 h-7 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${admin.config.activo ? 'bg-green-500' : 'bg-gray-300'}`}>
                   <span className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all ${admin.config.activo ? 'left-[22px]' : 'left-0.5'}`} />
+                </button>
+              </div>
+
+              {/* Recordatorio */}
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-gray-700">Recordatorio del juego</p>
+                  <p className="text-[11px] text-gray-400">Avisa a todas para que pidan reseñas (rota entre 3 mensajes)</p>
+                  {recMsg && <p className="text-[11px] text-emerald-600 mt-0.5">{recMsg}</p>}
+                </div>
+                <button onClick={enviarRecordatorio} disabled={enviandoRec || !admin.config.activo}
+                  className="px-3 py-2 text-white text-[12px] font-semibold rounded-lg cursor-pointer disabled:opacity-50 flex-shrink-0"
+                  style={{ background: 'linear-gradient(135deg, #ec4899, #db2777)' }}>
+                  {enviandoRec ? 'Enviando…' : 'Enviar aviso'}
                 </button>
               </div>
 
