@@ -10,6 +10,21 @@ type SerpReview = {
   date?: string
   iso_date?: string
   snippet?: string
+  details?: Record<string, string> // atributos estructurados (ej. "Estilista": "Claudia : buen trato")
+}
+
+// Texto a escanear/mostrar: comentario libre + campos estructurados (Servicios,
+// Estilista, etc.). Muchas reseñas no tienen comentario pero completan estos
+// campos, y ahí a veces figura el nombre de la empleada ("Estilista: Claudia").
+function textoDeReview(r: SerpReview): string {
+  const partes: string[] = []
+  if (r.snippet?.trim()) partes.push(r.snippet.trim())
+  if (r.details && typeof r.details === 'object') {
+    for (const [k, v] of Object.entries(r.details)) {
+      if (typeof v === 'string' && v.trim()) partes.push(`${k}: ${v.trim()}`)
+    }
+  }
+  return partes.join(' · ')
 }
 
 async function fetchDataId(key: string): Promise<string | null> {
@@ -85,7 +100,9 @@ async function acumularMenciones(
     const backfill: { rk: string; iso: string }[] = []
     let vistaVieja = false // alguna reseña ANTERIOR al mes del concurso (newest-first → frenar)
     for (const r of pagina) {
-      if ((r.rating ?? 0) < 4 || !r.snippet?.trim()) continue
+      if ((r.rating ?? 0) < 4) continue
+      const texto = textoDeReview(r)
+      if (!texto) continue // ni comentario ni campos estructurados → nada que contar
       const iso = typeof r.iso_date === 'string' && r.iso_date ? r.iso_date : null
       if (iso) {
         const m = iso.slice(0, 7)
@@ -97,13 +114,13 @@ async function acumularMenciones(
       const rk = reviewKey(r)
       if (conocidas.has(rk)) { if (iso) backfill.push({ rk, iso }); continue }
       conocidas.add(rk)
-      const detectados = detectarEmpleadas(r.snippet, empleadas)
+      const detectados = detectarEmpleadas(texto, empleadas)
       nuevas.push({
         review_key: rk,
         author: r.user?.name ?? 'Cliente',
         avatar: r.user?.thumbnail ?? null,
         rating: r.rating ?? 5,
-        texto: r.snippet,
+        texto,
         fecha_texto: r.date ?? '',
         fecha_iso: iso,
         mes,
@@ -173,7 +190,12 @@ export async function ejecutarGoogleReviewsRefresh() {
     console.error('[concurso-google] acumular menciones falló:', e)
   }
 
-  return { updated: reviews.length, mencionesNuevas, mencionesTotal, mencionesError }
+  // Diagnóstico: qué campos trae una reseña SIN comentario libre (para saber dónde
+  // vienen los datos estructurados tipo "Estilista: Claudia").
+  const ejemploSinComentario = pagina1.find(r => !(typeof r.snippet === 'string' && r.snippet.trim()))
+  const camposSinComentario = ejemploSinComentario ? Object.keys(ejemploSinComentario) : []
+
+  return { updated: reviews.length, mencionesNuevas, mencionesTotal, mencionesError, camposSinComentario }
 }
 
 // Ruta standalone (debug/manual) — el cron de Vercel llama a /api/cron/diario
