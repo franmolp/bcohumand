@@ -238,7 +238,6 @@ async function descargarReporte(page, url, label) {
   //      (no cualquier overlay genérico — eso rompió el menú la vez pasada, probablemente
   //      porque el data-qa="overlay" es el backdrop legítimo de otro popover de Fresha)
   const overlaySelector = '[class*="modalSlide" i], [data-qa="overlay"], [data-react-aria-top-layer] [role="dialog"]'
-  const promoSelector = '[class*="modalSlide" i]'
 
   const limpiarOverlay = async () => {
     const overlay = page.locator(overlaySelector).first()
@@ -249,6 +248,12 @@ async function descargarReporte(page, url, label) {
     if (desaparecio) return
 
     console.log(`[${label}] Overlay sigue presente, intentando cerrarlo activamente`)
+    // Escape cierra tanto los anuncios como los popovers abiertos (que dejan su backdrop),
+    // sin tocar el DOM. Es la forma más limpia y suele resolverlo.
+    await page.keyboard.press('Escape').catch(() => {})
+    await page.waitForTimeout(300)
+    await page.keyboard.press('Escape').catch(() => {})
+    await page.waitForTimeout(300)
     const closeBtn = overlay.locator('button[aria-label*="close" i], button[aria-label*="cerrar" i], button:has-text("×")').first()
     if (await closeBtn.count() > 0) {
       await closeBtn.click({ timeout: 3000 }).catch(() => {})
@@ -259,12 +264,19 @@ async function descargarReporte(page, url, label) {
     await page.waitForTimeout(500)
     if (await page.locator(overlaySelector).count() === 0) return
 
-    const promo = page.locator(promoSelector).first()
-    if (await promo.count() > 0) {
-      console.log(`[${label}] Overlay sigue tapando la UI, eliminando el panel de anuncio del DOM`)
-      await promo.evaluate(el => el.remove()).catch(() => {})
-      await page.waitForTimeout(300)
-    }
+    // Sigue tapando. Se remueven los paneles de anuncio (modalSlide) y — clave — al
+    // backdrop genérico (data-qa="overlay") NO se lo remueve (puede ser el de un popover
+    // legítimo y romperlo), sino que se le desactivan los pointer-events: deja de
+    // interceptar el click sobre "Opciones" pero queda en el DOM. No se toca el wrapper
+    // del portal para no anular el menú CSV, que se renderiza en esa misma capa.
+    console.log(`[${label}] Overlay sigue tapando la UI, neutralizando el backdrop que intercepta el click`)
+    await page.evaluate(() => {
+      document.querySelectorAll('[class*="modalSlide" i]').forEach(el => el.remove())
+      document.querySelectorAll('[data-qa="overlay"], [data-react-aria-top-layer] [class*="overlay" i]').forEach(el => {
+        el.style.pointerEvents = 'none'
+      })
+    }).catch(() => {})
+    await page.waitForTimeout(300)
   }
 
   await limpiarOverlay()
@@ -276,11 +288,24 @@ async function descargarReporte(page, url, label) {
     try {
       await opcionesBtn.click({ timeout: 15000 })
     } catch (e2) {
-      await page.screenshot({ path: `/tmp/fresha-${label}-debug.png`, fullPage: true }).catch(() => {})
-      throw new Error(
-        `[${label}] No se pudo hacer click en "Opciones" (posible overlay tapando el botón).\n` +
-        `Screenshot guardado en /tmp/fresha-${label}-debug.png\n${e2.message}`
-      )
+      // Último recurso: forzar el click (ignora la intercepción de pointer-events) y,
+      // si aún así no abre el menú, invocar el handler directo por JS (evita el overlay).
+      console.warn(`[${label}] Segundo intento falló, forzando el click: ${e2.message}`)
+      await opcionesBtn.click({ timeout: 8000, force: true }).catch(() => {})
+      await page.waitForTimeout(500)
+      const menuAbierto = await page.locator('[role="menu"], [class*="dropdown" i], [role="menuitem"]').count() > 0
+      if (!menuAbierto) {
+        await opcionesBtn.evaluate(el => el.click()).catch(() => {})
+        await page.waitForTimeout(500)
+      }
+      const menuFinal = await page.locator('[role="menu"], [class*="dropdown" i], [role="menuitem"]').count() > 0
+      if (!menuFinal) {
+        await page.screenshot({ path: `/tmp/fresha-${label}-debug.png`, fullPage: true }).catch(() => {})
+        throw new Error(
+          `[${label}] No se pudo hacer click en "Opciones" (posible overlay tapando el botón).\n` +
+          `Screenshot guardado en /tmp/fresha-${label}-debug.png\n${e2.message}`
+        )
+      }
     }
   }
   await page.waitForTimeout(800)
