@@ -1275,7 +1275,8 @@ function TabEnviados({ cicloActivo, isAdmin, onRefresh }: { cicloActivo: Ciclo |
         <div className="flex items-center justify-end gap-2 mb-3">
           <span className="text-[12px] text-[var(--text-muted)] flex-shrink-0">Ordenar por</span>
           <div className="w-44">
-            <Select value={orden} onChange={v => { setOrden(v as 'recibido' | 'pedido'); setPagina(0) }}>
+            <Select value={orden} onChange={v => { setOrden(v as 'recibido' | 'pedido'); setPagina(0) }}
+              className="!h-9 !px-3 text-[13px]">
               <option value="recibido">Fecha de recibido</option>
               <option value="pedido">Fecha de pedido</option>
             </Select>
