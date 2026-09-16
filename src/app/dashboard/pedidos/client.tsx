@@ -39,6 +39,11 @@ function fmtCantidad(cantidad: number, unidad: string): string {
   return a ? `${cantidad}${a}.` : `${cantidad} ${unidad}.`
 }
 
+// Formatea una cantidad sumada quitando decimales innecesarios (1.5 → "1.5", 12.00 → "12").
+function fmtNum(n: number): string {
+  return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(2)))
+}
+
 interface Proveedor { id: number; nombre: string }
 
 interface Producto {
@@ -1198,6 +1203,18 @@ function TabEnviados({ cicloActivo, isAdmin, onRefresh }: { cicloActivo: Ciclo |
           const key = `${g.fecha}__${g.proveedor_id ?? 'null'}`
           const abierto = abiertos.has(key)
           const pendientes = g.items.filter(i => i.estado === 'ordenado' && borrador[i.id] === undefined).length
+          // Resumen de unidades para corroborar el pedido de un vistazo (sin desplegar).
+          // Considera las marcas sin guardar (borrador) para que se actualice al revisar.
+          let llegaronU = 0, faltaronU = 0, revisarU = 0
+          for (const i of g.items) {
+            const marcado = borrador[i.id]
+            if (marcado !== undefined) {
+              if (marcado > 0) llegaronU += marcado; else faltaronU += i.cantidad
+            } else if (i.estado === 'recibido') llegaronU += i.cantidad
+            else if (i.estado === 'faltante') faltaronU += i.cantidad
+            else if (i.estado === 'ordenado') revisarU += i.cantidad
+          }
+          const yaRevisado = llegaronU > 0 || faltaronU > 0
           const fechaRecibido = pendientes === 0
             ? g.items.reduce((max: string | null, i) => i.recibido_en && (!max || i.recibido_en > max) ? i.recibido_en : max, null)
             : null
@@ -1212,6 +1229,13 @@ function TabEnviados({ cicloActivo, isAdmin, onRefresh }: { cicloActivo: Ciclo |
                     Pedido {formatFechaEnvio(g.fecha)}
                     {fechaRecibido && <> · Recibido {formatFechaHora(fechaRecibido)}</>}
                   </p>
+                  {yaRevisado && (
+                    <p className="text-[11px] font-semibold mt-0.5 flex flex-wrap items-center gap-x-2">
+                      <span className="text-green-600">✓ {fmtNum(llegaronU)} llegaron</span>
+                      {faltaronU > 0 && <span className="text-orange-600">✕ {fmtNum(faltaronU)} faltaron</span>}
+                      {revisarU > 0 && <span className="text-[var(--text-muted)] font-medium">· {fmtNum(revisarU)} sin revisar</span>}
+                    </p>
+                  )}
                   {pendientes > 0 && (
                     <p className="text-[11px] font-bold text-orange-600 mt-0.5">
                       Falta revisar {pendientes} producto{pendientes !== 1 ? 's' : ''}
