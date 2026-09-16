@@ -1019,6 +1019,7 @@ function TabEnviados({ cicloActivo, isAdmin, onRefresh }: { cicloActivo: Ciclo |
   const [guardandoPedido, setGuardandoPedido] = useState(false)
   const [abiertos, setAbiertos] = useState<Set<string>>(new Set())
   const [pagina, setPagina] = useState(0)
+  const [orden, setOrden] = useState<'recibido' | 'pedido'>('recibido')
   const POR_PAGINA = 8
 
   function showToast(msg: string, type: 'success' | 'error' = 'success') {
@@ -1157,13 +1158,22 @@ function TabEnviados({ cicloActivo, isAdmin, onRefresh }: { cicloActivo: Ciclo |
   if (loading) return <Spinner />
 
   const cantMarcados = Object.keys(borrador).length
-  // Los pedidos con ítems sin recibir (todavía "ordenado") van arriba de todo —
-  // el resto, ya cerrado, queda después. Dentro de cada grupo se mantiene el
-  // orden por fecha que ya viene del backend (sort estable).
+  // Fecha (timestamp) para ordenar cada grupo según el criterio elegido. La de recibido
+  // es la más reciente entre sus ítems; si todavía no se recibió nada, cae a la de pedido.
+  const tsGrupo = (g: EnvioGroup): number => {
+    if (orden === 'recibido') {
+      const rec = g.items.reduce((max: string | null, i) => i.recibido_en && (!max || i.recibido_en > max) ? i.recibido_en : max, null)
+      if (rec) return new Date(rec).getTime()
+    }
+    return g.fecha === 'sin_fecha' ? 0 : new Date(g.fecha + 'T00:00:00').getTime()
+  }
+  // Los pedidos con ítems sin recibir (todavía "ordenado") van SIEMPRE arriba de todo.
+  // El resto se ordena por el criterio elegido (recibido o pedido), más nuevo primero.
   const gruposOrdenados = [...grupos].sort((a, b) => {
     const aAbierto = a.items.some(i => i.estado === 'ordenado') ? 1 : 0
     const bAbierto = b.items.some(i => i.estado === 'ordenado') ? 1 : 0
-    return bAbierto - aAbierto
+    if (aAbierto !== bAbierto) return bAbierto - aAbierto
+    return tsGrupo(b) - tsGrupo(a)
   })
   const totalPaginas = Math.max(1, Math.ceil(gruposOrdenados.length / POR_PAGINA))
   const paginaSegura = Math.min(pagina, totalPaginas - 1)
@@ -1261,6 +1271,17 @@ function TabEnviados({ cicloActivo, isAdmin, onRefresh }: { cicloActivo: Ciclo |
       )}
 
       {!grupos.length && <p className="text-center text-[13px] text-gray-400 py-12">No hay pedidos enviados</p>}
+      {grupos.length > 0 && (
+        <div className="flex items-center justify-end gap-2 mb-3">
+          <span className="text-[12px] text-[var(--text-muted)] flex-shrink-0">Ordenar por</span>
+          <div className="w-44">
+            <Select value={orden} onChange={v => { setOrden(v as 'recibido' | 'pedido'); setPagina(0) }}>
+              <option value="recibido">Fecha de recibido</option>
+              <option value="pedido">Fecha de pedido</option>
+            </Select>
+          </div>
+        </div>
+      )}
       <div className="space-y-3">
         {gruposPagina.map(g => {
           const key = `${g.fecha}__${g.proveedor_id ?? 'null'}`
