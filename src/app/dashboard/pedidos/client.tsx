@@ -1061,6 +1061,39 @@ function TabEnviados({ cicloActivo, isAdmin, onRefresh }: { cicloActivo: Ciclo |
     setBorrador(b => { const next = { ...b }; delete next[itemId]; return next })
   }
 
+  // Admin: reabre un ítem ya cerrado (recibido/faltante) para volver a controlarlo,
+  // por si se olvidaron de anotar algo que llegó o cargaron mal la cantidad. Vuelve a
+  // 'ordenado' (aparecen de nuevo los botones Recibir / No llegó). Si estaba recibido,
+  // primero revierte del stock lo que se había sumado, para no contarlo dos veces.
+  const [reabrir, setReabrir] = useState<EnvioItem | null>(null)
+  const [reabriendo, setReabriendo] = useState(false)
+  async function confirmarReabrir() {
+    if (!reabrir) return
+    setReabriendo(true)
+    try {
+      if (reabrir.estado === 'recibido' && (reabrir.variante_id || reabrir.producto_id)) {
+        const url = reabrir.variante_id
+          ? `/api/pedidos/variantes/${reabrir.variante_id}`
+          : `/api/pedidos/productos/${reabrir.producto_id}`
+        await fetch(url, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stock_delta: -reabrir.cantidad }),
+        }).catch(() => {})
+      }
+      const res = await fetch(`/api/pedidos/ciclos/${reabrir.ciclo_id}/items/${reabrir.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estado: 'ordenado' }),
+      })
+      if (!res.ok) { showToast('No se pudo reabrir el ítem', 'error'); return }
+      showToast('Ítem reabierto — volvé a marcar si llegó')
+      setReabrir(null)
+      cargar()
+      onRefresh()
+    } finally {
+      setReabriendo(false)
+    }
+  }
+
   async function guardarPedido() {
     const pendientes = Object.entries(borrador)
     if (!pendientes.length) return
@@ -1139,6 +1172,36 @@ function TabEnviados({ cicloActivo, isAdmin, onRefresh }: { cicloActivo: Ciclo |
   return (
     <div>
       <Toast message={toast?.msg ?? ''} visible={!!toast} type={toast?.type} />
+
+      {/* Modal confirmación reapertura (admin) */}
+      <Modal
+        open={!!reabrir} onClose={() => setReabrir(null)}
+        title="¿Reabrir este ítem?"
+        footer={
+          <>
+            <Button variant="secondary" className="flex-1" onClick={() => setReabrir(null)} disabled={reabriendo}>Cancelar</Button>
+            <Button className="flex-1" onClick={confirmarReabrir} loading={reabriendo}>Reabrir</Button>
+          </>
+        }
+      >
+        <div className="p-3 bg-gray-50 border border-[var(--border)] rounded-xl">
+          <p className="text-[13px] font-semibold text-[var(--text)]">
+            {reabrir?.nombre}
+            {reabrir?.variante_nombre && <span className="font-normal text-[var(--text-muted)]"> · {reabrir.variante_nombre}</span>}
+          </p>
+          <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+            Estado actual: {reabrir?.estado === 'recibido' ? `recibido (${reabrir ? fmtCantidad(reabrir.cantidad, reabrir.unidad) : ''})` : 'no llegó'}
+          </p>
+        </div>
+        <p className="text-[12px] text-[var(--text-sub)]">
+          Vuelve a quedar pendiente de control, con los botones <b>Recibir</b> / <b>No llegó</b> para cargarlo de nuevo.
+          {reabrir?.estado === 'recibido' && (
+            <span className="block mt-1 text-orange-600">
+              Se descuenta del stock lo que se había sumado ({reabrir ? fmtCantidad(reabrir.cantidad, reabrir.unidad) : ''}); al volver a recibirlo se suma la cantidad correcta.
+            </span>
+          )}
+        </p>
+      </Modal>
 
       {/* Modal confirmación recepción */}
       <Modal
@@ -1299,6 +1362,14 @@ function TabEnviados({ cicloActivo, isAdmin, onRefresh }: { cicloActivo: Ciclo |
                           onClick={() => deshacerMarca(item.id)}
                           className="flex-shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 cursor-pointer transition-colors">
                           Deshacer
+                        </button>
+                      )}
+                      {isAdmin && (item.estado === 'recibido' || item.estado === 'faltante') && (
+                        <button
+                          onClick={() => setReabrir(item)}
+                          title="Reabrir para corregir la recepción"
+                          className="flex-shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 cursor-pointer transition-colors">
+                          Reabrir
                         </button>
                       )}
                     </div>
