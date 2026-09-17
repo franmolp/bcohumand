@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
   const [solsRes, usersRes, evRes, efRes] = await Promise.all([
     supabase.from('solicitudes')
-      .select('id, usuario_id, empleado_nombre, tipo, fecha_inicio, fecha_fin, estado, subtipo_horario, horario_anterior, horario_nuevo, fecha_compensacion')
+      .select('id, usuario_id, empleado_nombre, tipo, fecha_inicio, fecha_fin, estado, subtipo_horario, horario_anterior, horario_nuevo, fecha_compensacion, motivo, comentario_admin')
       .in('estado', ['approved', 'pending'])
       .lte('fecha_inicio', lastDay)
       .or(`fecha_fin.gte.${firstDay},fecha_fin.is.null`),

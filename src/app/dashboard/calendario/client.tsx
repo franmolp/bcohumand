@@ -21,6 +21,8 @@ interface SolicitudCal {
   fecha_compensacion: string | null
   equipo_nombre: string | null
   rol_nombre: string | null
+  motivo: string | null
+  comentario_admin: string | null
 }
 
 interface CumpleanosUser {
@@ -210,6 +212,10 @@ function buildDayMap(
             id: `feriado-${s.fecha_inicio}-${day}`,
             type: 'local_cerrado',
             title: 'Local cerrado',
+            // Motivo (nombre del feriado) y comentario del admin, para ver el detalle
+            // en el modal del día sin tener que ir a Solicitudes.
+            subtitle: s.motivo ?? undefined,
+            descripcion: s.comentario_admin ?? undefined,
             color: COLOR_LOCAL_CLOSED,
             isPending: false,
           })
