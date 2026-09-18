@@ -397,8 +397,12 @@ function DayModal({
                   : <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-sm text-white font-bold text-[13px]" style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)' }}>{bdIni}</div>
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-[13px] font-semibold leading-snug">{ev.title}</p>
-                {ev.subtitle    && <p className="text-[12px] text-gray-500 mt-0.5">{ev.subtitle}</p>}
+                {/* En "Local cerrado" el motivo (subtitle) pasa a ser el título, para no
+                    repetir "Local cerrado" arriba y en la etiqueta de categoría de abajo. */}
+                <p className="text-[13px] font-semibold leading-snug">
+                  {ev.type === 'local_cerrado' && ev.subtitle ? ev.subtitle : ev.title}
+                </p>
+                {ev.subtitle && ev.type !== 'local_cerrado' && <p className="text-[12px] text-gray-500 mt-0.5">{ev.subtitle}</p>}
                 {ev.hora        && <p className="text-[11px] text-gray-400 mt-0.5">{ev.hora}</p>}
                 {ev.descripcion && <p className="text-[12px] text-gray-600 mt-1">{ev.descripcion}</p>}
                 <span className="text-[10px] font-medium uppercase tracking-wide mt-1 block" style={{ color: ev.color }}>
