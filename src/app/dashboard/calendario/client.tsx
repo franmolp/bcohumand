@@ -2,8 +2,8 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import type { SessionUser } from '@/types'
-import { Modal, Toast, Spinner } from '@/components/ui'
-import { IconCalendar, IconChevronLeft, IconChevronRight, IconPlus, IconTrash, IconX } from '@/components/ui/Icons'
+import { Modal, Toast, Spinner, Button } from '@/components/ui'
+import { IconCalendar, IconChevronLeft, IconChevronRight, IconPlus, IconTrash, IconX, IconEdit } from '@/components/ui/Icons'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -88,6 +88,7 @@ interface CalEvent {
   usuarioId?: string
   hora?: string
   fotoUrl?: string | null
+  feriadoRango?: { inicio: string; fin: string } // solo feriados (solicitud masiva): permite editar motivo/comentario
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -218,6 +219,7 @@ function buildDayMap(
             descripcion: s.comentario_admin ?? undefined,
             color: COLOR_LOCAL_CLOSED,
             isPending: false,
+            feriadoRango: { inicio: s.fecha_inicio, fin: s.fecha_fin ?? s.fecha_inicio },
           })
         }
         cur.setDate(day + 1)
@@ -355,12 +357,13 @@ function EventChip({ ev }: { ev: CalEvent }) {
 
 function DayModal({
   day, mes, anio, events, isAdmin,
-  onClose, onDelete,
+  onClose, onDelete, onEditFeriado,
 }: {
   day: number; mes: number; anio: number
   events: CalEvent[]; isAdmin: boolean
   onClose: () => void
   onDelete: (sourceId: string, type: CalEventType) => void
+  onEditFeriado: (ev: CalEvent) => void
 }) {
   const typeLabel: Record<CalEventType, string> = {
     local_cerrado: 'Local cerrado',
@@ -403,6 +406,15 @@ function DayModal({
                   {ev.isPending && ' · Pendiente'}
                 </span>
               </div>
+              {isAdmin && ev.feriadoRango && (
+                <button
+                  onClick={() => onEditFeriado(ev)}
+                  title="Editar motivo / comentario"
+                  className="p-1.5 text-gray-300 hover:text-[var(--primary)] transition-colors cursor-pointer flex-shrink-0"
+                >
+                  <IconEdit size={14} />
+                </button>
+              )}
               {canDelete(ev) && (
                 <button
                   onClick={() => onDelete(ev.sourceId!, ev.type)}
@@ -799,10 +811,49 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
 
   const [dayModal,    setDayModal]    = useState<{ day: number; events: CalEvent[] } | null>(null)
   const [createModal, setCreateModal] = useState(false)
+  const [feriadoEdit, setFeriadoEdit] = useState<{ inicio: string; fin: string; motivo: string; comentario: string } | null>(null)
+  const [savingFeriado, setSavingFeriado] = useState(false)
 
   function showToast(msg: string) {
     setToastMsg(msg); setToastVisible(true)
     setTimeout(() => setToastVisible(false), 3000)
+  }
+
+  function abrirEditarFeriado(ev: CalEvent) {
+    if (!ev.feriadoRango) return
+    setFeriadoEdit({
+      inicio: ev.feriadoRango.inicio,
+      fin: ev.feriadoRango.fin,
+      motivo: ev.subtitle ?? '',
+      comentario: ev.descripcion ?? '',
+    })
+  }
+
+  async function guardarEditarFeriado() {
+    if (!feriadoEdit) return
+    setSavingFeriado(true)
+    try {
+      const r = await fetch('/api/solicitudes/masiva', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fecha_inicio: feriadoEdit.inicio,
+          fecha_fin: feriadoEdit.fin,
+          motivo: feriadoEdit.motivo.trim() || null,
+          comentario_admin: feriadoEdit.comentario.trim() || null,
+        }),
+      })
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}))
+        showToast(body.error ?? 'No se pudo guardar')
+        return
+      }
+      setFeriadoEdit(null)
+      setDayModal(null)
+      showToast('Feriado actualizado')
+      loadData(anio, mes)
+    } finally {
+      setSavingFeriado(false)
+    }
   }
 
   const loadData = useCallback(async (y: number, m: number) => {
@@ -1074,7 +1125,41 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
           isAdmin={isAdmin}
           onClose={() => setDayModal(null)}
           onDelete={handleDeleteEvent}
+          onEditFeriado={abrirEditarFeriado}
         />
+      )}
+
+      {/* ── Editar motivo/comentario de feriado ── */}
+      {feriadoEdit && (
+        <Modal open onClose={() => setFeriadoEdit(null)} title="Editar local cerrado">
+          <div className="space-y-3">
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Motivo / Descripción</label>
+              <input
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[var(--primary)]"
+                style={{ fontSize: 16 }}
+                placeholder="Ej: Feriado nacional, aniversario…"
+                value={feriadoEdit.motivo}
+                onChange={e => setFeriadoEdit(f => f && { ...f, motivo: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Comentario para empleados</label>
+              <textarea
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[var(--primary)] resize-none"
+                rows={2}
+                style={{ fontSize: 16 }}
+                placeholder="Opcional"
+                value={feriadoEdit.comentario}
+                onChange={e => setFeriadoEdit(f => f && { ...f, comentario: e.target.value })}
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="secondary" className="flex-1" onClick={() => setFeriadoEdit(null)} disabled={savingFeriado}>Cancelar</Button>
+              <Button className="flex-1" onClick={guardarEditarFeriado} loading={savingFeriado}>Guardar</Button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* ── Create event modal ── */}

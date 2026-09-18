@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/auth'
 import { crearNotificaciones } from '@/lib/notificaciones'
 
@@ -70,6 +71,39 @@ export async function POST(request: NextRequest) {
     } catch { /* silently ignore */ }
 
     return NextResponse.json({ ok: true, count: inserts.length }, { status: 201 })
+  } catch {
+    return NextResponse.json({ error: 'Error interno' }, { status: 500 })
+  }
+}
+
+// PATCH — edita motivo/comentario de un Feriado/Local cerrado ya creado (todas las
+// filas del feriado: una por empleado). Útil para completar feriados viejos que se
+// crearon sin motivo, o corregir un dato, sin tener que borrarlo y rehacerlo.
+export async function PATCH(request: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
+  if (!isAdmin) return NextResponse.json({ error: 'Sin permisos de administrador' }, { status: 403 })
+
+  try {
+    const { fecha_inicio, fecha_fin, motivo, comentario_admin } = await request.json()
+    if (!fecha_inicio || !fecha_fin) {
+      return NextResponse.json({ error: 'Fechas requeridas' }, { status: 400 })
+    }
+
+    const { error, count } = await supabaseAdmin
+      .from('solicitudes')
+      .update(
+        { motivo: motivo || null, comentario_admin: comentario_admin || null },
+        { count: 'exact' }
+      )
+      .eq('tipo', 'Feriado/Local cerrado')
+      .eq('fecha_inicio', fecha_inicio)
+      .eq('fecha_fin', fecha_fin)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true, count: count ?? 0 })
   } catch {
     return NextResponse.json({ error: 'Error interno' }, { status: 500 })
   }
