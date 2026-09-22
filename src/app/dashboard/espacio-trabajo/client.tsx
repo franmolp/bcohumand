@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import type { SessionUser } from '@/types'
 import { Spinner } from '@/components/ui'
-import { IconLayoutGrid, IconChevronLeft, IconChevronRight, IconClock } from '@/components/ui/Icons'
+import { IconLayoutGrid, IconChevronLeft, IconChevronRight, IconClock, IconLock } from '@/components/ui/Icons'
 import Aprobaciones from './Aprobaciones'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -408,7 +408,7 @@ function WeekDayChips({ dates, selectedDate, todayStr, onSelect, turnos, capacid
               </div>
               <div className="h-2 flex items-center justify-center relative">
                 {isClosed ? (
-                  <span className="text-[9px] leading-none" title="Local cerrado">🔒</span>
+                  <IconLock size={11} className="text-[var(--text-muted)]" />
                 ) : (
                   <>
                     {dotColor && dotPing && (
@@ -635,7 +635,7 @@ export default function EspacioTrabajoClient({ user, isAdminOrEncargada }: { use
         <div className="py-10 text-center text-sm text-red-500">{error}</div>
       ) : !apiData ? null : cerrado ? (
         <div className="bg-white rounded-2xl border border-[var(--border)] py-14 text-center">
-          <div className="text-3xl mb-2">🔒</div>
+          <IconLock size={26} className="text-[var(--text-muted)] mx-auto mb-2" />
           <p className="text-sm font-semibold text-[var(--text)]">Local cerrado</p>
           {motivoCierre && <p className="text-xs text-[var(--text-muted)] mt-1">{motivoCierre}</p>}
           <p className="text-xs text-[var(--text-muted)] mt-1">No hay mesas ni espacios de trabajo este día</p>
