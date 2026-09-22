@@ -85,7 +85,7 @@ export async function getPuestosDisponibles(
   const sabadoActual = addDays(today, dowHoy === 0 ? -1 : 6 - dowHoy)
   const hasta = addDays(sabadoActual, 7) // sábado de la semana que viene
 
-  const [configRes, miembrosRes, ajustesRes] = await Promise.all([
+  const [configRes, miembrosRes, ajustesRes, feriadosRes] = await Promise.all([
     supabaseAdmin.from('configuracion').select('valor').eq('clave', 'espacio_trabajo').single(),
     supabaseAdmin.from('usuarios').select('id').eq('equipo_id', equipoRow.id).eq('estado_cuenta', 'activo'),
     supabaseAdmin
@@ -95,7 +95,29 @@ export async function getPuestosDisponibles(
       .gte('fecha', today)
       .lte('fecha', hasta)
       .in('estado', ['approved', 'pending']),
+    // Feriados / Local cerrado en el rango: esos días no se ofrecen puestos libres.
+    supabaseAdmin
+      .from('solicitudes')
+      .select('fecha_inicio, fecha_fin')
+      .eq('tipo', 'Feriado/Local cerrado')
+      .in('estado', ['approved', 'pending'])
+      .lte('fecha_inicio', hasta)
+      .or(`fecha_fin.gte.${today},fecha_fin.is.null`),
   ])
+
+  // Fechas cerradas (feriado) expandidas al rango pedido.
+  const diasCerrados = new Set<string>()
+  for (const f of (feriadosRes.data ?? []) as { fecha_inicio: string; fecha_fin: string | null }[]) {
+    const ini = f.fecha_inicio < today ? today : f.fecha_inicio
+    const fin = (f.fecha_fin ?? f.fecha_inicio)
+    const finClamp = fin > hasta ? hasta : fin
+    const cur = new Date(ini + 'T12:00:00Z')
+    const last = new Date(finClamp + 'T12:00:00Z')
+    while (cur <= last) {
+      diasCerrados.add(cur.toISOString().slice(0, 10))
+      cur.setUTCDate(cur.getUTCDate() + 1)
+    }
+  }
 
   const capacidadesOverride = (configRes.data?.valor as { capacidades?: Record<string, number> } | null)?.capacidades ?? {}
   const capacity = capacidadesOverride[equipoRow.nombre] ?? defaultCapacity(equipoRow.nombre)
@@ -147,6 +169,7 @@ export async function getPuestosDisponibles(
   const piso = Math.min(minGap, MIN_GAP_CONTIGUO)
 
   for (const [fecha, shiftsDia] of turnosPorFecha.entries()) {
+    if (diasCerrados.has(fecha)) continue // feriado / local cerrado: no se ofrecen puestos
     const gapsCrudos = findGapsForDay(shiftsDia, capacity, piso)
     const solicitudesDia = solicitudesPorFecha.get(fecha) ?? []
 

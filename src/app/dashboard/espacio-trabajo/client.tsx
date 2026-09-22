@@ -20,6 +20,7 @@ interface ApiResponse {
   turnos: Turno[]
   ultimaImportacion: string | null
   capacidades: Record<string, number>
+  diasCerrados?: Record<string, string | null>
 }
 
 // ── ISO week helpers ──────────────────────────────────────────────────────────
@@ -341,13 +342,14 @@ function AvailableSection({ equipo, capacity, shifts, selectedDate }: {
 }
 
 // ── Week day chips (6 fixed chips for loaded week) ───────────────────────────
-function WeekDayChips({ dates, selectedDate, todayStr, onSelect, turnos, capacidades, soloManicuras = false }: {
+function WeekDayChips({ dates, selectedDate, todayStr, onSelect, turnos, capacidades, diasCerrados = {}, soloManicuras = false }: {
   dates: string[]
   selectedDate: string
   todayStr: string
   onSelect: (date: string) => void
   turnos: Turno[]
   capacidades: Record<string, number>
+  diasCerrados?: Record<string, string | null>
   soloManicuras?: boolean
 }) {
   return (
@@ -359,11 +361,12 @@ function WeekDayChips({ dates, selectedDate, todayStr, onSelect, turnos, capacid
           const isToday = date === todayStr
 
           const dayTurnos = turnos.filter(t => t.fecha === date)
+          const isClosed = date in diasCerrados
           const equipos = [...new Set(dayTurnos.map(t => t.equipo).filter(Boolean))]
             .filter(e => !isRecepcion(e) && !isPeluqueria(e))
             .filter(e => !soloManicuras || isManicura(e))
           let dotColor = '', dotPing = false
-          if (equipos.some(eq => dayTurnos.some(t => t.equipo === eq))) {
+          if (!isClosed && equipos.some(eq => dayTurnos.some(t => t.equipo === eq))) {
             let isExcedido = false, isLibre = false
             for (const eq of equipos) {
               const cap = capacidades[eq] ?? 8
@@ -404,10 +407,16 @@ function WeekDayChips({ dates, selectedDate, todayStr, onSelect, turnos, capacid
                 </span>
               </div>
               <div className="h-2 flex items-center justify-center relative">
-                {dotColor && dotPing && (
-                  <span className={`absolute w-2 h-2 rounded-full ${dotColor} opacity-75 animate-ping`} />
+                {isClosed ? (
+                  <span className="text-[9px] leading-none" title="Local cerrado">🔒</span>
+                ) : (
+                  <>
+                    {dotColor && dotPing && (
+                      <span className={`absolute w-2 h-2 rounded-full ${dotColor} opacity-75 animate-ping`} />
+                    )}
+                    {dotColor && <span className={`w-1.5 h-1.5 rounded-full ${dotColor} relative`} />}
+                  </>
                 )}
-                {dotColor && <span className={`w-1.5 h-1.5 rounded-full ${dotColor} relative`} />}
               </div>
             </button>
           )
@@ -516,6 +525,10 @@ export default function EspacioTrabajoClient({ user, isAdminOrEncargada }: { use
     })
   }, [apiData, groups, selectedDate])
 
+  // Día cerrado (feriado / local cerrado): no se muestran mesas ni ocupación.
+  const cerrado = !!apiData?.diasCerrados && selectedDate in apiData.diasCerrados
+  const motivoCierre = cerrado ? apiData!.diasCerrados![selectedDate] : null
+
   return (
     <div className="py-4 space-y-4">
       {/* Header */}
@@ -564,6 +577,7 @@ export default function EspacioTrabajoClient({ user, isAdminOrEncargada }: { use
         onSelect={setSelectedDate}
         turnos={apiData?.turnos ?? []}
         capacidades={apiData?.capacidades ?? {}}
+        diasCerrados={apiData?.diasCerrados ?? {}}
         soloManicuras={isCompras}
       />
 
@@ -589,7 +603,7 @@ export default function EspacioTrabajoClient({ user, isAdminOrEncargada }: { use
                     : 'text-[var(--text-muted)] hover:text-[var(--text-sub)]'
                 }`}>
                 Disponibles
-                {hasAvailable && tab !== 'disponibles' && (
+                {hasAvailable && !cerrado && tab !== 'disponibles' && (
                   <span className="ml-1.5 inline-flex items-center justify-center w-1.5 h-1.5 rounded-full bg-emerald-400" />
                 )}
               </button>
@@ -619,7 +633,14 @@ export default function EspacioTrabajoClient({ user, isAdminOrEncargada }: { use
         <div className="py-16"><Spinner /></div>
       ) : error ? (
         <div className="py-10 text-center text-sm text-red-500">{error}</div>
-      ) : !apiData ? null : groups.length === 0 ? (
+      ) : !apiData ? null : cerrado ? (
+        <div className="bg-white rounded-2xl border border-[var(--border)] py-14 text-center">
+          <div className="text-3xl mb-2">🔒</div>
+          <p className="text-sm font-semibold text-[var(--text)]">Local cerrado</p>
+          {motivoCierre && <p className="text-xs text-[var(--text-muted)] mt-1">{motivoCierre}</p>}
+          <p className="text-xs text-[var(--text-muted)] mt-1">No hay mesas ni espacios de trabajo este día</p>
+        </div>
+      ) : groups.length === 0 ? (
         <div className="bg-white rounded-2xl border border-[var(--border)] py-14 text-center">
           <p className="text-sm text-[var(--text-muted)]">Sin turnos cargados para esta semana</p>
           <p className="text-xs text-[var(--text-muted)] mt-1">Importá los horarios desde Fresha para ver la ocupación</p>

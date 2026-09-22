@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Load config and schedules in parallel
-  const [configRes, horariosRes, solicitudesRes] = await Promise.all([
+  const [configRes, horariosRes, solicitudesRes, feriadosRes] = await Promise.all([
     supabase.from('configuracion').select('clave, valor').in('clave', ['espacio_trabajo', 'ultima_importacion_turnos', 'ultima_importacion_fichadas']),
     supabaseAdmin
       .from('horarios_base')
@@ -50,7 +50,31 @@ export async function GET(req: NextRequest) {
       .eq('estado', 'approved')
       .gte('fecha', fechaInicio)
       .lte('fecha', fechaFin),
+    // Feriados / Local cerrado que caen en el rango: se usan para marcar el día como
+    // cerrado (sin mesas ni ocupación). Deduplicado por fecha más abajo.
+    supabaseAdmin
+      .from('solicitudes')
+      .select('fecha_inicio, fecha_fin, motivo')
+      .eq('tipo', 'Feriado/Local cerrado')
+      .in('estado', ['approved', 'pending'])
+      .lte('fecha_inicio', fechaFin)
+      .or(`fecha_fin.gte.${fechaInicio},fecha_fin.is.null`),
   ])
+
+  // Mapa fecha (YYYY-MM-DD) → motivo del feriado, solo para las fechas del rango pedido.
+  const diasCerrados: Record<string, string | null> = {}
+  for (const f of (feriadosRes.data ?? []) as { fecha_inicio: string; fecha_fin: string | null; motivo: string | null }[]) {
+    const ini = f.fecha_inicio < fechaInicio ? fechaInicio : f.fecha_inicio
+    const fin = (f.fecha_fin ?? f.fecha_inicio)
+    const finClamp = fin > fechaFin ? fechaFin : fin
+    const cur = new Date(ini + 'T12:00:00Z')
+    const last = new Date(finClamp + 'T12:00:00Z')
+    while (cur <= last) {
+      const d = cur.toISOString().slice(0, 10)
+      if (!(d in diasCerrados)) diasCerrados[d] = f.motivo
+      cur.setUTCDate(cur.getUTCDate() + 1)
+    }
+  }
 
   const configMap = new Map((configRes.data ?? []).map((c: { clave: string; valor: unknown }) => [c.clave, c.valor]))
   const espacioConfig = configMap.get('espacio_trabajo') as { capacidades?: Record<string, number> } | undefined
@@ -64,7 +88,7 @@ export async function GET(req: NextRequest) {
   const solicitudesAprobadas = solicitudesRes.data ?? []
 
   if (horarios.length === 0 && solicitudesAprobadas.length === 0) {
-    return NextResponse.json({ turnos: [], ultimaImportacion, ultimaFichadas, capacidades: {} })
+    return NextResponse.json({ turnos: [], ultimaImportacion, ultimaFichadas, capacidades: {}, diasCerrados })
   }
 
   // Two separate queries — avoid FK join which can fail silently
@@ -155,5 +179,5 @@ export async function GET(req: NextRequest) {
     capacidades[name] = capacidadesOverride[name] ?? defaultCapacity(name)
   }
 
-  return NextResponse.json({ turnos, ultimaImportacion, ultimaFichadas, capacidades })
+  return NextResponse.json({ turnos, ultimaImportacion, ultimaFichadas, capacidades, diasCerrados })
 }
