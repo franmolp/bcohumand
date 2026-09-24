@@ -1264,11 +1264,9 @@ function VentasHistoricoChart({ mes, onSelectMes }: { mes: string; onSelectMes: 
           // Ventas: parte real (fuerte) + parte estimada (gris) hacia arriba
           const yVentas = yDe(m.ventas)
           const yVentasProy = yDe(m.ventasProyeccion)
-          // Remanente: puede ser negativo (baja de la línea cero)
-          const rTop = yDe(Math.max(m.remanente, 0))
-          const rBot = yDe(Math.min(m.remanente, 0))
-          const yRemProy = yDe(m.remanenteProyeccion)
-          const colorRem = m.remanente >= 0 ? VERDE : ROJO
+          // Remanente: en el mes en curso se muestra el estimado (con compras y sueldos
+          // estimados); en meses cerrados, el real. Puede ser negativo (baja del cero).
+          const remView = m.esActual ? m.remanenteProyeccion : m.remanente
 
           return (
             <g key={m.mes}>
@@ -1286,12 +1284,14 @@ function VentasHistoricoChart({ mes, onSelectMes }: { mes: string; onSelectMes: 
                 <title>{`${fmtMes(m.mes)} — Ventas ${fmt$(m.ventas)}${m.esActual && m.ventasProyeccion > m.ventas ? ` (estimado ${fmt$(m.ventasProyeccion)})` : ''}`}</title>
               </rect>
 
-              {/* Remanente — barrita más fina */}
-              {m.esActual && m.remanenteProyeccion > m.remanente && (
-                <rect x={rx} y={yRemProy} width={RW} height={Math.max(0, rTop - yRemProy)} rx={2} fill={GRIS} />
-              )}
-              <rect x={rx} y={rTop} width={RW} height={Math.max(1, rBot - rTop)} rx={2} fill={colorRem}>
-                <title>{`${fmtMes(m.mes)} — Remanente ${fmt$(m.remanente)}`}</title>
+              {/* Remanente — barrita más fina. En el mes en curso es una ESTIMACIÓN
+                  (ya con sueldos estimados), por eso va atenuada. */}
+              <rect x={rx} y={yDe(Math.max(remView, 0))} width={RW}
+                height={Math.max(1, yDe(Math.min(remView, 0)) - yDe(Math.max(remView, 0)))}
+                rx={2} fill={remView >= 0 ? VERDE : ROJO} opacity={m.esActual ? 0.5 : 1}>
+                <title>{m.esActual
+                  ? `${fmtMes(m.mes)} — Remanente estimado ${fmt$(m.remanenteProyeccion)}`
+                  : `${fmtMes(m.mes)} — Remanente ${fmt$(m.remanente)}`}</title>
               </rect>
 
               {/* Etiqueta de mes */}

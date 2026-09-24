@@ -29,14 +29,36 @@ export async function GET() {
   const diasDelMes = new Date(ay, am, 0).getDate()
   const diaHoy = parseInt(hoyStr.slice(8, 10), 10)
 
-  const meses = (data ?? []).filter((f: Fila) => f.mes >= INICIO_METRICAS).map((f: Fila) => {
+  const filas = (data ?? []).filter((f: Fila) => f.mes >= INICIO_METRICAS)
+
+  // Ratio sueldos/ventas de los meses YA cerrados (con sueldos cargados), para estimar
+  // los sueldos del mes en curso (que todavía no se liquidaron) en proporción a las
+  // ventas proyectadas. Se promedian los meses cerrados disponibles.
+  const ratios: number[] = []
+  for (const f of filas as Fila[]) {
+    const esActual = f.mes === mesActual
+    if (!esActual && f.ventas > 0 && f.sueldos > 0) ratios.push(f.sueldos / f.ventas)
+  }
+  const ratioSueldos = ratios.length ? ratios.reduce((a, b) => a + b, 0) / ratios.length : null
+
+  const meses = (filas as Fila[]).map((f: Fila) => {
     const ventas = Math.round(f.ventas || 0)
     const gastos = Math.round(f.gastos || 0)
     const sueldos = Math.round(f.sueldos || 0)
     const remanente = ventas - gastos - sueldos
     const esActual = f.mes === mesActual
-    // Proyección solo del mes en curso (aún incompleto): escala por días.
+    // Proyección solo del mes en curso (aún incompleto): escala por días transcurridos.
     const factor = esActual && diaHoy > 0 && diaHoy < diasDelMes ? diasDelMes / diaHoy : 1
+    const ventasProyeccion = esActual ? Math.round(ventas * factor) : ventas
+    const gastosProyeccion = esActual ? Math.round(gastos * factor) : gastos
+    // Sueldos estimados del mes en curso: proporción histórica sueldos/ventas × ventas
+    // proyectadas. Si no hay meses cerrados con sueldos, se cae a escalar por días.
+    const sueldosEstimados = esActual
+      ? (ratioSueldos != null ? Math.round(ratioSueldos * ventasProyeccion) : Math.round(sueldos * factor))
+      : sueldos
+    const remanenteProyeccion = esActual
+      ? ventasProyeccion - gastosProyeccion - sueldosEstimados
+      : remanente
     return {
       mes: f.mes,
       ventas,
@@ -44,10 +66,9 @@ export async function GET() {
       sueldos,
       remanente,
       esActual,
-      // En el mes en curso los sueldos todavía no se cargan, así que el remanente
-      // proyectado se calcula como ventas − gastos (igual criterio que la tarjeta).
-      ventasProyeccion: esActual ? Math.round(ventas * factor) : ventas,
-      remanenteProyeccion: esActual ? Math.round((ventas - gastos) * factor) : remanente,
+      ventasProyeccion,
+      sueldosEstimados,
+      remanenteProyeccion,
     }
   })
 
