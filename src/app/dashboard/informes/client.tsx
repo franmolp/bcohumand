@@ -1282,7 +1282,6 @@ function VentasHistoricoChart({ mes, onSelectMes }: { mes: string; onSelectMes: 
           const dV = pctDelta(ventasView, prev ? prev.ventas : null)
           const dR = pctDelta(remView, prev ? prev.remanente : null)
           const topVentas = m.esActual ? yVentasProy : yVentas
-          const topRem = yDe(Math.max(remView, 0))
 
           return (
             <g key={m.mes}>
@@ -1310,19 +1309,31 @@ function VentasHistoricoChart({ mes, onSelectMes }: { mes: string; onSelectMes: 
                   : `${fmtMes(m.mes)} — Remanente ${fmt$(m.remanente)}`}</title>
               </rect>
 
-              {/* % de variación vs mes anterior, arriba de cada barra */}
-              {dV && (
-                <text x={vx + VW / 2} y={Math.max(TOP - 2, topVentas - 3)} textAnchor="middle"
-                  fontSize={7.5} fontWeight={600} fill={dV.up ? VERDE : ROJO}>
-                  {dV.txt}
-                </text>
-              )}
-              {dR && (
-                <text x={rx + RW / 2} y={Math.max(TOP - 2, topRem - 3)} textAnchor="middle"
-                  fontSize={7} fontWeight={600} fill={dR.up ? VERDE : ROJO} opacity={0.85}>
-                  {dR.txt}
-                </text>
-              )}
+              {/* % de variación vs mes anterior, DENTRO de cada barra (o arriba si es muy baja) */}
+              {dV && (() => {
+                const barH = zeroY - yVentas
+                const dentro = barH >= 20
+                return (
+                  <text x={vx + VW / 2} y={dentro ? yVentas + 14 : Math.max(TOP - 1, topVentas - 4)}
+                    textAnchor="middle" fontSize={11} fontWeight={700}
+                    fill={dentro ? '#ffffff' : (dV.up ? VERDE : ROJO)}>
+                    {dV.txt}
+                  </text>
+                )
+              })()}
+              {dR && (() => {
+                const rTop = yDe(Math.max(remView, 0))
+                const rBot = yDe(Math.min(remView, 0))
+                const barH = rBot - rTop
+                const dentro = barH >= 18
+                return (
+                  <text x={rx + RW / 2} y={dentro ? rTop + 13 : Math.max(TOP - 1, rTop - 4)}
+                    textAnchor="middle" fontSize={10} fontWeight={700}
+                    fill={dentro ? (m.esActual ? '#14532d' : '#ffffff') : (dR.up ? VERDE : ROJO)}>
+                    {dR.txt}
+                  </text>
+                )
+              })()}
 
               {/* Etiqueta de mes */}
               <text x={cx} y={BASE + 14} textAnchor="middle"
