@@ -1311,6 +1311,17 @@ function VentasHistoricoChart({ mes, onSelectMes }: { mes: string; onSelectMes: 
 
               {/* % de variación vs mes anterior, DENTRO de cada barra (o arriba si es muy baja) */}
               {dV && (() => {
+                // Mes en curso: el % corresponde al estimado, así que va dentro de la
+                // franja gris (en negro para contrastar). Resto: dentro del violeta (blanco).
+                const grisH = yVentas - yVentasProy
+                if (m.esActual && grisH >= 16) {
+                  return (
+                    <text x={vx + VW / 2} y={(yVentasProy + yVentas) / 2 + 4}
+                      textAnchor="middle" fontSize={11} fontWeight={700} fill="#111827">
+                      {dV.txt}
+                    </text>
+                  )
+                }
                 const barH = zeroY - yVentas
                 const dentro = barH >= 20
                 return (
