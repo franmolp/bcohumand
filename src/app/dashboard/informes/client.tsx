@@ -1160,10 +1160,183 @@ function TabServicios({ data }: { data: ApiData }) {
   )
 }
 
+// ─── Gráfico histórico de ventas netas (últimos 12 meses) ─────────────────────
+
+interface MesHistorico {
+  mes: string
+  ventas: number
+  gastos: number
+  sueldos: number
+  remanente: number
+  esActual: boolean
+  ventasProyeccion: number
+  remanenteProyeccion: number
+}
+
+// Formato compacto de plata para ejes/etiquetas: $1.2M, $850k, $500
+function fmtCompacto(n: number): string {
+  const s = n < 0 ? '-' : ''
+  const a = Math.abs(n)
+  if (a >= 1_000_000) return `${s}$${(a / 1_000_000).toFixed(a >= 10_000_000 ? 0 : 1).replace('.0', '')}M`
+  if (a >= 1_000) return `${s}$${Math.round(a / 1000)}k`
+  return `${s}$${Math.round(a)}`
+}
+
+function mesCorto(mes: string): string {
+  const [y, m] = mes.split('-').map(Number)
+  return new Date(y, m - 1, 1).toLocaleString('es', { month: 'short' }).replace('.', '')
+}
+
+function VentasHistoricoChart() {
+  const [meses, setMeses] = useState<MesHistorico[] | null>(null)
+  const [error, setError] = useState(false)
+  const [sel, setSel] = useState<number | null>(null)
+
+  useEffect(() => {
+    fetch('/api/informes/historico')
+      .then(r => r.json())
+      .then(d => {
+        if (Array.isArray(d.meses)) { setMeses(d.meses); setSel(d.meses.length - 1) }
+        else setError(true)
+      })
+      .catch(() => setError(true))
+  }, [])
+
+  if (error) return null
+  if (!meses) {
+    return (
+      <div className="bg-white rounded-2xl border border-[var(--border)] p-4 mb-4 h-[220px] flex items-center justify-center">
+        <Spinner />
+      </div>
+    )
+  }
+  if (meses.length === 0) return null
+
+  // Escala: incluye ventas (con proyección) y remanente (puede ser negativo).
+  const maxV = Math.max(1, ...meses.map(m => Math.max(m.ventasProyeccion, m.ventas, m.remanente, m.remanenteProyeccion)))
+  const minV = Math.min(0, ...meses.map(m => Math.min(m.remanente, m.remanenteProyeccion)))
+  const rango = maxV - minV || 1
+
+  // Coordenadas del viewBox (se escala al ancho del contenedor)
+  const W = 520, H = 210, TOP = 14, BASE = 172
+  const PL = 6, PR = 6
+  const plotH = BASE - TOP
+  const slotW = (W - PL - PR) / meses.length
+  const yDe = (v: number) => TOP + (maxV - v) / rango * plotH
+  const zeroY = yDe(0)
+
+  const VW = Math.min(16, slotW * 0.34) // ancho barra ventas
+  const RW = Math.min(9, slotW * 0.2)   // ancho barra remanente (más finita)
+  const GAP = Math.max(2, slotW * 0.06)
+
+  const PRIMARY = 'var(--primary)'
+  const GRIS = '#cbd5e1'       // estimado / proyección
+  const VERDE = '#16a34a'
+  const ROJO = '#dc2626'
+
+  const s = sel != null ? meses[sel] : null
+
+  return (
+    <div className="bg-white rounded-2xl border border-[var(--border)] p-4 mb-4">
+      <div className="flex items-baseline justify-between gap-2 mb-1">
+        <p className="text-[13px] font-semibold text-[var(--text)]">Ventas netas · últimos 12 meses</p>
+      </div>
+
+      {/* Detalle del mes seleccionado */}
+      {s && (
+        <div className="mb-2 min-h-[34px]">
+          <p className="text-[12px] font-semibold text-[var(--text)]">{fmtMes(s.mes)}</p>
+          <p className="text-[11px] text-[var(--text-muted)]">
+            Ventas <span className="font-semibold text-[var(--text-sub)]">{fmt$(s.ventas)}</span>
+            {s.esActual && s.ventasProyeccion > s.ventas && (
+              <> · estimado <span className="font-semibold text-gray-400">{fmt$(s.ventasProyeccion)}</span></>
+            )}
+            {' · '}Remanente <span className={`font-semibold ${s.remanente >= 0 ? 'text-green-600' : 'text-red-500'}`}>{fmt$(s.remanente)}</span>
+          </p>
+        </div>
+      )}
+
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" className="block" style={{ height: 'auto' }} role="img" aria-label="Gráfico de ventas netas de los últimos 12 meses">
+        {/* Línea base (cero) */}
+        <line x1={PL} y1={zeroY} x2={W - PR} y2={zeroY} stroke="#e5e7eb" strokeWidth={1} />
+
+        {meses.map((m, i) => {
+          const cx = PL + i * slotW + slotW / 2
+          const groupW = VW + GAP + RW
+          const vx = cx - groupW / 2
+          const rx = vx + VW + GAP
+          const isSel = i === sel
+
+          // Ventas: parte real (fuerte) + parte estimada (gris) hacia arriba
+          const yVentas = yDe(m.ventas)
+          const yVentasProy = yDe(m.ventasProyeccion)
+          // Remanente: puede ser negativo (baja de la línea cero)
+          const rTop = yDe(Math.max(m.remanente, 0))
+          const rBot = yDe(Math.min(m.remanente, 0))
+          const yRemProy = yDe(m.remanenteProyeccion)
+          const colorRem = m.remanente >= 0 ? VERDE : ROJO
+
+          return (
+            <g key={m.mes}>
+              {/* fondo del slot seleccionado */}
+              {isSel && (
+                <rect x={PL + i * slotW + 1} y={TOP - 6} width={slotW - 2} height={BASE - TOP + 24}
+                  rx={6} fill="var(--primary)" opacity={0.06} />
+              )}
+
+              {/* Ventas — estimado (gris) primero, detrás/encima de la real */}
+              {m.esActual && m.ventasProyeccion > m.ventas && (
+                <rect x={vx} y={yVentasProy} width={VW} height={Math.max(0, yVentas - yVentasProy)} rx={2} fill={GRIS} />
+              )}
+              <rect x={vx} y={yVentas} width={VW} height={Math.max(0, zeroY - yVentas)} rx={2} fill={PRIMARY}>
+                <title>{`${fmtMes(m.mes)} — Ventas ${fmt$(m.ventas)}${m.esActual && m.ventasProyeccion > m.ventas ? ` (estimado ${fmt$(m.ventasProyeccion)})` : ''}`}</title>
+              </rect>
+
+              {/* Remanente — barrita más fina */}
+              {m.esActual && m.remanenteProyeccion > m.remanente && (
+                <rect x={rx} y={yRemProy} width={RW} height={Math.max(0, rTop - yRemProy)} rx={2} fill={GRIS} />
+              )}
+              <rect x={rx} y={rTop} width={RW} height={Math.max(1, rBot - rTop)} rx={2} fill={colorRem}>
+                <title>{`${fmtMes(m.mes)} — Remanente ${fmt$(m.remanente)}`}</title>
+              </rect>
+
+              {/* Etiqueta de mes */}
+              <text x={cx} y={BASE + 14} textAnchor="middle"
+                fontSize={9} fontWeight={isSel ? 700 : 400}
+                fill={isSel ? 'var(--primary)' : '#9ca3af'}>
+                {mesCorto(m.mes)}
+              </text>
+
+              {/* Zona táctil para seleccionar el mes */}
+              <rect x={PL + i * slotW} y={0} width={slotW} height={BASE + 20} fill="transparent"
+                style={{ cursor: 'pointer' }} onClick={() => setSel(i)} />
+            </g>
+          )
+        })}
+
+        {/* Escala máxima arriba a la izquierda */}
+        <text x={PL} y={TOP - 4} fontSize={9} fill="#9ca3af">{fmtCompacto(maxV)}</text>
+      </svg>
+
+      {/* Leyenda */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 px-0.5">
+        <span className="flex items-center gap-1 text-[10px] text-gray-400">
+          <span className="w-2 h-2 rounded-sm inline-block" style={{ background: 'var(--primary)' }} />Ventas netas
+        </span>
+        <span className="flex items-center gap-1 text-[10px] text-gray-400">
+          <span className="w-2 h-2 rounded-sm inline-block bg-green-600" />Remanente
+        </span>
+        <span className="flex items-center gap-1 text-[10px] text-gray-400">
+          <span className="w-2 h-2 rounded-sm inline-block" style={{ background: '#cbd5e1' }} />Estimado (mes en curso)
+        </span>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 type Tab = 'resumen' | 'caja' | 'productividad' | 'servicios'
-
 export default function InformesClient({ user: _user }: { user: SessionUser }) {
   const [mes, setMes] = useState(mesActual)
   const [tab, setTab] = useState<Tab>('resumen')
@@ -1234,6 +1407,9 @@ export default function InformesClient({ user: _user }: { user: SessionUser }) {
           )}
         </div>
       </div>
+
+      {/* Gráfico histórico de ventas netas (últimos 12 meses) */}
+      <VentasHistoricoChart />
 
       {/* Month navigator */}
       <div className="flex items-center justify-between bg-white rounded-2xl border border-[var(--border)] px-4 py-3 mb-4">
