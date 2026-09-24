@@ -1187,6 +1187,13 @@ function mesCorto(mes: string): string {
   return new Date(y, m - 1, 1).toLocaleString('es', { month: 'short' }).replace('.', '')
 }
 
+// % de variación vs el mes anterior. null si no hay mes previo o el previo es 0.
+function pctDelta(curr: number, prev: number | null | undefined): { txt: string; up: boolean } | null {
+  if (prev == null || prev === 0) return null
+  const r = Math.round((curr - prev) / Math.abs(prev) * 100)
+  return { txt: `${r > 0 ? '+' : ''}${r}%`, up: r >= 0 }
+}
+
 function VentasHistoricoChart({ mes, onSelectMes }: { mes: string; onSelectMes: (m: string) => void }) {
   const [meses, setMeses] = useState<MesHistorico[] | null>(null)
   const [error, setError] = useState(false)
@@ -1268,6 +1275,15 @@ function VentasHistoricoChart({ mes, onSelectMes }: { mes: string; onSelectMes: 
           // estimados); en meses cerrados, el real. Puede ser negativo (baja del cero).
           const remView = m.esActual ? m.remanenteProyeccion : m.remanente
 
+          // Variación vs el mes anterior. En el mes en curso se compara el proyectado
+          // contra el mes anterior completo (manzana con manzana).
+          const prev = i > 0 ? meses[i - 1] : null
+          const ventasView = m.esActual ? m.ventasProyeccion : m.ventas
+          const dV = pctDelta(ventasView, prev ? prev.ventas : null)
+          const dR = pctDelta(remView, prev ? prev.remanente : null)
+          const topVentas = m.esActual ? yVentasProy : yVentas
+          const topRem = yDe(Math.max(remView, 0))
+
           return (
             <g key={m.mes}>
               {/* fondo del slot seleccionado */}
@@ -1293,6 +1309,20 @@ function VentasHistoricoChart({ mes, onSelectMes }: { mes: string; onSelectMes: 
                   ? `${fmtMes(m.mes)} — Remanente estimado ${fmt$(m.remanenteProyeccion)}`
                   : `${fmtMes(m.mes)} — Remanente ${fmt$(m.remanente)}`}</title>
               </rect>
+
+              {/* % de variación vs mes anterior, arriba de cada barra */}
+              {dV && (
+                <text x={vx + VW / 2} y={Math.max(TOP - 2, topVentas - 3)} textAnchor="middle"
+                  fontSize={7.5} fontWeight={600} fill={dV.up ? VERDE : ROJO}>
+                  {dV.txt}
+                </text>
+              )}
+              {dR && (
+                <text x={rx + RW / 2} y={Math.max(TOP - 2, topRem - 3)} textAnchor="middle"
+                  fontSize={7} fontWeight={600} fill={dR.up ? VERDE : ROJO} opacity={0.85}>
+                  {dR.txt}
+                </text>
+              )}
 
               {/* Etiqueta de mes */}
               <text x={cx} y={BASE + 14} textAnchor="middle"
