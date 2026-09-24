@@ -1224,9 +1224,9 @@ function VentasHistoricoChart({ mes, onSelectMes }: { mes: string; onSelectMes: 
   const yDe = (v: number) => TOP + (maxV - v) / rango * plotH
   const zeroY = yDe(0)
 
-  const VW = Math.min(16, slotW * 0.34) // ancho barra ventas
-  const RW = Math.min(9, slotW * 0.2)   // ancho barra remanente (más finita)
-  const GAP = Math.max(2, slotW * 0.06)
+  const VW = slotW * 0.40 // ancho barra ventas (escala con el slot)
+  const RW = slotW * 0.20 // ancho barra remanente (más finita)
+  const GAP = slotW * 0.07
 
   const PRIMARY = 'var(--primary)'
   const GRIS = '#cbd5e1'       // estimado / proyección
