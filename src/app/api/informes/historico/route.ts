@@ -6,6 +6,11 @@ export const dynamic = 'force-dynamic'
 
 type Fila = { mes: string; ventas: number; gastos: number; sueldos: number }
 
+// Las métricas arrancan en junio 2026: antes no hay nada cargado. Se muestran los
+// meses desde acá hacia adelante; cuando pase el tiempo, la ventana móvil de 12
+// meses ya empieza después de esta fecha y este piso deja de recortar nada.
+const INICIO_METRICAS = '2026-06'
+
 // Serie de los últimos 12 meses para el gráfico de Contabilidad: ventas netas y
 // remanente (ventas − gastos − sueldos) por mes. En el mes en curso agrega la
 // proyección (estimado a fin de mes según el ritmo de los días transcurridos).
@@ -24,7 +29,7 @@ export async function GET() {
   const diasDelMes = new Date(ay, am, 0).getDate()
   const diaHoy = parseInt(hoyStr.slice(8, 10), 10)
 
-  const meses = (data ?? []).map((f: Fila) => {
+  const meses = (data ?? []).filter((f: Fila) => f.mes >= INICIO_METRICAS).map((f: Fila) => {
     const ventas = Math.round(f.ventas || 0)
     const gastos = Math.round(f.gastos || 0)
     const sueldos = Math.round(f.sueldos || 0)

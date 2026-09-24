@@ -1187,16 +1187,15 @@ function mesCorto(mes: string): string {
   return new Date(y, m - 1, 1).toLocaleString('es', { month: 'short' }).replace('.', '')
 }
 
-function VentasHistoricoChart() {
+function VentasHistoricoChart({ mes, onSelectMes }: { mes: string; onSelectMes: (m: string) => void }) {
   const [meses, setMeses] = useState<MesHistorico[] | null>(null)
   const [error, setError] = useState(false)
-  const [sel, setSel] = useState<number | null>(null)
 
   useEffect(() => {
     fetch('/api/informes/historico')
       .then(r => r.json())
       .then(d => {
-        if (Array.isArray(d.meses)) { setMeses(d.meses); setSel(d.meses.length - 1) }
+        if (Array.isArray(d.meses)) setMeses(d.meses)
         else setError(true)
       })
       .catch(() => setError(true))
@@ -1234,27 +1233,22 @@ function VentasHistoricoChart() {
   const VERDE = '#16a34a'
   const ROJO = '#dc2626'
 
-  const s = sel != null ? meses[sel] : null
+  const selIndex = meses.findIndex(m => m.mes === mes)
+  const s = selIndex >= 0 ? meses[selIndex] : null
 
   return (
     <div className="bg-white rounded-2xl border border-[var(--border)] p-4 mb-4">
       <div className="flex items-baseline justify-between gap-2 mb-1">
-        <p className="text-[13px] font-semibold text-[var(--text)]">Ventas netas · últimos 12 meses</p>
-      </div>
-
-      {/* Detalle del mes seleccionado */}
-      {s && (
-        <div className="mb-2 min-h-[34px]">
-          <p className="text-[12px] font-semibold text-[var(--text)]">{fmtMes(s.mes)}</p>
-          <p className="text-[11px] text-[var(--text-muted)]">
-            Ventas <span className="font-semibold text-[var(--text-sub)]">{fmt$(s.ventas)}</span>
+        <p className="text-[13px] font-semibold text-[var(--text)]">Ventas netas por mes</p>
+        {s && (
+          <p className="text-[11px] text-[var(--text-muted)] truncate">
+            <span className="font-semibold text-[var(--text-sub)]">{fmtCompacto(s.ventas)}</span>
             {s.esActual && s.ventasProyeccion > s.ventas && (
-              <> · estimado <span className="font-semibold text-gray-400">{fmt$(s.ventasProyeccion)}</span></>
+              <span className="text-gray-400"> · est. {fmtCompacto(s.ventasProyeccion)}</span>
             )}
-            {' · '}Remanente <span className={`font-semibold ${s.remanente >= 0 ? 'text-green-600' : 'text-red-500'}`}>{fmt$(s.remanente)}</span>
           </p>
-        </div>
-      )}
+        )}
+      </div>
 
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" className="block" style={{ height: 'auto' }} role="img" aria-label="Gráfico de ventas netas de los últimos 12 meses">
         {/* Línea base (cero) */}
@@ -1265,7 +1259,7 @@ function VentasHistoricoChart() {
           const groupW = VW + GAP + RW
           const vx = cx - groupW / 2
           const rx = vx + VW + GAP
-          const isSel = i === sel
+          const isSel = i === selIndex
 
           // Ventas: parte real (fuerte) + parte estimada (gris) hacia arriba
           const yVentas = yDe(m.ventas)
@@ -1309,7 +1303,7 @@ function VentasHistoricoChart() {
 
               {/* Zona táctil para seleccionar el mes */}
               <rect x={PL + i * slotW} y={0} width={slotW} height={BASE + 20} fill="transparent"
-                style={{ cursor: 'pointer' }} onClick={() => setSel(i)} />
+                style={{ cursor: 'pointer' }} onClick={() => onSelectMes(m.mes)} />
             </g>
           )
         })}
@@ -1408,8 +1402,8 @@ export default function InformesClient({ user: _user }: { user: SessionUser }) {
         </div>
       </div>
 
-      {/* Gráfico histórico de ventas netas (últimos 12 meses) */}
-      <VentasHistoricoChart />
+      {/* Gráfico histórico de ventas netas */}
+      <VentasHistoricoChart mes={mes} onSelectMes={setMes} />
 
       {/* Month navigator */}
       <div className="flex items-center justify-between bg-white rounded-2xl border border-[var(--border)] px-4 py-3 mb-4">
