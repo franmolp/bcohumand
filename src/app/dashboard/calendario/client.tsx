@@ -301,7 +301,9 @@ function buildDayMap(
       if (!matches) continue
     }
 
-    const hora = !ev.todo_el_dia && ev.hora_desde ? ev.hora_desde.slice(0, 5) : undefined
+    const hora = !ev.todo_el_dia && ev.hora_desde
+      ? (ev.hora_hasta ? `${ev.hora_desde.slice(0, 5)} – ${ev.hora_hasta.slice(0, 5)}` : ev.hora_desde.slice(0, 5))
+      : undefined
 
     add(day, {
       id: `ev-${ev.id}`,
