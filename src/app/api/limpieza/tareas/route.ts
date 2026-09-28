@@ -12,13 +12,21 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   if (!esAdmin(session.rol)) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
 
-  const { data, error } = await supabaseAdmin
+  const r = await supabaseAdmin
     .from('limpieza_tareas')
     .select('id, tipo, dia_semana, fecha, titulo, detalle, horario, orden, activo, parent_id')
     .eq('activo', true)
     .order('tipo').order('dia_semana', { nullsFirst: true }).order('orden')
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data ?? [])
+  if (!r.error) return NextResponse.json(r.data ?? [])
+
+  // Fallback si la columna parent_id todavía no existe (migración sin correr).
+  const r2 = await supabaseAdmin
+    .from('limpieza_tareas')
+    .select('id, tipo, dia_semana, fecha, titulo, detalle, horario, orden, activo')
+    .eq('activo', true)
+    .order('tipo').order('dia_semana', { nullsFirst: true }).order('orden')
+  if (r2.error) return NextResponse.json({ error: r2.error.message }, { status: 500 })
+  return NextResponse.json((r2.data ?? []).map(t => ({ ...t, parent_id: null })))
 }
 
 // Crea una tarea del plan (o una subtarea si viene parent_id).

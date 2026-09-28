@@ -22,18 +22,35 @@ export async function GET(req: NextRequest) {
   }
   const dow = dowDeFecha(fecha)
 
-  // Tareas "padre" (parent_id null) que aplican a la fecha.
-  const { data: padresData } = await supabaseAdmin
-    .from('limpieza_tareas')
-    .select('id, tipo, dia_semana, fecha, titulo, detalle, horario, orden, activo, parent_id')
-    .eq('activo', true)
-    .is('parent_id', null)
-    .or(`tipo.eq.diaria,and(tipo.eq.semanal,dia_semana.eq.${dow}),and(tipo.eq.puntual,fecha.eq.${fecha})`)
-  const padres = ordenarTareas((padresData ?? []) as LimpiezaTarea[])
+  // Tareas "padre" (parent_id null) que aplican a la fecha. Si la columna parent_id
+  // todavía no existe (migración sin correr), se cae a la consulta clásica sin subtareas.
+  const filtroAplica = `tipo.eq.diaria,and(tipo.eq.semanal,dia_semana.eq.${dow}),and(tipo.eq.puntual,fecha.eq.${fecha})`
+  let conParent = true
+  let padresData: LimpiezaTarea[] | null = null
+  {
+    const r = await supabaseAdmin
+      .from('limpieza_tareas')
+      .select('id, tipo, dia_semana, fecha, titulo, detalle, horario, orden, activo, parent_id')
+      .eq('activo', true)
+      .is('parent_id', null)
+      .or(filtroAplica)
+    if (r.error) {
+      conParent = false
+      const r2 = await supabaseAdmin
+        .from('limpieza_tareas')
+        .select('id, tipo, dia_semana, fecha, titulo, detalle, horario, orden, activo')
+        .eq('activo', true)
+        .or(filtroAplica)
+      padresData = (r2.data ?? []) as LimpiezaTarea[]
+    } else {
+      padresData = (r.data ?? []) as LimpiezaTarea[]
+    }
+  }
+  const padres = ordenarTareas(padresData ?? [])
   const padreIds = padres.map(p => p.id)
 
   const [{ data: subsData }, { data: hechas }] = await Promise.all([
-    padreIds.length
+    conParent && padreIds.length
       ? supabaseAdmin
           .from('limpieza_tareas')
           .select('id, titulo, detalle, horario, orden, parent_id')

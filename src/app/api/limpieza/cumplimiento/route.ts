@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'rango inválido' }, { status: 400 })
   }
 
-  const [{ data: tareas }, { data: hechas }] = await Promise.all([
+  const [tareasRes, { data: hechas }] = await Promise.all([
     supabaseAdmin
       .from('limpieza_tareas')
       .select('id, tipo, dia_semana, fecha, titulo, detalle, horario, orden, activo, parent_id')
@@ -31,7 +31,15 @@ export async function GET(req: NextRequest) {
       .lte('fecha', hasta),
   ])
 
-  const tareasList = (tareas ?? []) as LimpiezaTarea[]
+  let tareasData = tareasRes.data
+  if (tareasRes.error) {
+    const r2 = await supabaseAdmin
+      .from('limpieza_tareas')
+      .select('id, tipo, dia_semana, fecha, titulo, detalle, horario, orden, activo')
+      .eq('activo', true)
+    tareasData = (r2.data ?? []).map(t => ({ ...t, parent_id: null }))
+  }
+  const tareasList = (tareasData ?? []) as LimpiezaTarea[]
   const padres = tareasList.filter(t => t.parent_id == null)
   const hijosPorPadre = new Map<number, number>()
   for (const t of tareasList) if (t.parent_id != null) hijosPorPadre.set(t.parent_id, (hijosPorPadre.get(t.parent_id) ?? 0) + 1)
