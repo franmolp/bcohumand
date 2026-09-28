@@ -69,7 +69,34 @@ export async function GET(req: NextRequest) {
     subsPorPadre.set(s.parent_id as number, arr)
   }
 
-  const tareas = padres.map(p => {
+  // Orden "aprendido": el orden en que la limpieza tildó las tareas/subtareas el último
+  // día con actividad previo a la fecha. Así el checklist se acomoda solo a cómo lo hace
+  // realmente (sin tocar el plan del admin). Lo no tildado queda al final por orden configurado.
+  const { data: refRow } = await supabaseAdmin
+    .from('limpieza_hechas').select('fecha').lt('fecha', fecha).order('fecha', { ascending: false }).limit(1)
+  const refDay = refRow && refRow.length ? (refRow[0].fecha as string) : null
+  const ordenRef = new Map<number, number>()
+  if (refDay) {
+    const { data: refHechas } = await supabaseAdmin
+      .from('limpieza_hechas').select('tarea_id, hecho_en').eq('fecha', refDay).order('hecho_en', { ascending: true })
+    ;(refHechas ?? []).forEach((h, i) => { if (!ordenRef.has(h.tarea_id as number)) ordenRef.set(h.tarea_id as number, i) })
+  }
+  const keyDe = (id: number) => ordenRef.has(id) ? ordenRef.get(id)! : Number.POSITIVE_INFINITY
+
+  // Subtareas por orden aprendido, luego el configurado.
+  for (const arr of subsPorPadre.values()) arr.sort((a, b) => keyDe(a.id) - keyDe(b.id) || a.orden - b.orden)
+
+  // Padres: se mantiene el agrupado por tipo (diaria/semanal/puntual) y dentro se ordena
+  // por el orden aprendido (para un padre con subtareas, su primera subtarea tildada).
+  const pesoTipo: Record<string, number> = { diaria: 0, semanal: 1, puntual: 2 }
+  const keyPadre = (p: LimpiezaTarea) => {
+    const subs = subsPorPadre.get(p.id) ?? []
+    return subs.length ? Math.min(...subs.map(s => keyDe(s.id))) : keyDe(p.id)
+  }
+  const padresOrdenados = [...padres].sort((a, b) =>
+    (pesoTipo[a.tipo] ?? 9) - (pesoTipo[b.tipo] ?? 9) || keyPadre(a) - keyPadre(b) || a.orden - b.orden)
+
+  const tareas = padresOrdenados.map(p => {
     const subs = (subsPorPadre.get(p.id) ?? []).map(s => ({ ...s, hecho: hechasSet.has(s.id) }))
     return {
       id: p.id,
