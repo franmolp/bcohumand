@@ -268,6 +268,9 @@ function TabPlan({ showToast }: { showToast: (m: string, t?: 'success' | 'error'
   const [saving, setSaving] = useState(false)
   const [del, setDel] = useState<Tarea | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [repetir, setRepetir] = useState<Tarea | null>(null)
+  const [repetirDias, setRepetirDias] = useState<number[]>([])
+  const [repitiendo, setRepitiendo] = useState(false)
 
   const cargar = useCallback(() => {
     fetch('/api/limpieza/tareas').then(r => r.json()).then(d => setTareas(Array.isArray(d) ? d : [])).catch(() => setTareas([]))
@@ -309,6 +312,17 @@ function TabPlan({ showToast }: { showToast: (m: string, t?: 'success' | 'error'
     setDel(null); cargar(); showToast('Tarea quitada')
   }
 
+  async function hacerRepetir() {
+    if (!repetir || !repetirDias.length) return
+    setRepitiendo(true)
+    const res = await fetch(`/api/limpieza/tareas/${repetir.id}/repetir`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dias: repetirDias }),
+    }).catch(() => null)
+    setRepitiendo(false)
+    if (!res || !res.ok) { const b = await res?.json().catch(() => ({})); showToast(b?.error ?? 'No se pudo repetir', 'error'); return }
+    setRepetir(null); setRepetirDias([]); cargar(); showToast('Tarea repetida')
+  }
+
   if (!tareas) return <div className="py-12"><Spinner /></div>
 
   const esPadre = (t: Tarea) => t.parent_id == null
@@ -343,10 +357,18 @@ function TabPlan({ showToast }: { showToast: (m: string, t?: 'success' | 'error'
           <button onClick={() => setDel(t)} className="p-1.5 text-gray-300 hover:text-red-500 cursor-pointer"><IconTrash size={13} /></button>
         </div>
         {subs.length > 0 && <div className="pl-3 mt-1 border-l border-gray-100 ml-1">{subs.map(subFila)}</div>}
-        <button onClick={() => setEdit({ titulo: '', detalle: '', horario: '', parent_id: t.id, orden: subs.length + 1 })}
-          className="text-[11px] font-medium text-[var(--primary)] flex items-center gap-1 mt-1.5 ml-1 cursor-pointer hover:opacity-80">
-          <IconPlus size={11} /> Subtarea
-        </button>
+        <div className="flex items-center gap-4 mt-1.5 ml-1">
+          <button onClick={() => setEdit({ titulo: '', detalle: '', horario: '', parent_id: t.id, orden: subs.length + 1 })}
+            className="text-[11px] font-medium text-[var(--primary)] flex items-center gap-1 cursor-pointer hover:opacity-80">
+            <IconPlus size={11} /> Subtarea
+          </button>
+          {t.tipo === 'semanal' && (
+            <button onClick={() => { setRepetir(t); setRepetirDias([]) }}
+              className="text-[11px] font-medium text-[var(--text-muted)] flex items-center gap-1 cursor-pointer hover:text-[var(--primary)]">
+              <IconPlus size={11} /> Repetir en otros días
+            </button>
+          )}
+        </div>
       </div>
     )
   }
@@ -445,6 +467,38 @@ function TabPlan({ showToast }: { showToast: (m: string, t?: 'success' | 'error'
 
       <Confirm open={!!del} onClose={() => setDel(null)} onConfirm={borrar} loading={deleting} danger
         title="¿Quitar la tarea?" message={`"${del?.titulo}" dejará de aparecer en el plan.`} confirmLabel="Quitar" />
+
+      {/* Modal repetir en otros días (con subtareas) */}
+      <Modal open={!!repetir} onClose={() => setRepetir(null)} title="Repetir en otros días"
+        footer={<>
+          <Button variant="secondary" className="flex-1" onClick={() => setRepetir(null)} disabled={repitiendo}>Cancelar</Button>
+          <Button className="flex-1" onClick={hacerRepetir} loading={repitiendo} disabled={!repetirDias.length}>Repetir</Button>
+        </>}>
+        {repetir && (
+          <div className="space-y-3">
+            <p className="text-[13px] text-[var(--text-sub)]">
+              Se copia <b>{repetir.titulo}</b> (con sus subtareas) a los días que elijas. Hoy está en <b>{repetir.dia_semana != null ? DIAS[repetir.dia_semana] : '—'}</b>.
+            </p>
+            <div>
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Repetir en</label>
+              <div className="flex flex-wrap gap-1.5">
+                {[1, 2, 3, 4, 5, 6, 0].filter(d => d !== repetir.dia_semana).map(d => {
+                  const sel = repetirDias.includes(d)
+                  return (
+                    <button key={d} type="button"
+                      onClick={() => setRepetirDias(cur => cur.includes(d) ? cur.filter(x => x !== d) : [...cur, d])}
+                      className={`px-3 py-1.5 rounded-lg text-[12px] font-medium border cursor-pointer transition-colors ${
+                        sel ? 'bg-[var(--primary)] text-white border-[var(--primary)]' : 'bg-white text-[var(--text-sub)] border-gray-200 hover:border-[var(--primary)]/40'
+                      }`}>
+                      {DIAS_CORTO[d]}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
