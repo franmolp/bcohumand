@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { esEquipoLimpieza } from '@/lib/limpieza'
+import { esEquipoLimpieza, hoyAR } from '@/lib/limpieza'
 
 function esAdmin(rol: string) { return rol === 'admin' || rol === 'Admin' }
 
@@ -17,6 +17,12 @@ export async function POST(req: NextRequest) {
     { tarea_id?: number; fecha?: string; hecho?: boolean }
   if (!tarea_id || !fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
     return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 })
+  }
+
+  // El equipo de limpieza solo puede marcar el día actual; otros días son de solo
+  // lectura. El admin puede corregir cualquier día.
+  if (!esAdmin(session.rol) && fecha !== hoyAR()) {
+    return NextResponse.json({ error: 'Solo podés marcar el día de hoy' }, { status: 403 })
   }
 
   if (hecho) {

@@ -15,6 +15,12 @@ export type LimpiezaTarea = {
   horario: string | null
   orden: number
   activo: boolean
+  parent_id: number | null
+}
+
+// Fecha de "hoy" en horario Argentina (YYYY-MM-DD).
+export function hoyAR(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
 }
 
 // Día de la semana (0=Dom..6=Sáb) de una fecha 'YYYY-MM-DD', en horario local estable.

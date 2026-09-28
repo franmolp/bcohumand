@@ -14,6 +14,7 @@ type Tarea = {
   horario: string | null
   orden: number
   hecho?: boolean
+  parent_id?: number | null
 }
 
 const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
@@ -92,7 +93,7 @@ export default function LimpiezaClient({ isAdmin }: { isAdmin: boolean }) {
         ))}
       </div>
 
-      {tab === 'hoy' && <TabHoy showToast={showToast} />}
+      {tab === 'hoy' && <TabHoy showToast={showToast} isAdmin={isAdmin} />}
       {tab === 'pedidos' && <TabPedidos showToast={showToast} onCount={setPedPend} />}
       {tab === 'plan' && isAdmin && <TabPlan showToast={showToast} />}
       {tab === 'cumplimiento' && isAdmin && <TabCumplimiento />}
@@ -101,9 +102,12 @@ export default function LimpiezaClient({ isAdmin }: { isAdmin: boolean }) {
 }
 
 // ─── HOY: checklist del día ───────────────────────────────────────────────────
-function TabHoy({ showToast }: { showToast: (m: string, t?: 'success' | 'error') => void }) {
+type SubDia = { id: number; titulo: string; detalle: string | null; horario: string | null; hecho: boolean }
+type TareaDia = { id: number; tipo: 'diaria' | 'semanal' | 'puntual'; titulo: string; detalle: string | null; horario: string | null; hecho: boolean; subtareas: SubDia[] }
+
+function TabHoy({ showToast, isAdmin }: { showToast: (m: string, t?: 'success' | 'error') => void; isAdmin: boolean }) {
   const [fecha, setFecha] = useState(todayAR())
-  const [tareas, setTareas] = useState<Tarea[] | null>(null)
+  const [tareas, setTareas] = useState<TareaDia[] | null>(null)
   const [loading, setLoading] = useState(true)
 
   const cargar = useCallback((f: string) => {
@@ -116,23 +120,40 @@ function TabHoy({ showToast }: { showToast: (m: string, t?: 'success' | 'error')
   }, [])
   useEffect(() => { cargar(fecha) }, [cargar, fecha])
 
-  async function toggle(t: Tarea) {
-    const nuevo = !t.hecho
-    setTareas(prev => prev?.map(x => x.id === t.id ? { ...x, hecho: nuevo } : x) ?? prev)
+  const hoy = todayAR()
+  const editable = isAdmin || fecha === hoy
+
+  async function toggle(leafId: number, nuevo: boolean) {
+    if (!editable) return
+    setTareas(prev => prev?.map(t => {
+      if (t.subtareas.length) {
+        const subs = t.subtareas.map(s => s.id === leafId ? { ...s, hecho: nuevo } : s)
+        return { ...t, subtareas: subs, hecho: subs.every(s => s.hecho) }
+      }
+      return t.id === leafId ? { ...t, hecho: nuevo } : t
+    }) ?? prev)
     const res = await fetch('/api/limpieza/hechas', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tarea_id: t.id, fecha, hecho: nuevo }),
+      body: JSON.stringify({ tarea_id: leafId, fecha, hecho: nuevo }),
     }).catch(() => null)
-    if (!res || !res.ok) {
-      setTareas(prev => prev?.map(x => x.id === t.id ? { ...x, hecho: !nuevo } : x) ?? prev)
-      showToast('No se pudo guardar', 'error')
-    }
+    if (!res || !res.ok) { cargar(fecha); showToast('No se pudo guardar', 'error') }
   }
 
-  const hoy = todayAR()
-  const total = tareas?.length ?? 0
-  const hechas = tareas?.filter(t => t.hecho).length ?? 0
+  const leavesDe = (t: TareaDia) => t.subtareas.length || 1
+  const hechasDe = (t: TareaDia) => t.subtareas.length ? t.subtareas.filter(s => s.hecho).length : (t.hecho ? 1 : 0)
+  const total = tareas?.reduce((a, t) => a + leavesDe(t), 0) ?? 0
+  const hechas = tareas?.reduce((a, t) => a + hechasDe(t), 0) ?? 0
   const grupos = ['diaria', 'semanal', 'puntual'] as const
+
+  // Checkbox reutilizable
+  const check = (id: number, hecho: boolean) => (
+    <button onClick={() => toggle(id, !hecho)} disabled={!editable}
+      className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+        hecho ? 'bg-[var(--primary)] border-[var(--primary)]' : 'border-gray-300'
+      } ${editable ? 'cursor-pointer' : 'cursor-default opacity-70'}`}>
+      {hecho && <IconCheck size={13} className="text-white" />}
+    </button>
+  )
 
   return (
     <div>
@@ -149,6 +170,13 @@ function TabHoy({ showToast }: { showToast: (m: string, t?: 'success' | 'error')
           <IconChevronRight size={18} />
         </button>
       </div>
+
+      {/* Aviso solo lectura (otro día, no admin) */}
+      {!editable && (
+        <div className="mb-3 px-3 py-2 rounded-xl bg-amber-50 border border-amber-100 text-[12px] text-amber-700">
+          Solo podés marcar el día de hoy. Estás viendo otro día.
+        </div>
+      )}
 
       {/* Progreso */}
       {!loading && total > 0 && (
@@ -179,14 +207,37 @@ function TabHoy({ showToast }: { showToast: (m: string, t?: 'success' | 'error')
                     <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{GRUPO_LABEL[g]}</p>
                   </div>
                   <div className="divide-y divide-gray-50">
-                    {items.map(t => (
-                      <button key={t.id} onClick={() => toggle(t)}
-                        className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors cursor-pointer">
-                        <span className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                          t.hecho ? 'bg-[var(--primary)] border-[var(--primary)]' : 'border-gray-300'
-                        }`}>
-                          {t.hecho && <IconCheck size={13} className="text-white" />}
-                        </span>
+                    {items.map(t => t.subtareas.length ? (
+                      // Tarea con subtareas: encabezado + subtareas tildables
+                      <div key={t.id} className="px-4 py-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`text-[14px] font-semibold ${t.hecho ? 'text-[var(--text-muted)]' : 'text-[var(--text)]'}`}>
+                            {t.titulo}
+                            {t.horario && <span className="ml-2 text-[11px] font-normal text-[var(--text-muted)]">{t.horario}</span>}
+                          </span>
+                          <span className="text-[11px] font-medium text-[var(--text-muted)] flex-shrink-0">
+                            {t.subtareas.filter(s => s.hecho).length}/{t.subtareas.length}
+                          </span>
+                        </div>
+                        <div className="mt-2 space-y-1 pl-1">
+                          {t.subtareas.map(s => (
+                            <div key={s.id} className="flex items-start gap-2.5">
+                              {check(s.id, s.hecho)}
+                              <span className="flex-1 min-w-0 pt-0.5">
+                                <span className={`text-[13px] ${s.hecho ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text)]'}`}>
+                                  {s.titulo}
+                                  {s.horario && <span className="ml-2 text-[11px] font-normal text-[var(--text-muted)]">{s.horario}</span>}
+                                </span>
+                                {s.detalle && <span className="block text-[11px] text-[var(--text-muted)]">{s.detalle}</span>}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      // Tarea simple tildable
+                      <div key={t.id} className="flex items-start gap-3 px-4 py-3">
+                        {check(t.id, t.hecho)}
                         <span className="flex-1 min-w-0">
                           <span className={`text-[14px] font-medium ${t.hecho ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text)]'}`}>
                             {t.titulo}
@@ -194,7 +245,7 @@ function TabHoy({ showToast }: { showToast: (m: string, t?: 'success' | 'error')
                           </span>
                           {t.detalle && <span className="block text-[12px] text-[var(--text-muted)] mt-0.5">{t.detalle}</span>}
                         </span>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -232,6 +283,7 @@ function TabPlan({ showToast }: { showToast: (m: string, t?: 'success' | 'error'
         tipo: edit.tipo, titulo: edit.titulo, detalle: edit.detalle, horario: edit.horario,
         dia_semana: edit.tipo === 'semanal' ? edit.dia_semana : null,
         fecha: edit.tipo === 'puntual' ? edit.fecha : null,
+        parent_id: edit.parent_id ?? undefined,
         orden: edit.orden ?? 0,
       }),
     }).catch(() => null)
@@ -251,22 +303,45 @@ function TabPlan({ showToast }: { showToast: (m: string, t?: 'success' | 'error'
 
   if (!tareas) return <div className="py-12"><Spinner /></div>
 
-  const diarias = tareas.filter(t => t.tipo === 'diaria')
-  const puntuales = tareas.filter(t => t.tipo === 'puntual').sort((a, b) => (a.fecha ?? '').localeCompare(b.fecha ?? ''))
-  const semanalPorDia = (d: number) => tareas.filter(t => t.tipo === 'semanal' && t.dia_semana === d).sort((a, b) => a.orden - b.orden)
+  const esPadre = (t: Tarea) => t.parent_id == null
+  const subsDe = (id: number) => tareas.filter(t => t.parent_id === id).sort((a, b) => a.orden - b.orden)
+  const diarias = tareas.filter(t => esPadre(t) && t.tipo === 'diaria')
+  const puntuales = tareas.filter(t => esPadre(t) && t.tipo === 'puntual').sort((a, b) => (a.fecha ?? '').localeCompare(b.fecha ?? ''))
+  const semanalPorDia = (d: number) => tareas.filter(t => esPadre(t) && t.tipo === 'semanal' && t.dia_semana === d).sort((a, b) => a.orden - b.orden)
 
-  const fila = (t: Tarea) => (
-    <div key={t.id} className="flex items-start gap-2 px-4 py-2.5">
-      <div className="flex-1 min-w-0">
-        <p className="text-[13px] font-medium text-[var(--text)]">
-          {t.titulo}{t.horario && <span className="ml-2 text-[11px] font-normal text-[var(--text-muted)]">{t.horario}</span>}
-        </p>
-        {t.detalle && <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{t.detalle}</p>}
-      </div>
-      <button onClick={() => setEdit(t)} className="p-1.5 text-gray-300 hover:text-[var(--primary)] cursor-pointer"><IconEdit size={13} /></button>
-      <button onClick={() => setDel(t)} className="p-1.5 text-gray-300 hover:text-red-500 cursor-pointer"><IconTrash size={13} /></button>
+  const subFila = (s: Tarea) => (
+    <div key={s.id} className="flex items-center gap-2 py-1.5">
+      <span className="w-1.5 h-1.5 rounded-full bg-gray-300 flex-shrink-0" />
+      <p className="flex-1 min-w-0 text-[12px] text-[var(--text-sub)] truncate">
+        {s.titulo}{s.horario && <span className="ml-1.5 text-[10px] text-[var(--text-muted)]">{s.horario}</span>}
+      </p>
+      <button onClick={() => setEdit(s)} className="p-1 text-gray-300 hover:text-[var(--primary)] cursor-pointer"><IconEdit size={12} /></button>
+      <button onClick={() => setDel(s)} className="p-1 text-gray-300 hover:text-red-500 cursor-pointer"><IconTrash size={12} /></button>
     </div>
   )
+
+  const fila = (t: Tarea) => {
+    const subs = subsDe(t.id)
+    return (
+      <div key={t.id} className="px-4 py-2.5">
+        <div className="flex items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-medium text-[var(--text)]">
+              {t.titulo}{t.horario && <span className="ml-2 text-[11px] font-normal text-[var(--text-muted)]">{t.horario}</span>}
+            </p>
+            {t.detalle && <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{t.detalle}</p>}
+          </div>
+          <button onClick={() => setEdit(t)} className="p-1.5 text-gray-300 hover:text-[var(--primary)] cursor-pointer"><IconEdit size={13} /></button>
+          <button onClick={() => setDel(t)} className="p-1.5 text-gray-300 hover:text-red-500 cursor-pointer"><IconTrash size={13} /></button>
+        </div>
+        {subs.length > 0 && <div className="pl-3 mt-1 border-l border-gray-100 ml-1">{subs.map(subFila)}</div>}
+        <button onClick={() => setEdit({ titulo: '', detalle: '', horario: '', parent_id: t.id, orden: subs.length + 1 })}
+          className="text-[11px] font-medium text-[var(--primary)] flex items-center gap-1 mt-1.5 ml-1 cursor-pointer hover:opacity-80">
+          <IconPlus size={11} /> Subtarea
+        </button>
+      </div>
+    )
+  }
 
   const seccion = (titulo: string, items: Tarea[], nueva: Partial<Tarea>) => (
     <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
@@ -289,24 +364,26 @@ function TabPlan({ showToast }: { showToast: (m: string, t?: 'success' | 'error'
       {seccion('Puntuales (fecha específica)', puntuales, { tipo: 'puntual', fecha: todayAR() })}
 
       {/* Modal alta/edición */}
-      <Modal open={!!edit} onClose={() => setEdit(null)} title={edit?.id ? 'Editar tarea' : 'Nueva tarea'}
+      <Modal open={!!edit} onClose={() => setEdit(null)} title={edit?.parent_id ? (edit?.id ? 'Editar subtarea' : 'Nueva subtarea') : (edit?.id ? 'Editar tarea' : 'Nueva tarea')}
         footer={<>
           <Button variant="secondary" className="flex-1" onClick={() => setEdit(null)} disabled={saving}>Cancelar</Button>
           <Button className="flex-1" onClick={guardar} loading={saving}>Guardar</Button>
         </>}>
         {edit && (
           <div className="space-y-3">
-            <Select label="Tipo" value={edit.tipo ?? 'diaria'} onChange={v => setEdit(e => ({ ...e, tipo: v as Tarea['tipo'] }))}>
-              <option value="diaria">Diaria (todos los días)</option>
-              <option value="semanal">Semanal (un día de la semana)</option>
-              <option value="puntual">Puntual (una fecha)</option>
-            </Select>
-            {edit.tipo === 'semanal' && (
+            {!edit.parent_id && (
+              <Select label="Tipo" value={edit.tipo ?? 'diaria'} onChange={v => setEdit(e => ({ ...e, tipo: v as Tarea['tipo'] }))}>
+                <option value="diaria">Diaria (todos los días)</option>
+                <option value="semanal">Semanal (un día de la semana)</option>
+                <option value="puntual">Puntual (una fecha)</option>
+              </Select>
+            )}
+            {!edit.parent_id && edit.tipo === 'semanal' && (
               <Select label="Día" value={String(edit.dia_semana ?? 1)} onChange={v => setEdit(e => ({ ...e, dia_semana: Number(v) }))}>
                 {[1, 2, 3, 4, 5, 6, 0].map(d => <option key={d} value={d}>{DIAS[d]}</option>)}
               </Select>
             )}
-            {edit.tipo === 'puntual' && (
+            {!edit.parent_id && edit.tipo === 'puntual' && (
               <div>
                 <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Fecha</label>
                 <input type="date" value={edit.fecha ?? ''} onChange={e => setEdit(x => ({ ...x, fecha: e.target.value }))}
@@ -314,9 +391,9 @@ function TabPlan({ showToast }: { showToast: (m: string, t?: 'success' | 'error'
               </div>
             )}
             <div>
-              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Tarea</label>
+              <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">{edit.parent_id ? 'Subtarea' : 'Tarea'}</label>
               <input value={edit.titulo ?? ''} onChange={e => setEdit(x => ({ ...x, titulo: e.target.value }))}
-                placeholder="Ej: Baños" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[var(--primary)]" style={{ fontSize: 16 }} />
+                placeholder={edit.parent_id ? 'Ej: Microondas' : 'Ej: Cocina'} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[var(--primary)]" style={{ fontSize: 16 }} />
             </div>
             <div>
               <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Detalle (opcional)</label>

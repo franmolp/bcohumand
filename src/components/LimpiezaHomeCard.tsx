@@ -18,8 +18,14 @@ export default function LimpiezaHomeCard() {
       fetch('/api/limpieza/pedidos').then(r => r.json()).catch(() => []),
     ]).then(([dia, pedidos]) => {
       const tareas = Array.isArray(dia?.tareas) ? dia.tareas : []
-      setTotal(tareas.length)
-      setHechas(tareas.filter((t: { hecho?: boolean }) => t.hecho).length)
+      let tot = 0, hec = 0
+      for (const t of tareas as { hecho?: boolean; subtareas?: { hecho?: boolean }[] }[]) {
+        const subs = t.subtareas ?? []
+        if (subs.length) { tot += subs.length; hec += subs.filter(s => s.hecho).length }
+        else { tot += 1; hec += t.hecho ? 1 : 0 }
+      }
+      setTotal(tot)
+      setHechas(hec)
       setPendientes(Array.isArray(pedidos) ? pedidos.filter((p: { estado: string }) => p.estado !== 'resuelto').length : 0)
       setListo(true)
     })
