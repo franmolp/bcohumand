@@ -58,8 +58,8 @@ export default function LimpiezaClient({ isAdmin }: { isAdmin: boolean }) {
   }, [])
 
   const tabs = isAdmin
-    ? ([['hoy', 'Hoy'], ['pedidos', 'Pedidos'], ['plan', 'Plan'], ['cumplimiento', 'Cumplimiento']] as const)
-    : ([['hoy', 'Hoy'], ['pedidos', 'Pedidos']] as const)
+    ? ([['hoy', 'Hoy'], ['pedidos', 'Solicitudes'], ['plan', 'Plan'], ['cumplimiento', 'Cumplimiento']] as const)
+    : ([['hoy', 'Hoy'], ['pedidos', 'Solicitudes especiales']] as const)
 
   return (
     <div className="py-4 fade-in">
@@ -259,11 +259,12 @@ function TabHoy({ showToast, isAdmin }: { showToast: (m: string, t?: 'success' |
 }
 
 // ─── PLAN: editor del admin ───────────────────────────────────────────────────
-const BLANK: Partial<Tarea> = { tipo: 'diaria', dia_semana: 1, fecha: null, titulo: '', detalle: '', horario: '', orden: 0 }
+type EditTarea = Partial<Tarea> & { dias_semana?: number[] }
+const BLANK: EditTarea = { tipo: 'diaria', dia_semana: 1, fecha: null, titulo: '', detalle: '', horario: '', orden: 0 }
 
 function TabPlan({ showToast }: { showToast: (m: string, t?: 'success' | 'error') => void }) {
   const [tareas, setTareas] = useState<Tarea[] | null>(null)
-  const [edit, setEdit] = useState<Partial<Tarea> | null>(null)
+  const [edit, setEdit] = useState<EditTarea | null>(null)
   const [saving, setSaving] = useState(false)
   const [del, setDel] = useState<Tarea | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -275,14 +276,20 @@ function TabPlan({ showToast }: { showToast: (m: string, t?: 'success' | 'error'
 
   async function guardar() {
     if (!edit?.titulo?.trim()) { showToast('Falta el título', 'error'); return }
-    setSaving(true)
     const esNueva = !edit.id
+    // Semanal nueva con varios días: se guarda repetida (una por día).
+    const esSemanalMulti = esNueva && edit.tipo === 'semanal' && !edit.parent_id
+    if (esSemanalMulti && !(edit.dias_semana && edit.dias_semana.length)) {
+      showToast('Elegí al menos un día', 'error'); return
+    }
+    setSaving(true)
     const url = esNueva ? '/api/limpieza/tareas' : `/api/limpieza/tareas/${edit.id}`
     const res = await fetch(url, {
       method: esNueva ? 'POST' : 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         tipo: edit.tipo, titulo: edit.titulo, detalle: edit.detalle, horario: edit.horario,
         dia_semana: edit.tipo === 'semanal' ? edit.dia_semana : null,
+        dias_semana: esSemanalMulti ? edit.dias_semana : undefined,
         fecha: edit.tipo === 'puntual' ? edit.fecha : null,
         parent_id: edit.parent_id ?? undefined,
         orden: edit.orden ?? 0,
@@ -344,7 +351,7 @@ function TabPlan({ showToast }: { showToast: (m: string, t?: 'success' | 'error'
     )
   }
 
-  const seccion = (titulo: string, items: Tarea[], nueva: Partial<Tarea>) => (
+  const seccion = (titulo: string, items: Tarea[], nueva: EditTarea) => (
     <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
       <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-[var(--border)]">
         <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{titulo}</p>
@@ -361,7 +368,7 @@ function TabPlan({ showToast }: { showToast: (m: string, t?: 'success' | 'error'
   return (
     <div className="space-y-3">
       {seccion('Base diaria (todos los días)', diarias, { tipo: 'diaria' })}
-      {[1, 2, 3, 4, 5, 6].map(d => seccion(`Extra · ${DIAS[d]}`, semanalPorDia(d), { tipo: 'semanal', dia_semana: d }))}
+      {[1, 2, 3, 4, 5, 6].map(d => seccion(`Extra · ${DIAS[d]}`, semanalPorDia(d), { tipo: 'semanal', dia_semana: d, dias_semana: [d] }))}
       {seccion('Puntuales (fecha específica)', puntuales, { tipo: 'puntual', fecha: todayAR() })}
 
       {/* Modal alta/edición */}
@@ -373,16 +380,42 @@ function TabPlan({ showToast }: { showToast: (m: string, t?: 'success' | 'error'
         {edit && (
           <div className="space-y-3">
             {!edit.parent_id && (
-              <Select label="Tipo" value={edit.tipo ?? 'diaria'} onChange={v => setEdit(e => ({ ...e, tipo: v as Tarea['tipo'] }))}>
+              <Select label="Tipo" value={edit.tipo ?? 'diaria'} onChange={v => setEdit(e => {
+                const tipo = v as Tarea['tipo']
+                return { ...e, tipo, dias_semana: tipo === 'semanal' && !(e?.dias_semana?.length) ? [1] : e?.dias_semana }
+              })}>
                 <option value="diaria">Diaria (todos los días)</option>
-                <option value="semanal">Semanal (un día de la semana)</option>
+                <option value="semanal">Semanal (uno o varios días)</option>
                 <option value="puntual">Puntual (una fecha)</option>
               </Select>
             )}
             {!edit.parent_id && edit.tipo === 'semanal' && (
-              <Select label="Día" value={String(edit.dia_semana ?? 1)} onChange={v => setEdit(e => ({ ...e, dia_semana: Number(v) }))}>
-                {[1, 2, 3, 4, 5, 6, 0].map(d => <option key={d} value={d}>{DIAS[d]}</option>)}
-              </Select>
+              edit.id ? (
+                <Select label="Día" value={String(edit.dia_semana ?? 1)} onChange={v => setEdit(e => ({ ...e, dia_semana: Number(v) }))}>
+                  {[1, 2, 3, 4, 5, 6, 0].map(d => <option key={d} value={d}>{DIAS[d]}</option>)}
+                </Select>
+              ) : (
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Días (podés elegir varios)</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[1, 2, 3, 4, 5, 6, 0].map(d => {
+                      const sel = (edit.dias_semana ?? []).includes(d)
+                      return (
+                        <button key={d} type="button"
+                          onClick={() => setEdit(e => {
+                            const cur = e?.dias_semana ?? []
+                            return { ...e, dias_semana: cur.includes(d) ? cur.filter(x => x !== d) : [...cur, d] }
+                          })}
+                          className={`px-3 py-1.5 rounded-lg text-[12px] font-medium border cursor-pointer transition-colors ${
+                            sel ? 'bg-[var(--primary)] text-white border-[var(--primary)]' : 'bg-white text-[var(--text-sub)] border-gray-200 hover:border-[var(--primary)]/40'
+                          }`}>
+                          {DIAS_CORTO[d]}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
             )}
             {!edit.parent_id && edit.tipo === 'puntual' && (
               <div>

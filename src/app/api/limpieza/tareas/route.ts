@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({})) as {
     tipo?: string; dia_semana?: number | null; fecha?: string | null; parent_id?: number | null
+    dias_semana?: number[]
     titulo?: string; detalle?: string | null; horario?: string | null; orden?: number
   }
   if (!body.titulo?.trim()) return NextResponse.json({ error: 'Falta el título' }, { status: 400 })
@@ -54,6 +55,20 @@ export async function POST(req: NextRequest) {
         horario: body.horario?.trim() || null, orden: body.orden ?? 0,
       })
       .select().single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(data)
+  }
+
+  // Semanal con varios días: se guarda una fila por día elegido (tarea repetida).
+  if (body.tipo === 'semanal' && Array.isArray(body.dias_semana) && body.dias_semana.length) {
+    const dias = [...new Set(body.dias_semana.filter(d => typeof d === 'number' && d >= 0 && d <= 6))]
+    if (!dias.length) return NextResponse.json({ error: 'Elegí al menos un día' }, { status: 400 })
+    const rows = dias.map(d => ({
+      tipo: 'semanal', dia_semana: d, fecha: null,
+      titulo: body.titulo!.trim(), detalle: body.detalle?.trim() || null,
+      horario: body.horario?.trim() || null, orden: body.orden ?? 0,
+    }))
+    const { data, error } = await supabaseAdmin.from('limpieza_tareas').insert(rows).select()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json(data)
   }
