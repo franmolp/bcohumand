@@ -5,9 +5,10 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { SessionUser } from '@/types'
-import { IconHome, IconUsers, IconClipboard, IconLogout, IconBell, IconShoppingBag, IconWall, IconDollar, IconSettings, IconX, IconMore, IconCalendar, IconReceipt, IconShield, IconCamera, IconCalendarCheck, IconWrench, IconStar, IconLayoutGrid, IconBarChart, IconTrophy, IconBottle, IconEye } from '@/components/ui/Icons'
+import { IconHome, IconUsers, IconClipboard, IconLogout, IconBell, IconShoppingBag, IconWall, IconDollar, IconSettings, IconX, IconMore, IconCalendar, IconReceipt, IconShield, IconCamera, IconCalendarCheck, IconWrench, IconStar, IconLayoutGrid, IconBarChart, IconTrophy, IconBottle, IconEye, IconSparkles } from '@/components/ui/Icons'
 import PhotoCropModal from '@/components/PhotoCropModal'
 import ImpersonarModal from '@/components/ImpersonarModal'
+import { esEquipoLimpieza } from '@/lib/limpieza'
 
 const allNav = [
   { href: '/dashboard',              label: 'Inicio',         icon: IconHome,        mobile: true },
@@ -25,6 +26,7 @@ const allNav = [
   { href: '/dashboard/muro',            label: 'Muro Social',      icon: IconWall },
   { href: '/dashboard/reconocimientos', label: 'Reconocimientos',  icon: IconTrophy },
   { href: '/dashboard/reparaciones',  label: 'Reparaciones',    icon: IconWrench },
+  { href: '/dashboard/limpieza',      label: 'Limpieza',        icon: IconSparkles,   limpieza: true },
   { href: '/dashboard/juegos',        label: 'Juegos',          icon: IconStar,        mobile: true },
   { href: '/dashboard/informes',       label: 'Contabilidad',    icon: IconBarChart,   roles: ['Admin', 'admin'] },
   { href: '/dashboard/equipos',       label: 'Equipos y Roles', icon: IconSettings,   admin: true },
@@ -59,6 +61,7 @@ export default function Navigation({ user, hasPedidosAccess = false, hasPuestosA
 
   const items = allNav.filter(i => {
     if (i.admin && !isAdmin) return false
+    if ((i as {limpieza?: boolean}).limpieza && !isAdmin && !esEquipoLimpieza(user.equipo)) return false
     if (i.href === '/dashboard/pedidos' && !hasPedidosAccess) return false
     if ((i as {notAdmin?: boolean}).notAdmin && (isAdmin || isEncargada || isHR)) return false
     if (isHR && (i.href === '/dashboard/monotributo' || i.href === '/dashboard/liquidador')) return false
