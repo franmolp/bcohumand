@@ -33,10 +33,11 @@ const allNav = [
   { href: '/dashboard/seguridad',    label: 'Seguridad',      icon: IconShield,      admin: true },
 ]
 
-export default function Navigation({ user, hasPedidosAccess = false, hasPuestosAccess = false }: { user: SessionUser; permisos?: string[] | null; hasPedidosAccess?: boolean; hasPuestosAccess?: boolean }) {
+export default function Navigation({ user, hasPedidosAccess = false, hasPuestosAccess = false, hasMonotributoAccess = false }: { user: SessionUser; permisos?: string[] | null; hasPedidosAccess?: boolean; hasPuestosAccess?: boolean; hasMonotributoAccess?: boolean }) {
   const path = usePathname()
   const router = useRouter()
   const isAdmin = user.rol === 'admin' || user.rol === 'Admin'
+  const esLimpieza = esEquipoLimpieza(user.equipo)
   const isHR = user.rol === 'HR'
   const isAdminOrHR = isAdmin || isHR
   const isEncargada = user.rol === 'Encargada'
@@ -61,7 +62,11 @@ export default function Navigation({ user, hasPedidosAccess = false, hasPuestosA
 
   const items = allNav.filter(i => {
     if (i.admin && !isAdmin) return false
-    if ((i as {limpieza?: boolean}).limpieza && !isAdmin && !esEquipoLimpieza(user.equipo)) return false
+    if ((i as {limpieza?: boolean}).limpieza && !isAdmin && !esLimpieza) return false
+    // Al equipo de limpieza se le ocultan módulos que no usa.
+    if (esLimpieza && ['/dashboard/espacio-trabajo', '/dashboard/pedidos', '/dashboard/monotributo', '/dashboard/juegos'].includes(i.href)) return false
+    // Monotributo: solo admin y empleadas habilitadas en Ajustes.
+    if (i.href === '/dashboard/monotributo' && !isAdmin && !hasMonotributoAccess) return false
     if (i.href === '/dashboard/pedidos' && !hasPedidosAccess) return false
     if ((i as {notAdmin?: boolean}).notAdmin && (isAdmin || isEncargada || isHR)) return false
     if (isHR && (i.href === '/dashboard/monotributo' || i.href === '/dashboard/liquidador')) return false

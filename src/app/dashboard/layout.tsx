@@ -42,9 +42,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
     hasPuestosAccess = acceso.ok
   }
 
+  // Monotributo: solo el admin y las empleadas habilitadas por el admin en Ajustes.
+  let hasMonotributoAccess = isAdmin
+  if (!isAdmin) {
+    const { data: emp } = await supabaseAdmin
+      .from('usuarios')
+      .select('monotributo_habilitado')
+      .eq('id', session.id)
+      .single()
+    hasMonotributoAccess = emp?.monotributo_habilitado ?? false
+  }
+
   return (
     <div className="h-[100dvh] overflow-hidden bg-[var(--bg)] lg:min-h-[100dvh] lg:h-auto lg:overflow-visible">
-      <Navigation user={session} permisos={userPermisos} hasPedidosAccess={hasPedidosAccess} hasPuestosAccess={hasPuestosAccess} />
+      <Navigation user={session} permisos={userPermisos} hasPedidosAccess={hasPedidosAccess} hasPuestosAccess={hasPuestosAccess} hasMonotributoAccess={hasMonotributoAccess} />
       <PushSubscriber />
       <ActivityPing />
       <main className="h-full overflow-y-auto overscroll-contain pt-12 pb-16 px-4 lg:h-auto lg:overflow-visible lg:pt-14 lg:pb-0 lg:pl-52 lg:pr-0" style={{ touchAction: 'pan-y' }}>
