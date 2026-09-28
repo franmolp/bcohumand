@@ -38,6 +38,7 @@ const GRUPO_LABEL: Record<string, string> = { diaria: 'Base diaria', semanal: 'E
 
 export default function LimpiezaClient({ isAdmin }: { isAdmin: boolean }) {
   const [tab, setTab] = useState<'hoy' | 'plan' | 'cumplimiento' | 'pedidos'>('hoy')
+  const [pedPend, setPedPend] = useState(0)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   function showToast(msg: string, type: 'success' | 'error' = 'success') {
     setToast({ msg, type }); setTimeout(() => setToast(null), 2500)
@@ -46,6 +47,13 @@ export default function LimpiezaClient({ isAdmin }: { isAdmin: boolean }) {
   // Abrir la pestaña Pedidos si vino desde una notificación (?tab=pedidos)
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('tab') === 'pedidos') setTab('pedidos')
+  }, [])
+
+  // Contador de pedidos sin resolver, para el globito de la pestaña.
+  useEffect(() => {
+    fetch('/api/limpieza/pedidos').then(r => r.json())
+      .then(d => setPedPend(Array.isArray(d) ? d.filter((p: { estado: string }) => p.estado !== 'resuelto').length : 0))
+      .catch(() => {})
   }, [])
 
   const tabs = isAdmin
@@ -71,16 +79,21 @@ export default function LimpiezaClient({ isAdmin }: { isAdmin: boolean }) {
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-4">
         {tabs.map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)}
-            className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all cursor-pointer ${
+            className={`relative flex-1 py-1.5 text-sm font-medium rounded-lg transition-all cursor-pointer ${
               tab === k ? 'bg-white text-[var(--primary)] shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text)]'
             }`}>
             {l}
+            {k === 'pedidos' && pedPend > 0 && (
+              <span className="ml-1.5 inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold align-middle">
+                {pedPend}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
       {tab === 'hoy' && <TabHoy showToast={showToast} />}
-      {tab === 'pedidos' && <TabPedidos showToast={showToast} />}
+      {tab === 'pedidos' && <TabPedidos showToast={showToast} onCount={setPedPend} />}
       {tab === 'plan' && isAdmin && <TabPlan showToast={showToast} />}
       {tab === 'cumplimiento' && isAdmin && <TabCumplimiento />}
     </div>
@@ -346,24 +359,36 @@ function fmtFechaCorta(iso: string): string {
   return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
 }
 
-function TabPedidos({ showToast }: { showToast: (m: string, t?: 'success' | 'error') => void }) {
+function TabPedidos({ showToast, onCount }: { showToast: (m: string, t?: 'success' | 'error') => void; onCount: (n: number) => void }) {
   const [pedidos, setPedidos] = useState<Pedido[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
+  const reportar = useCallback((lista: Pedido[]) => {
+    onCount(lista.filter(p => p.estado !== 'resuelto').length)
+  }, [onCount])
+
   const cargar = useCallback(() => {
-    fetch('/api/limpieza/pedidos').then(r => r.json()).then(d => setPedidos(Array.isArray(d) ? d : [])).catch(() => setPedidos([]))
-  }, [])
+    fetch('/api/limpieza/pedidos').then(r => r.json()).then(d => {
+      const lista = Array.isArray(d) ? d : []
+      setPedidos(lista); reportar(lista)
+    }).catch(() => setPedidos([]))
+  }, [reportar])
   useEffect(() => { cargar() }, [cargar])
 
-  async function cambiar(p: Pedido, estado: 'pendiente' | 'resuelto') {
+  async function toggle(p: Pedido) {
+    const estado = p.estado === 'resuelto' ? 'pendiente' : 'resuelto'
     setBusy(p.id)
     const res = await fetch(`/api/limpieza/pedidos/${p.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estado }),
     }).catch(() => null)
     setBusy(null)
     if (!res || !res.ok) { showToast('No se pudo actualizar', 'error'); return }
-    setPedidos(prev => prev?.map(x => x.id === p.id ? { ...x, estado } : x) ?? prev)
-    showToast(estado === 'resuelto' ? 'Marcado como resuelto' : 'Reabierto')
+    setPedidos(prev => {
+      const next = prev?.map(x => x.id === p.id ? { ...x, estado } : x) ?? prev
+      if (next) reportar(next)
+      return next
+    })
+    if (estado === 'resuelto') showToast('Marcado como resuelto')
   }
 
   if (!pedidos) return <div className="py-12"><Spinner /></div>
@@ -375,30 +400,22 @@ function TabPedidos({ showToast }: { showToast: (m: string, t?: 'success' | 'err
     const done = p.estado === 'resuelto'
     const prio = PRIO[p.prioridad] ?? PRIO.media
     return (
-      <div key={p.id} className={`bg-white rounded-2xl border border-[var(--border)] p-3.5 ${done ? 'opacity-60' : ''}`}>
-        <div className="flex items-start gap-2">
-          <div className="flex-1 min-w-0">
-            <p className={`text-[14px] font-semibold ${done ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text)]'}`}>{p.titulo}</p>
-            {p.descripcion && <p className="text-[12px] text-[var(--text-muted)] mt-0.5">{p.descripcion}</p>}
-            <div className="flex items-center flex-wrap gap-2 mt-1.5">
-              {!done && <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${prio.cls}`}>{prio.label}</span>}
-              {p.nombre_empleada && <span className="text-[11px] text-[var(--text-muted)]">Pidió: {p.nombre_empleada}</span>}
-              <span className="text-[11px] text-[var(--text-muted)]">· {fmtFechaCorta(p.creado_en)}</span>
-            </div>
-          </div>
-          {done ? (
-            <button onClick={() => cambiar(p, 'pendiente')} disabled={busy === p.id}
-              className="flex-shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 cursor-pointer transition-colors">
-              Reabrir
-            </button>
-          ) : (
-            <button onClick={() => cambiar(p, 'resuelto')} disabled={busy === p.id}
-              className="flex-shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 cursor-pointer transition-colors">
-              Resuelto
-            </button>
-          )}
-        </div>
-      </div>
+      <button key={p.id} onClick={() => toggle(p)} disabled={busy === p.id}
+        className={`w-full flex items-start gap-3 bg-white rounded-2xl border border-[var(--border)] p-3.5 text-left hover:bg-gray-50 transition-colors cursor-pointer ${done ? 'opacity-60' : ''}`}>
+        <span className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+          done ? 'bg-[var(--primary)] border-[var(--primary)]' : 'border-gray-300'
+        }`}>
+          {done && <IconCheck size={13} className="text-white" />}
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className={`block text-[14px] font-semibold ${done ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text)]'}`}>{p.titulo}</span>
+          {p.descripcion && <span className="block text-[12px] text-[var(--text-muted)] mt-0.5">{p.descripcion}</span>}
+          <span className="flex items-center flex-wrap gap-2 mt-1.5">
+            {!done && <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${prio.cls}`}>{prio.label}</span>}
+            <span className="text-[11px] text-[var(--text-muted)]">{fmtFechaCorta(p.creado_en)}</span>
+          </span>
+        </span>
+      </button>
     )
   }
 
