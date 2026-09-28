@@ -185,6 +185,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   const nextMoYr = mo === 12 ? yr + 1 : yr
 
   const showAusentes = session.rol === 'HR' || session.rol === 'Encargada'
+  const esLimpieza = esEquipoLimpieza(session.equipo)
   // Período de vacaciones: 01/04/YYYY → 31/03/YYYY+1
   const periodYear = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1
   const periodStart = `${periodYear}-04-01`
@@ -436,8 +437,11 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
       </div>
 
       {/* Plan de limpieza — solo para el equipo Limpieza */}
-      {esEquipoLimpieza(session.equipo) && <LimpiezaHomeCard />}
+      {esLimpieza && <LimpiezaHomeCard />}
 
+      {/* El equipo Limpieza ve un home reducido: solo su card, Mis solicitudes y
+          Próximos eventos. El resto se oculta. */}
+      {!esLimpieza && (<>
       {/* Wordle del día */}
       <WordleCard
         tieneHoy={tieneHoy}
@@ -657,13 +661,14 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
           </div>
         </div>
       )}
+      </>)}
 
       <div className="grid lg:grid-cols-3 gap-4">
-
         {/* Left column */}
         <div className="lg:col-span-2 space-y-4">
 
           {/* Vacaciones */}
+          {!esLimpieza && (
           <Link href="/dashboard/solicitudes" className="block bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between gap-2 mb-4">
               <div className="flex items-center gap-2">
@@ -692,6 +697,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
               />
             </div>
           </Link>
+          )}
 
           {/* Mis solicitudes pendientes */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -727,7 +733,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
           </div>
 
           {/* Notificaciones */}
-          {notifs.length > 0 && (
+          {!esLimpieza && notifs.length > 0 && (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
               <Link href="/dashboard/notificaciones" className="flex items-center justify-between px-5 py-4 border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
                 <div className="flex items-center gap-2">
@@ -805,7 +811,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
 
 
           {/* Reseñas de Google */}
-          <GoogleReviewsCarousel verticalOffset={90} />
+          {!esLimpieza && <GoogleReviewsCarousel verticalOffset={90} />}
 
         </div>
       </div>
