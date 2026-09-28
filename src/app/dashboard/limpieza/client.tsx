@@ -145,14 +145,13 @@ function TabHoy({ showToast, isAdmin }: { showToast: (m: string, t?: 'success' |
   const hechas = tareas?.reduce((a, t) => a + hechasDe(t), 0) ?? 0
   const grupos = ['diaria', 'semanal', 'puntual'] as const
 
-  // Checkbox reutilizable
-  const check = (id: number, hecho: boolean) => (
-    <button onClick={() => toggle(id, !hecho)} disabled={!editable}
-      className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-        hecho ? 'bg-[var(--primary)] border-[var(--primary)]' : 'border-gray-300'
-      } ${editable ? 'cursor-pointer' : 'cursor-default opacity-70'}`}>
+  // Recuadro del checkbox (span, no button: el reset global le sacaría el borde a un button)
+  const box = (hecho: boolean) => (
+    <span className={`mt-0.5 w-5 h-5 rounded-md border-2 border-solid flex items-center justify-center flex-shrink-0 transition-colors ${
+      hecho ? 'bg-[var(--primary)] border-[var(--primary)]' : 'border-gray-300'
+    }`}>
       {hecho && <IconCheck size={13} className="text-white" />}
-    </button>
+    </span>
   )
 
   return (
@@ -219,10 +218,11 @@ function TabHoy({ showToast, isAdmin }: { showToast: (m: string, t?: 'success' |
                             {t.subtareas.filter(s => s.hecho).length}/{t.subtareas.length}
                           </span>
                         </div>
-                        <div className="mt-2 space-y-1 pl-1">
+                        <div className="mt-2 space-y-0.5 pl-1">
                           {t.subtareas.map(s => (
-                            <div key={s.id} className="flex items-start gap-2.5">
-                              {check(s.id, s.hecho)}
+                            <button key={s.id} onClick={() => toggle(s.id, !s.hecho)} disabled={!editable}
+                              className={`w-full flex items-start gap-2.5 text-left py-1 rounded-lg ${editable ? 'cursor-pointer hover:bg-gray-50' : 'cursor-default'}`}>
+                              {box(s.hecho)}
                               <span className="flex-1 min-w-0 pt-0.5">
                                 <span className={`text-[13px] ${s.hecho ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text)]'}`}>
                                   {s.titulo}
@@ -230,14 +230,15 @@ function TabHoy({ showToast, isAdmin }: { showToast: (m: string, t?: 'success' |
                                 </span>
                                 {s.detalle && <span className="block text-[11px] text-[var(--text-muted)]">{s.detalle}</span>}
                               </span>
-                            </div>
+                            </button>
                           ))}
                         </div>
                       </div>
                     ) : (
                       // Tarea simple tildable
-                      <div key={t.id} className="flex items-start gap-3 px-4 py-3">
-                        {check(t.id, t.hecho)}
+                      <button key={t.id} onClick={() => toggle(t.id, !t.hecho)} disabled={!editable}
+                        className={`w-full flex items-start gap-3 px-4 py-3 text-left ${editable ? 'cursor-pointer hover:bg-gray-50' : 'cursor-default'}`}>
+                        {box(t.hecho)}
                         <span className="flex-1 min-w-0">
                           <span className={`text-[14px] font-medium ${t.hecho ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text)]'}`}>
                             {t.titulo}
@@ -245,7 +246,7 @@ function TabHoy({ showToast, isAdmin }: { showToast: (m: string, t?: 'success' |
                           </span>
                           {t.detalle && <span className="block text-[12px] text-[var(--text-muted)] mt-0.5">{t.detalle}</span>}
                         </span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
