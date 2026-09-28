@@ -7,6 +7,8 @@ import GoogleReviewsCarousel from '@/components/GoogleReviewsCarousel'
 import ListaPreciosCard from '@/components/ListaPreciosCard'
 import { getPuestosDisponibles } from '@/lib/puestos'
 import { getConcursoResumen } from '@/lib/concurso-google'
+import { esEquipoLimpieza } from '@/lib/limpieza'
+import LimpiezaHomeCard from '@/components/LimpiezaHomeCard'
 import { fmtFechaLarga } from '@/lib/fecha'
 
 const VACACIONES_DEFAULT = 14
@@ -432,6 +434,9 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
           {fmtDateLabel(today)}
         </p>
       </div>
+
+      {/* Plan de limpieza — solo para el equipo Limpieza */}
+      {esEquipoLimpieza(session.equipo) && <LimpiezaHomeCard />}
 
       {/* Wordle del día */}
       <WordleCard

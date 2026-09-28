@@ -34,6 +34,7 @@ export type TipoNotif =
   | 'puesto_deshecho'
   | 'puestos_disponibles_semana'
   | 'concurso_google'
+  | 'limpieza_pedido'
 
 export async function sendPushToUsers(usuarioIds: string[], titulo: string, mensaje: string, url = '/dashboard/notificaciones') {
   const publicKey  = process.env.VAPID_PUBLIC_KEY

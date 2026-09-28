@@ -5,7 +5,7 @@ import Link from 'next/link'
 import type { SessionUser } from '@/types'
 import {
   IconBell, IconCheck, IconX, IconCalendar, IconCalendarCheck,
-  IconShoppingBag, IconReceipt, IconWall, IconAlertCircle, IconPlus, IconTrash, IconFilter, IconHeartFilled, IconFingerprint, IconDollar, IconWrench, IconFileText, IconTrophy, IconBottle, IconLayoutGrid,
+  IconShoppingBag, IconReceipt, IconWall, IconAlertCircle, IconPlus, IconTrash, IconFilter, IconHeartFilled, IconFingerprint, IconDollar, IconWrench, IconFileText, IconTrophy, IconBottle, IconLayoutGrid, IconSparkles,
 } from '@/components/ui/Icons'
 import { Spinner, Modal, Button, Input, Select, Toast } from '@/components/ui'
 
@@ -61,6 +61,7 @@ function tipoConfig(tipo: string) {
     reconocimiento_aprobado:       { icon: <IconTrophy size={14} />,  bg: 'bg-yellow-100',  color: 'text-yellow-600',  href: '/dashboard/reconocimientos' },
     reconocimiento_recordatorio:   { icon: <IconTrophy size={14} />,  bg: 'bg-yellow-100',  color: 'text-yellow-600',  href: '/dashboard/reconocimientos' },
     concurso_google:               { icon: <IconTrophy size={14} />,  bg: 'bg-pink-100',    color: 'text-pink-600',    href: '/dashboard/reconocimientos?tab=resenas' },
+    limpieza_pedido:               { icon: <IconSparkles size={14} />, bg: 'bg-teal-100',    color: 'text-teal-600',    href: '/dashboard/limpieza?tab=pedidos' },
     pedido_recordatorio:           { icon: <IconBottle size={14} />, bg: 'bg-purple-100', color: 'text-purple-600', href: '/dashboard/pedidos' },
     puesto_solicitado:             { icon: <IconLayoutGrid size={14} />, bg: 'bg-sky-100',     color: 'text-sky-600',     href: '/dashboard/espacio-trabajo' },
     puesto_aprobado:               { icon: <IconLayoutGrid size={14} />, bg: 'bg-green-100',   color: 'text-green-600',   href: '/dashboard/espacio-trabajo' },

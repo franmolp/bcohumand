@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { crearNotificacion, crearNotificaciones, getAdminAndEncargadaIds, getAdminIds } from '@/lib/notificaciones'
+import { crearNotificacion, crearNotificaciones, getAdminAndEncargadaIds, getAdminIds, getUserIdsByEquipo } from '@/lib/notificaciones'
 
 export async function GET() {
   const session = await getSession()
@@ -89,6 +89,19 @@ export async function POST(req: Request) {
       mensaje: `${titulo.trim()} · Cargada por el admin`,
       tipo: 'reparacion_nueva',
     }).catch(() => {})
+  }
+
+  // Si es un pedido de LIMPIEZA, avisar al equipo de limpieza (además del admin),
+  // que es quien lo va a resolver. Se excluye a quien lo cargó.
+  if ((categoria || 'otro') === 'limpieza') {
+    const limpiezaIds = (await getUserIdsByEquipo('Limpieza')).filter(id => id !== session.id)
+    if (limpiezaIds.length) {
+      await crearNotificaciones(limpiezaIds, {
+        titulo: 'Nuevo pedido de limpieza',
+        mensaje: `${targetNombre}: ${titulo.trim()}`,
+        tipo: 'limpieza_pedido',
+      }).catch(() => {})
+    }
   }
 
   return NextResponse.json(data)
