@@ -174,7 +174,10 @@ function parseCitas(text) {
   const map = new Map()
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i]
-    if (iE >= 0 && r[iE]?.trim().toLowerCase() === 'cancelado') continue
+    // Fresha exporta el estado en femenino ("Cancelada"), así que un === 'cancelado'
+    // nunca matcheaba y las citas canceladas se contaban como turno (ej. una cita
+    // cancelada a las 9:00 pisaba el primer turno real de las 11:30).
+    if (iE >= 0 && (r[iE] ?? '').trim().toLowerCase().startsWith('cancel')) continue
     const nombre = r[iN]?.trim() ?? ''
     const fecha  = freshaDate(r[iF] ?? '')
     const franja = r[iFr]?.trim() ?? ''
