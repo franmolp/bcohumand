@@ -24,12 +24,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // Solo se opera sobre pedidos de limpieza (no otras categorías de mantenimiento).
   const { data: rep } = await supabaseAdmin
     .from('reparaciones')
-    .select('id, categoria, titulo, usuario_id')
+    .select('id, categoria, titulo, usuario_id, estado')
     .eq('id', id)
     .single()
   if (!rep || rep.categoria !== 'limpieza') {
     return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
   }
+
+  // El equipo de limpieza puede marcar resuelto, pero NO reabrir (volver a pendiente):
+  // eso solo el admin. Evita disparar notificaciones repetidas a quien la cargó.
+  if (estado === 'pendiente' && !esAdmin(session.rol)) {
+    return NextResponse.json({ error: 'Solo el admin puede reabrir una solicitud resuelta' }, { status: 403 })
+  }
+
+  const yaResuelta = rep.estado === 'resuelto'
 
   const { error } = await supabaseAdmin
     .from('reparaciones')
@@ -37,10 +45,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  if (estado === 'resuelto' && rep.usuario_id && rep.usuario_id !== session.id) {
+  // Aviso a quien la cargó SOLO cuando pasa a resuelta (no si ya lo estaba).
+  if (estado === 'resuelto' && !yaResuelta && rep.usuario_id && rep.usuario_id !== session.id) {
     await crearNotificacion({
       usuario_id: rep.usuario_id,
-      titulo: 'Pedido de limpieza resuelto',
+      titulo: 'Solicitud de limpieza resuelta',
       mensaje: rep.titulo,
       tipo: 'reparacion_actualizada',
     }).catch(() => {})

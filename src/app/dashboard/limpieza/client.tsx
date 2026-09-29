@@ -94,7 +94,7 @@ export default function LimpiezaClient({ isAdmin }: { isAdmin: boolean }) {
       </div>
 
       {tab === 'hoy' && <TabHoy showToast={showToast} isAdmin={isAdmin} />}
-      {tab === 'pedidos' && <TabPedidos showToast={showToast} onCount={setPedPend} />}
+      {tab === 'pedidos' && <TabPedidos showToast={showToast} onCount={setPedPend} isAdmin={isAdmin} />}
       {tab === 'plan' && isAdmin && <TabPlan showToast={showToast} />}
       {tab === 'cumplimiento' && isAdmin && <TabCumplimiento />}
     </div>
@@ -528,7 +528,7 @@ function fmtFechaCorta(iso: string): string {
   return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
 }
 
-function TabPedidos({ showToast, onCount }: { showToast: (m: string, t?: 'success' | 'error') => void; onCount: (n: number) => void }) {
+function TabPedidos({ showToast, onCount, isAdmin }: { showToast: (m: string, t?: 'success' | 'error') => void; onCount: (n: number) => void; isAdmin: boolean }) {
   const [pedidos, setPedidos] = useState<Pedido[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -545,7 +545,9 @@ function TabPedidos({ showToast, onCount }: { showToast: (m: string, t?: 'succes
   useEffect(() => { cargar() }, [cargar])
 
   async function toggle(p: Pedido) {
-    const estado = p.estado === 'resuelto' ? 'pendiente' : 'resuelto'
+    const done = p.estado === 'resuelto'
+    if (done && !isAdmin) return // el equipo no puede reabrir; solo el admin
+    const estado = done ? 'pendiente' : 'resuelto'
     setBusy(p.id)
     const res = await fetch(`/api/limpieza/pedidos/${p.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estado }),
@@ -567,11 +569,14 @@ function TabPedidos({ showToast, onCount }: { showToast: (m: string, t?: 'succes
 
   const card = (p: Pedido) => {
     const done = p.estado === 'resuelto'
+    const puedeTocar = isAdmin || !done // el equipo solo puede marcar resuelto, no reabrir
     const prio = PRIO[p.prioridad] ?? PRIO.media
     return (
-      <button key={p.id} onClick={() => toggle(p)} disabled={busy === p.id}
-        className={`w-full flex items-start gap-3 bg-white rounded-2xl border border-[var(--border)] p-3.5 text-left hover:bg-gray-50 transition-colors cursor-pointer ${done ? 'opacity-60' : ''}`}>
-        <span className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+      <button key={p.id} onClick={() => toggle(p)} disabled={busy === p.id || !puedeTocar}
+        className={`w-full flex items-start gap-3 bg-white rounded-2xl border border-[var(--border)] p-3.5 text-left transition-colors ${
+          puedeTocar ? 'cursor-pointer hover:bg-gray-50' : 'cursor-default'
+        } ${done ? 'opacity-60' : ''}`}>
+        <span className={`mt-0.5 w-5 h-5 rounded-md border-2 border-solid flex items-center justify-center flex-shrink-0 transition-colors ${
           done ? 'bg-[var(--primary)] border-[var(--primary)]' : 'border-gray-300'
         }`}>
           {done && <IconCheck size={13} className="text-white" />}
