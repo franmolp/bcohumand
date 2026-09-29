@@ -6,7 +6,7 @@ import { IconSparkles, IconChevronRight } from '@/components/ui/Icons'
 
 // Card full-width para el dashboard admin: progreso de limpieza del día, clickeable
 // al módulo. Cuenta tareas para el "X/Y" y subtareas para la barra (granularidad fina).
-export default function LimpiezaProgresoCard() {
+export default function LimpiezaProgresoCard({ className = '' }: { className?: string }) {
   const [tot, setTot] = useState(0)
   const [hec, setHec] = useState(0)
   const [leafTot, setLeafTot] = useState(0)
@@ -32,7 +32,7 @@ export default function LimpiezaProgresoCard() {
 
   return (
     <Link href="/dashboard/limpieza"
-      className="block bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-shadow">
+      className={`block bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-shadow ${className}`}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-7 h-7 bg-[image:var(--gradient)] rounded-xl flex items-center justify-center flex-shrink-0">

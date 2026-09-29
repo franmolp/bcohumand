@@ -393,6 +393,9 @@ export default async function AdminDashboard({ session }: { session: SessionUser
           </Link>
         )}
 
+        {/* Progreso de limpieza del día — arriba de Pedidos, a lo ancho */}
+        <LimpiezaProgresoCard className="col-span-2" />
+
         {/* Pedidos pendientes */}
         {pedidosTotalItems > 0 && (
           <Link href="/dashboard/pedidos" className="col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 block hover:shadow-md transition-shadow">
@@ -565,9 +568,6 @@ export default async function AdminDashboard({ session }: { session: SessionUser
         </div>
 
       </div>
-
-      {/* Progreso de limpieza del día — full width, lleva al módulo */}
-      <LimpiezaProgresoCard />
 
       {/* Reseñas de Google */}
       <GoogleReviewsCarousel verticalOffset={-110} />
