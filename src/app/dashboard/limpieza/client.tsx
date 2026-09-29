@@ -151,7 +151,7 @@ function TabHoy({ showToast, isAdmin }: { showToast: (m: string, t?: 'success' |
 
   // Recuadro del checkbox (span, no button: el reset global le sacaría el borde a un button)
   const box = (hecho: boolean) => (
-    <span className={`mt-0.5 w-5 h-5 rounded-md border-2 border-solid flex items-center justify-center flex-shrink-0 transition-colors ${
+    <span className={`w-5 h-5 rounded-md border-2 border-solid flex items-center justify-center flex-shrink-0 transition-colors ${
       hecho ? 'bg-[var(--primary)] border-[var(--primary)]' : 'border-gray-300'
     }`}>
       {hecho && <IconCheck size={13} className="text-white" />}
@@ -225,9 +225,9 @@ function TabHoy({ showToast, isAdmin }: { showToast: (m: string, t?: 'success' |
                         <div className="mt-2 space-y-0.5 pl-1">
                           {t.subtareas.map(s => (
                             <button key={s.id} onClick={() => toggle(s.id, !s.hecho)} disabled={!editable}
-                              className={`w-full flex items-start gap-2.5 text-left py-1 rounded-lg ${editable ? 'cursor-pointer hover:bg-gray-50' : 'cursor-default'}`}>
+                              className={`w-full flex items-center gap-2.5 text-left py-1 rounded-lg ${editable ? 'cursor-pointer hover:bg-gray-50' : 'cursor-default'}`}>
                               {box(s.hecho)}
-                              <span className="flex-1 min-w-0 pt-0.5">
+                              <span className="flex-1 min-w-0">
                                 <span className={`text-[13px] ${s.hecho ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text)]'}`}>
                                   {s.titulo}
                                   {s.horario && <span className="ml-2 text-[11px] font-normal text-[var(--text-muted)]">{s.horario}</span>}
@@ -241,7 +241,7 @@ function TabHoy({ showToast, isAdmin }: { showToast: (m: string, t?: 'success' |
                     ) : (
                       // Tarea simple tildable
                       <button key={t.id} onClick={() => toggle(t.id, !t.hecho)} disabled={!editable}
-                        className={`w-full flex items-start gap-3 px-4 py-3 text-left ${editable ? 'cursor-pointer hover:bg-gray-50' : 'cursor-default'}`}>
+                        className={`w-full flex items-center gap-3 px-4 py-3 text-left ${editable ? 'cursor-pointer hover:bg-gray-50' : 'cursor-default'}`}>
                         {box(t.hecho)}
                         <span className="flex-1 min-w-0">
                           <span className={`text-[14px] font-medium ${t.hecho ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text)]'}`}>
