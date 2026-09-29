@@ -18,12 +18,9 @@ export default function LimpiezaHomeCard() {
       fetch('/api/limpieza/pedidos').then(r => r.json()).catch(() => []),
     ]).then(([dia, pedidos]) => {
       const tareas = Array.isArray(dia?.tareas) ? dia.tareas : []
+      // Contador general por tareas (no subtareas). Progreso fino queda para el módulo.
       let tot = 0, hec = 0
-      for (const t of tareas as { hecho?: boolean; subtareas?: { hecho?: boolean }[] }[]) {
-        const subs = t.subtareas ?? []
-        if (subs.length) { tot += subs.length; hec += subs.filter(s => s.hecho).length }
-        else { tot += 1; hec += t.hecho ? 1 : 0 }
-      }
+      for (const t of tareas as { hecho?: boolean }[]) { tot += 1; hec += t.hecho ? 1 : 0 }
       setTotal(tot)
       setHechas(hec)
       setPendientes(Array.isArray(pedidos) ? pedidos.filter((p: { estado: string }) => p.estado !== 'resuelto').length : 0)
@@ -44,10 +41,14 @@ export default function LimpiezaHomeCard() {
         <p className="text-[15px] font-bold leading-tight">Plan de limpieza de hoy</p>
         <p className="text-[12px] text-white/85 mt-0.5">
           {listo ? (
-            total > 0 ? `${hechas} de ${total} tareas hechas (${pct}%)` : 'Sin tareas para hoy'
+            total > 0 ? `${hechas} de ${total} tarea${total !== 1 ? 's' : ''} hecha${total !== 1 ? 's' : ''} (${pct}%)` : 'Sin tareas para hoy'
           ) : 'Cargando…'}
-          {pendientes > 0 && <> · {pendientes} pedido{pendientes !== 1 ? 's' : ''} pendiente{pendientes !== 1 ? 's' : ''}</>}
         </p>
+        {pendientes > 0 && (
+          <p className="text-[12px] font-semibold text-white mt-1.5 inline-flex items-center gap-1 bg-white/20 rounded-lg px-2 py-1">
+            {pendientes === 1 ? 'Tenés una solicitud especial — revisala' : `Tenés ${pendientes} solicitudes especiales — revisalas`}
+          </p>
+        )}
       </div>
       <IconChevronRight size={18} className="text-white/80 flex-shrink-0" />
     </Link>

@@ -141,8 +141,12 @@ function TabHoy({ showToast, isAdmin }: { showToast: (m: string, t?: 'success' |
 
   const leavesDe = (t: TareaDia) => t.subtareas.length || 1
   const hechasDe = (t: TareaDia) => t.subtareas.length ? t.subtareas.filter(s => s.hecho).length : (t.hecho ? 1 : 0)
-  const total = tareas?.reduce((a, t) => a + leavesDe(t), 0) ?? 0
-  const hechas = tareas?.reduce((a, t) => a + hechasDe(t), 0) ?? 0
+  // Barra de progreso: granularidad fina (subtareas). Contador general: solo tareas.
+  const totalLeaves = tareas?.reduce((a, t) => a + leavesDe(t), 0) ?? 0
+  const hechasLeaves = tareas?.reduce((a, t) => a + hechasDe(t), 0) ?? 0
+  const totalTareas = tareas?.length ?? 0
+  const hechasTareas = tareas?.filter(t => t.hecho).length ?? 0
+  const pct = totalLeaves ? hechasLeaves / totalLeaves * 100 : 0
   const grupos = ['diaria', 'semanal', 'puntual'] as const
 
   // Recuadro del checkbox (span, no button: el reset global le sacaría el borde a un button)
@@ -177,21 +181,21 @@ function TabHoy({ showToast, isAdmin }: { showToast: (m: string, t?: 'success' |
         </div>
       )}
 
-      {/* Progreso */}
-      {!loading && total > 0 && (
+      {/* Progreso: contador por tareas, barra por subtareas */}
+      {!loading && totalTareas > 0 && (
         <div className="mb-3">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[12px] font-medium text-[var(--text-sub)]">{hechas} de {total} hechas</span>
-            <span className="text-[12px] font-semibold text-[var(--primary)]">{Math.round(hechas / total * 100)}%</span>
+            <span className="text-[12px] font-medium text-[var(--text-sub)]">{hechasTareas} de {totalTareas} tarea{totalTareas !== 1 ? 's' : ''}</span>
+            <span className="text-[12px] font-semibold text-[var(--primary)]">{Math.round(pct)}%</span>
           </div>
           <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full bg-[var(--primary)] rounded-full transition-all" style={{ width: `${total ? hechas / total * 100 : 0}%` }} />
+            <div className="h-full bg-[var(--primary)] rounded-full transition-all" style={{ width: `${pct}%` }} />
           </div>
         </div>
       )}
 
       {loading ? <div className="py-12"><Spinner /></div>
-        : total === 0 ? (
+        : totalTareas === 0 ? (
           <div className="bg-white rounded-2xl border border-[var(--border)] py-12 text-center">
             <p className="text-sm text-[var(--text-muted)]">No hay tareas para este día</p>
           </div>
