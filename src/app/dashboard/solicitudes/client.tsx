@@ -163,6 +163,16 @@ function FormFields({
   const isSalud   = form.tipo === 'Ausencia por Salud'
   const dias      = isHorario ? 1 : calcDias(form.fecha_inicio, form.fecha_fin)
 
+  // Balance de vacaciones del empleado, para avisarle si se pasa al pedir.
+  const [vacBalance, setVacBalance] = useState<{ usadas: number; total: number } | null>(null)
+  useEffect(() => {
+    if (isAdminOrHR || form.tipo !== 'Vacaciones' || vacBalance) return
+    fetch('/api/perfil').then(r => r.json()).then(d => {
+      if (typeof d.vacaciones_total === 'number') setVacBalance({ usadas: d.vacaciones_usadas ?? 0, total: d.vacaciones_total })
+    }).catch(() => {})
+  }, [isAdminOrHR, form.tipo, vacBalance])
+  const excedeVac = !isAdminOrHR && form.tipo === 'Vacaciones' && !!vacBalance && dias > 0 && (vacBalance.usadas + dias) > vacBalance.total
+
   const needsAdvance = !isAdminOrHR && !editMode
   const today = todayAR()
   const dateMin = (() => {
@@ -289,6 +299,14 @@ function FormFields({
             <p className="text-[13px] text-[var(--primary)] font-medium -mt-1">
               {dias} día{dias !== 1 ? 's' : ''}
             </p>
+          )}
+          {excedeVac && vacBalance && (
+            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+              <IconAlertCircle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-[12px] text-amber-800">
+                Con estos {dias} días te pasás de tus vacaciones: ya usaste <b>{vacBalance.usadas}</b> de <b>{vacBalance.total}</b> días este período. Igual podés enviar la solicitud y el admin decide.
+              </p>
+            </div>
           )}
         </>
       )}
@@ -602,6 +620,35 @@ function isRecepcionEquipo(equipo: string): boolean {
   return equipo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes('recep')
 }
 
+// Advertencias de vacaciones para el admin (exceso de días + coincidencia con el mismo equipo).
+type ValidacionSol = {
+  excede: { usadas: number; total: number; pedido: number; excedePor: number } | null
+  solapamientos: { nombre: string; fecha_inicio: string; fecha_fin: string | null; dias_comun: number }[]
+}
+function Advertencias({ v, compact = false }: { v?: ValidacionSol; compact?: boolean }) {
+  if (!v || (!v.excede && !v.solapamientos.length)) return null
+  return (
+    <div className={compact ? 'mt-1 space-y-1' : 'mt-2 space-y-1.5'}>
+      {v.excede && (
+        <div className="flex items-start gap-1.5 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">
+          <IconAlertCircle size={13} className="mt-0.5 flex-shrink-0" />
+          <span>Se pasa de sus vacaciones: pidió <b>{v.excede.pedido}</b> y ya usó <b>{v.excede.usadas}</b> de <b>{v.excede.total}</b> días (excede por <b>{v.excede.excedePor}</b>).</span>
+        </div>
+      )}
+      {v.solapamientos.length > 0 && (
+        <div className="flex items-start gap-1.5 text-[11px] text-orange-800 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1">
+          <IconAlertCircle size={13} className="mt-0.5 flex-shrink-0" />
+          <span>
+            Coincide con vacaciones del mismo equipo: {v.solapamientos.map((s, i) => (
+              <span key={i}>{i > 0 ? ', ' : ''}<b>{s.nombre}</b> ({s.dias_comun} día{s.dias_comun !== 1 ? 's' : ''} en común)</span>
+            ))}.
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function SolicitudesClient({ user }: { user: SessionUser }) {
   const isAdmin = user.rol === 'admin' || user.rol === 'Admin'
   const isHR = user.rol === 'HR'
@@ -682,6 +729,13 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
   }, [estadoFilter, tipoFilter, empleadoFilter])
 
   useEffect(() => { load() }, [load])
+
+  // Advertencias de vacaciones (exceso + coincidencias de equipo) — solo admin/HR.
+  const [validaciones, setValidaciones] = useState<Record<string, ValidacionSol>>({})
+  useEffect(() => {
+    if (!isAdminOrHR) return
+    fetch('/api/solicitudes/validaciones').then(r => r.json()).then(d => setValidaciones(d.validaciones ?? {})).catch(() => {})
+  }, [isAdminOrHR, list])
 
   useEffect(() => {
     fetch('/api/solicitudes/config').then(r => r.json()).then(d => {
@@ -1129,6 +1183,7 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
                     {sol.comentario_admin && (
                       <p className="text-[11px] text-gray-400 mt-0.5 italic truncate">"{sol.comentario_admin}"</p>
                     )}
+                    {isAdminOrHR && <Advertencias v={validaciones[sol.id]} />}
                   </div>
                   {/* Acciones */}
                   <div className="flex flex-col gap-1 shrink-0">
@@ -1224,7 +1279,10 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
                         )}
                       </div>
                     </td>
-                    <td className="py-3 px-4 whitespace-nowrap"><DetallePeriodo sol={sol} /></td>
+                    <td className="py-3 px-4 align-top">
+                      <div className="whitespace-nowrap"><DetallePeriodo sol={sol} /></div>
+                      {isAdminOrHR && <div className="max-w-[260px]"><Advertencias v={validaciones[sol.id]} compact /></div>}
+                    </td>
                     <td className="py-3 px-4 max-w-[180px]">
                       {sol.motivo
                         ? <span className="block text-[13px] text-gray-600 truncate" title={sol.motivo}>{sol.motivo}</span>
@@ -1481,6 +1539,7 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
               </div>
               {approveItem.motivo && <p className="text-[12px] text-gray-500 mt-1 italic">"{approveItem.motivo}"</p>}
             </div>
+            <Advertencias v={validaciones[approveItem.id]} />
             <div>
               <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">Comentario al empleado <span className="font-normal text-[var(--text-muted)]">(opcional)</span></label>
               <textarea value={comentario} onChange={e => setComentario(e.target.value)}
