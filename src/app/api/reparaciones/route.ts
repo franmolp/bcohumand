@@ -97,9 +97,10 @@ export async function POST(req: Request) {
     const limpiezaIds = (await getUserIdsByEquipo('Limpieza')).filter(id => id !== session.id)
     if (limpiezaIds.length) {
       await crearNotificaciones(limpiezaIds, {
-        titulo: 'Nuevo pedido de limpieza',
+        titulo: 'Nueva solicitud especial de limpieza',
         mensaje: `${targetNombre}: ${titulo.trim()}`,
         tipo: 'limpieza_pedido',
+        url: '/dashboard/limpieza?tab=pedidos',
       }).catch(() => {})
     }
   }
