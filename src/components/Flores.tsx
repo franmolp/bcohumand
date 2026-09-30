@@ -17,7 +17,7 @@ const FIN    = '2026-10-06' // inclusive — una semanita
 // "Alegre y colorido": hibisco, girasol, tulipán, flor de cerezo.
 const FLORES = ['🌺', '🌻', '🌷', '🌸']
 const COUNT = 18       // un par nomás, sutil
-const VIDA_MS = 5300   // cuánto vive el efecto antes de desaparecer
+const VIDA_MS = 5900   // cuánto vive el efecto antes de desaparecer
 
 interface Flor {
   id: number
@@ -38,11 +38,11 @@ function makeFlor(id: number): Flor {
     x: Math.random() * 100,
     emoji: FLORES[Math.floor(Math.random() * FLORES.length)],
     size: 16 + Math.random() * 12,        // 16–28px
-    delay: Math.random() * 900,           // arranque escalonado 0–0.9s
-    duration: 3200 + Math.random() * 1000, // 3.2–4.2s
+    delay: Math.random() * 800,           // arranque escalonado 0–0.8s
+    duration: 3900 + Math.random() * 1100, // 3.9–5.0s, un cachito más lento
     sway: (Math.random() - 0.5) * 120,    // deriva suave a izq/der
     spin: Math.random() * 360 - 180,
-    land: 84 + Math.random() * 15,        // se juntan abajo, a alturas ligeramente distintas (84–99vh)
+    land: 62 + Math.random() * 18,        // se juntan por encima del nav de abajo (62–80vh)
     op: 0.55 + Math.random() * 0.25,      // 0.55–0.8, sutil
   }
 }
