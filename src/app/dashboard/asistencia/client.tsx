@@ -146,6 +146,7 @@ export default function AsistenciaClient({ user }: Props) {
   const [mes, setMes] = useState(defaultMes)
   const [records, setRecords] = useState<AsistenciaProcesada[]>([])
   const [primerTurnos, setPrimerTurnos] = useState<PrimerTurnoDia[]>([])
+  const [horariosBase, setHorariosBase] = useState<{ usuario_id: string; fecha: string; inicio_base: string; fin_base: string }[]>([])
   const [empList, setEmpList] = useState<Empleado[]>([])
   const [homeEmpId, setHomeEmpId] = useState((isAdmin || isHR || isEncargada) ? '' : user.id)
   const [todosDate, setTodosDate] = useState(today)
@@ -187,6 +188,12 @@ export default function AsistenciaClient({ user }: Props) {
     setPrimerTurnos(Array.isArray(data) ? data : [])
   }, [mes])
 
+  const loadHorariosBase = useCallback(async () => {
+    const res = await fetch(`/api/asistencia/horarios-base?mes=${mes}`)
+    const data = await res.json()
+    setHorariosBase(Array.isArray(data) ? data : [])
+  }, [mes])
+
   useEffect(() => {
     fetch('/api/espacio-trabajo?fechaInicio=2020-01-01&fechaFin=2020-01-01').then(r => r.json()).then(d => {
       // Mostrar el timestamp más reciente entre fichadas HIKVISION y turnos Fresha
@@ -197,6 +204,7 @@ export default function AsistenciaClient({ user }: Props) {
   useEffect(() => { if (isAdmin || isHR || isEncargada) loadEmpList() }, [isAdmin, isHR, isEncargada, loadEmpList])
   useEffect(() => { loadConfig() }, [loadConfig])
   useEffect(() => { loadRecords() }, [loadRecords])
+  useEffect(() => { loadHorariosBase() }, [loadHorariosBase])
   useEffect(() => { if (isAdmin || isHR || isEncargada) loadPrimerTurnos() }, [isAdmin, isHR, isEncargada, loadPrimerTurnos])
   // Sync mes with the month of todosDate when in Todos tab (records are loaded per-month)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -393,6 +401,7 @@ export default function AsistenciaClient({ user }: Props) {
             canSelectEmp={isAdmin || isHR || isEncargada}
             empList={empList} homeEmpId={homeEmpId} setHomeEmpId={setHomeEmpId}
             homeRecords={homeRecords} homeStats={homeStats}
+            baseHorarios={horariosBase.filter(h => h.usuario_id === homeEmpId)}
             onRecordEdited={loadRecords}
           />
         )}
@@ -454,16 +463,29 @@ function normalizarNombreLiq(nombre: string): string {
 
 // ─── Tab: Ficha ───────────────────────────────────────────────────────────────
 
-function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHomeEmpId, homeRecords, homeStats, onRecordEdited }: {
+function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHomeEmpId, homeRecords, homeStats, baseHorarios, onRecordEdited }: {
   mes: string; setMes: (m: string) => void; isAdmin: boolean; canSelectEmp?: boolean
   empList: Empleado[]; homeEmpId: string; setHomeEmpId: (id: string) => void
   homeRecords: AsistenciaProcesada[]
   homeStats: ReturnType<typeof calcPresentismo>
+  baseHorarios: { fecha: string; inicio_base: string; fin_base: string }[]
   onRecordEdited: () => void
 }) {
   const defaultMes = new Date().toISOString().substring(0, 7)
   const days = Array.from({ length: daysInMonth(mes) }, (_, i) => i + 1)
   const dayMap = new Map(homeRecords.map(r => [r.fecha, r]))
+  // Horario base programado por fecha (para días sin registro procesado: futuros,
+  // francos, sin fichada). Si el día tiene registro, se prioriza el horario del
+  // registro (puede estar editado a mano).
+  const baseMap = new Map(baseHorarios.map(h => [h.fecha, h]))
+  const baseDe = (fecha: string): { ini: string | null; fin: string | null } => {
+    const rec = dayMap.get(fecha)
+    if (rec && (rec.horario_base_entrada || rec.horario_base_salida)) {
+      return { ini: rec.horario_base_entrada ?? null, fin: rec.horario_base_salida ?? null }
+    }
+    const b = baseMap.get(fecha)
+    return { ini: b?.inicio_base ?? null, fin: b?.fin_base ?? null }
+  }
   const hasEmp = !!homeEmpId
 
   const [editRec, setEditRec] = useState<AsistenciaProcesada | null>(null)
@@ -755,22 +777,29 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
                     <td colSpan={6} className="px-5 py-2 text-xs text-gray-300">{dowF} {d}</td>
                   </tr>
                 )
-                if (!rec) return (
-                  <tr key={d} className="hover:bg-gray-50/40 transition-colors">
-                    <td className="px-5 py-3.5">
-                      <div className="text-sm font-semibold text-[var(--text)]">{dowF} {d}</div>
-                    </td>
-                    <td colSpan={4} className="px-4 py-3.5 text-sm text-gray-300">—</td>
-                    <td></td>
-                  </tr>
-                )
+                if (!rec) {
+                  const base = baseDe(fecha)
+                  return (
+                    <tr key={d} className="hover:bg-gray-50/40 transition-colors">
+                      <td className="px-5 py-3.5">
+                        <div className="text-sm font-semibold text-[var(--text)]">{dowF} {d}</div>
+                        {(base.ini || base.fin) && (
+                          <div className="text-xs text-gray-400 mt-0.5">Base: {fmtTime(base.ini)} – {fmtTime(base.fin)}</div>
+                        )}
+                      </td>
+                      <td colSpan={4} className="px-4 py-3.5 text-sm text-gray-300">—</td>
+                      <td></td>
+                    </tr>
+                  )
+                }
                 const chip = CHIP_INFO[rec.estado ?? ''] ?? CHIP_INFO['Ausente']
+                const base = baseDe(fecha)
                 return (
                   <tr key={d} className={`hover:bg-gray-50/40 transition-colors ${isManual ? 'bg-violet-50/30' : ''}`}>
                     <td className="px-5 py-3.5">
                       <div className="text-sm font-semibold text-[var(--text)]">{dowF} {d}</div>
-                      {(rec.horario_base_entrada || rec.horario_base_salida) && (
-                        <div className="text-xs text-gray-400 mt-0.5">Base: {fmtTime(rec.horario_base_entrada)} – {fmtTime(rec.horario_base_salida)}</div>
+                      {(base.ini || base.fin) && (
+                        <div className="text-xs text-gray-400 mt-0.5">Base: {fmtTime(base.ini)} – {fmtTime(base.fin)}</div>
                       )}
                     </td>
                     <td className="px-4 py-3.5">
@@ -829,16 +858,22 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
                 <span className="text-xs text-gray-300">{d} Dom</span>
               </div>
             )
-            if (!rec) return (
-              <div key={d} className="flex items-center gap-3 px-3 py-2.5 bg-white rounded-xl border border-[var(--border)]">
-                <div className="w-10 flex-shrink-0 text-center">
-                  <div className="text-sm font-bold text-[var(--text)]">{d}</div>
-                  <div className="text-[10px] text-[var(--text-muted)]">{dowS}</div>
+            if (!rec) {
+              const base = baseDe(fecha)
+              return (
+                <div key={d} className="flex items-center gap-3 px-3 py-2.5 bg-white rounded-xl border border-[var(--border)]">
+                  <div className="w-10 flex-shrink-0 text-center">
+                    <div className="text-sm font-bold text-[var(--text)]">{d}</div>
+                    <div className="text-[10px] text-[var(--text-muted)]">{dowS}</div>
+                  </div>
+                  {(base.ini || base.fin)
+                    ? <span className="text-[11px] text-gray-400">Base: {fmtTime(base.ini)}–{fmtTime(base.fin)}</span>
+                    : <span className="text-xs text-gray-300">—</span>}
                 </div>
-                <span className="text-xs text-gray-300">—</span>
-              </div>
-            )
+              )
+            }
             const chip = CHIP_INFO[rec.estado ?? ''] ?? CHIP_INFO['Ausente']
+            const base = baseDe(fecha)
             return (
               <div key={d} className={`flex items-center gap-2 px-3 py-2.5 bg-white rounded-xl border ${isManual ? 'border-violet-200' : 'border-[var(--border)]'}`}>
                 {/* Columna de fecha — siempre centrada verticalmente */}
@@ -866,14 +901,12 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
                           : null}
                     </div>
                   </div>
-                  {chip.present
-                    ? (rec.horario_base_entrada || rec.horario_base_salida) && (
-                        <div className="text-[10px] text-gray-400 mt-0.5">Base: {fmtTime(rec.horario_base_entrada)}–{fmtTime(rec.horario_base_salida)}</div>
-                      )
-                    : (rec.tipo_ausencia || rec.motivo || rec.comentario_admin) && (
-                        <div className="text-[10px] text-gray-400 mt-0.5 truncate">{[rec.tipo_ausencia, rec.motivo, rec.comentario_admin].filter(Boolean).join(' | ')}</div>
-                      )
-                  }
+                  {(base.ini || base.fin) && (
+                    <div className="text-[10px] text-gray-400 mt-0.5">Base: {fmtTime(base.ini)}–{fmtTime(base.fin)}</div>
+                  )}
+                  {!chip.present && (rec.tipo_ausencia || rec.motivo || rec.comentario_admin) && (
+                    <div className="text-[10px] text-gray-400 mt-0.5 truncate">{[rec.tipo_ausencia, rec.motivo, rec.comentario_admin].filter(Boolean).join(' | ')}</div>
+                  )}
                 </div>
                 {isAdmin && (
                   <button onClick={() => openEdit(rec)} className="flex-shrink-0 p-1.5 rounded-lg text-gray-300 hover:text-[var(--primary)] hover:bg-[var(--primary)]/5 transition-colors">
