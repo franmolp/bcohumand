@@ -399,6 +399,22 @@ export async function GET(req: NextRequest) {
       // salidas). Si el turno no tiene conteo físico cargado, se usa lo
       // esperado como mejor aproximación disponible.
       for (const t of turnosDia) {
+        // Turno sin NINGÚN movimiento de efectivo (ej. venta solo por QR: se abre
+        // en $0, se cierra en $0, sin ventas en efectivo ni salidas). No toca la
+        // caja ni corta la cadena de saldo: se muestra en el log como informativo
+        // pero sin alertas, y el saldo del cierre anterior se mantiene. Es seguro
+        // porque la firma "todo en cero" garantiza que no hubo plata de por medio.
+        const sinEfectivo =
+          Math.abs(t.starting_cash) < 1 && Math.abs(t.cash_payments) < 1 &&
+          Math.abs(t.paid_out) < 1 && Math.abs(t.actual_cash) < 1 && Math.abs(t.expected_cash) < 1
+        if (sinEfectivo) {
+          eventos.push({ tipo: 'apertura', hora: horaAR(t.opened_at), ts: t.opened_at, monto: t.starting_cash, discrepancia: null, detalle: 'Turno sin movimiento de efectivo (QR)' })
+          if (t.closed_at) {
+            eventos.push({ tipo: 'cierre', hora: horaAR(t.closed_at), ts: t.closed_at, monto: t.actual_cash, ventas: t.cash_payments })
+          }
+          continue
+        }
+
         let disc: number | null = null
         if (tracked) {
           if (!primerEvento) {
