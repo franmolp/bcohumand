@@ -5,6 +5,8 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { computeChip, getTeamType, DEFAULT_CONFIG, AsistenciaConfig } from '@/lib/asistencia'
 import { isRecepcion } from '@/lib/gaps'
 
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
   const bearerSecret = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null

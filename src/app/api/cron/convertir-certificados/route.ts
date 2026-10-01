@@ -3,32 +3,34 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { requireAdmin } from '@/lib/auth'
 import { crearNotificaciones, getAdminIds } from '@/lib/notificaciones'
 
+export const maxDuration = 60
+
 const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 
 type ConvertirMesResult =
   | { ok: false; error: string }
   | { ok: true; convertidas: number; mes: string; usuarioIds: string[]; inicioMes: string; finMes: string }
 
-// Regenera la asistencia procesada SOLO de las empleadas afectadas (una por una,
-// liviano y confiable). Regenerar el mes entero de todo el staff desde un cron
-// es pesado y el self-fetch se corta por timeout — por eso antes fallaba en
-// silencio y había que regenerar a mano.
-async function regenerarUsuarios(origin: string, usuarioIds: string[], fechaInicio: string, fechaFin: string): Promise<number> {
-  let total = 0
-  for (const usuarioId of usuarioIds) {
-    try {
-      const res = await fetch(`${origin}/api/asistencia/regenerar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.CRON_SECRET}` },
-        body: JSON.stringify({ fechaInicio, fechaFin, usuarioId }),
-      })
-      const data = await res.json().catch(() => ({}))
-      total += data.procesados ?? 0
-    } catch (e) {
-      console.error('[convertir-certificados] regen usuario falló:', usuarioId, e)
-    }
+// Regenera la asistencia procesada del MES CERRADO COMPLETO para todo el staff,
+// en una sola pasada (la ruta regenerar carga todo en bloque e inserta por
+// lotes — es la misma operación que el botón "Regenerar mes" y que la
+// importación nocturna, que ya la corre sin problemas). Antes se hacía un fetch
+// por cada empleada afectada y, al no tener maxDuration, el loop se cortaba por
+// timeout: las conversiones quedaban grabadas pero el presentismo sin recalcular.
+// Esto finaliza el mes aunque no haya habido conversiones (último día completo).
+async function regenerarMes(origin: string, fechaInicio: string, fechaFin: string): Promise<number | null> {
+  try {
+    const res = await fetch(`${origin}/api/asistencia/regenerar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.CRON_SECRET}` },
+      body: JSON.stringify({ fechaInicio, fechaFin }),
+    })
+    const data = await res.json().catch(() => ({}))
+    return data.procesados ?? 0
+  } catch (e) {
+    console.error('[convertir-certificados] regen mes falló:', e)
+    return null
   }
-  return total
 }
 
 async function convertirMes(year: number, month: number /* 0-indexed */): Promise<ConvertirMesResult> {
@@ -120,13 +122,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 500 })
     }
 
-    // Regenerar la asistencia solo de las empleadas afectadas (no debe tumbar la
-    // respuesta si falla). Si no hubo conversiones, no hay nada que regenerar.
-    let regenerados: number | null = null
-    if (result.usuarioIds.length > 0) {
-      const origin = new URL(request.url).origin
-      regenerados = await regenerarUsuarios(origin, result.usuarioIds, result.inicioMes, result.finMes)
-    }
+    // Regenerar el mes cerrado completo (todo el staff) para que el presentismo
+    // quede final: conversiones aplicadas + último día del mes con datos ya
+    // completos. Se hace siempre al cerrar, haya o no conversiones. No debe
+    // tumbar la respuesta si falla.
+    const origin = new URL(request.url).origin
+    const regenerados = await regenerarMes(origin, result.inicioMes, result.finMes)
 
     // Avisar a los admins del resultado (aunque sean 0 conversiones), para que
     // una falla silenciosa del cron no pase desapercibida hasta el mes siguiente.
@@ -177,12 +178,9 @@ export async function POST(request: NextRequest) {
     const result = await convertirMes(year, month)
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 500 })
 
-    // Regenerar la asistencia de las empleadas afectadas también en el disparo manual.
-    let regenerados: number | null = null
-    if (result.usuarioIds.length > 0) {
-      const origin = new URL(request.url).origin
-      regenerados = await regenerarUsuarios(origin, result.usuarioIds, result.inicioMes, result.finMes)
-    }
+    // Regenerar el mes completo (todo el staff) también en el disparo manual.
+    const origin = new URL(request.url).origin
+    const regenerados = await regenerarMes(origin, result.inicioMes, result.finMes)
 
     return NextResponse.json({ ...result, regenerados })
   } catch (e: unknown) {
