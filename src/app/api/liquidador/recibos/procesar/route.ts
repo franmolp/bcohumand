@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     // NOTA: el firmado real corre en el browser (ver dashboard/liquidador/recibos.tsx),
     // esta ruta es un fallback; se mantiene alineada por consistencia.
     const sigCenterX        = width * 0.324
-    page.drawImage(sigImage, { x: sigCenterX - sigWidth / 2, y: height * 0.055, width: sigWidth, height: sigHeight, opacity: 0.92 })
+    page.drawImage(sigImage, { x: sigCenterX - sigWidth / 2, y: height * 0.041, width: sigWidth, height: sigHeight, opacity: 0.92 })
 
     const signedBytes = await newDoc.save()
 

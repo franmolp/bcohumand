@@ -629,7 +629,7 @@ export function RecibosTab() {
         // 2026 (centro ≈ 32.4% del ancho, ≈ 5.5% de alto desde abajo).
         const fm            = pdfjsMeta[i]
         const sigCenterFrac = fm?.firmaX != null ? fm.firmaX : 0.324
-        const sigBottomFrac = fm?.firmaY != null ? fm.firmaY + 0.02 : 0.055
+        const sigBottomFrac = fm?.firmaY != null ? fm.firmaY + 0.008 : 0.041
         page.drawImage(sigImage, {
           x: sigCenterFrac * width - sigWidth / 2,
           y: sigBottomFrac * height,
