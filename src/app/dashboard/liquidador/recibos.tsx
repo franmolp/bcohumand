@@ -258,7 +258,7 @@ async function renderThumbnail(pdfBase64: string): Promise<string> {
     const pdfBytes = toUint8(pdfBase64)
     const doc    = await pdfjs.getDocument({ data: pdfBytes }).promise
     const page   = await doc.getPage(1)
-    const vp     = page.getViewport({ scale: 0.65 })
+    const vp     = page.getViewport({ scale: 0.9 })
     const canvas = document.createElement('canvas')
     canvas.width = vp.width; canvas.height = vp.height
     const ctx = canvas.getContext('2d')
@@ -838,8 +838,8 @@ export function RecibosTab() {
                 {/* Preview */}
                 {r.previewUrl ? (
                   <img src={r.previewUrl} alt={r.nombreFormateado}
-                    className="w-full object-cover border-b border-gray-100"
-                    style={{ maxHeight: 320 }} />
+                    className="w-full h-auto object-contain border-b border-gray-100"
+                    style={{ maxHeight: 600 }} />
                 ) : (
                   <div className="h-24 bg-gray-50 flex flex-col items-center justify-center gap-2 border-b border-gray-100">
                     <div className="w-4 h-4 border-2 border-[var(--primary)] border-t-transparent rounded-full animate-spin" />
