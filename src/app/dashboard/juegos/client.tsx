@@ -507,8 +507,8 @@ function GanadoresMeses({ data }: { data: HistorialEntry[] }) {
             <span className="w-6 h-6 flex items-center justify-center rounded-full bg-amber-400 shrink-0">
               <IconTrophy size={11} className="text-white" />
             </span>
-            <span className="text-[12px] text-gray-400 w-20 shrink-0">{e.mes}</span>
-            <span className="flex-1 text-[13px] font-medium text-[var(--text)] truncate">{e.ganador}</span>
+            <span className="text-[12px] text-gray-400 w-[108px] shrink-0 whitespace-nowrap">{e.mes}</span>
+            <span className="flex-1 min-w-0 text-[13px] font-medium text-[var(--text)] truncate">{e.ganador}</span>
             <span className="text-[12px] font-bold text-[var(--primary)]">{e.puntos} pts</span>
           </div>
         ))}
