@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
   if (!isAdmin) return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
 
   const body = await request.json()
-  const { titulo, emoji, fecha, todo_el_dia, hora_desde, hora_hasta, descripcion, tipo_destinatario, valor_destinatario, categoria, enviar_notificacion } = body
+  const { titulo, emoji, fecha, todo_el_dia, hora_desde, hora_hasta, descripcion, tipo_destinatario, valor_destinatario, categoria, enviar_notificacion, grupo_id } = body
 
   if (!titulo || !fecha) {
     return NextResponse.json({ error: 'Campos requeridos: titulo, fecha' }, { status: 400 })
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Campo requerido: tipo_destinatario' }, { status: 400 })
   }
 
-  const { data, error } = await supabaseAdmin.from('eventos_especiales').insert({
+  const insertData: Record<string, unknown> = {
     titulo,
     emoji: finalCategoria === 'local_cerrado' ? null : (emoji || null),
     fecha,
@@ -135,7 +135,12 @@ export async function POST(request: NextRequest) {
     valor_destinatario: finalCategoria === 'local_cerrado' ? null : (valor_destinatario || null),
     creado_por: session.id,
     categoria: finalCategoria,
-  }).select().single()
+  }
+  // Solo se incluye grupo_id cuando corresponde (evento para varios empleados), así
+  // la creación normal no depende de la migración de la columna.
+  if (finalCategoria !== 'local_cerrado' && grupo_id) insertData.grupo_id = grupo_id
+
+  const { data, error } = await supabaseAdmin.from('eventos_especiales').insert(insertData).select().single()
 
   if (error) {
     console.error('[calendario POST]', error.message, error.details, error.hint)

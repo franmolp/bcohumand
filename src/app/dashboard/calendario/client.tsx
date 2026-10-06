@@ -46,6 +46,7 @@ interface EventoEspecial {
   tipo_destinatario: string
   valor_destinatario: string | null
   categoria: string
+  grupo_id: string | null
 }
 
 interface EfemerideCal {
@@ -89,6 +90,8 @@ interface CalEvent {
   hora?: string
   fotoUrl?: string | null
   feriadoRango?: { inicio: string; fin: string } // solo feriados (solicitud masiva): permite editar motivo/comentario
+  involucrados?: string[] // eventos para empleados específicos: nombres de los involucrados (vista admin)
+  grupoIds?: string[]     // ids de todas las filas del grupo (para borrar el evento completo)
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -286,34 +289,74 @@ function buildDayMap(
   }
 
   // ── Eventos especiales y Local cerrado ──
+  // Una reunión para varios empleados específicos se guarda como N filas (una por
+  // empleado) con un grupo_id en común. Para quien ve todo se colapsan en un solo
+  // evento que lista a los involucrados; cada empleada igual ve solo su propia fila.
+  const horaDe = (ev: EventoEspecial) => (!ev.todo_el_dia && ev.hora_desde
+    ? (ev.hora_hasta ? `${ev.hora_desde.slice(0, 5)} – ${ev.hora_hasta.slice(0, 5)}` : ev.hora_desde.slice(0, 5))
+    : undefined)
+  const empNombre = new Map(data.empleados.map(e => [e.id, e.nombre]))
+
+  const localCerrados: EventoEspecial[] = []
+  const gruposEsp = new Map<string, EventoEspecial[]>()
   for (const ev of data.eventos) {
+    if (ev.categoria === 'local_cerrado') { localCerrados.push(ev); continue }
+    const key = ev.grupo_id || `__solo-${ev.id}`
+    if (!gruposEsp.has(key)) gruposEsp.set(key, [])
+    gruposEsp.get(key)!.push(ev)
+  }
+
+  for (const ev of localCerrados) {
     const day = dateInMonth(ev.fecha, anio, mes)
     if (!day) continue
-
-    const isLocalCerrado = ev.categoria === 'local_cerrado'
-
-    if (!isLocalCerrado && canViewAll && isFiltered) {
-      const matches =
-        ev.tipo_destinatario === 'all' ||
-        (filterTeam && ev.tipo_destinatario === 'team'     && ev.valor_destinatario === filterTeam) ||
-        (filterRole && ev.tipo_destinatario === 'role'     && ev.valor_destinatario === filterRole) ||
-        (filterUid  && ev.tipo_destinatario === 'employee' && ev.valor_destinatario === filterUid)
-      if (!matches) continue
-    }
-
-    const hora = !ev.todo_el_dia && ev.hora_desde
-      ? (ev.hora_hasta ? `${ev.hora_desde.slice(0, 5)} – ${ev.hora_hasta.slice(0, 5)}` : ev.hora_desde.slice(0, 5))
-      : undefined
-
     add(day, {
       id: `ev-${ev.id}`,
       sourceId: ev.id,
-      type: isLocalCerrado ? 'local_cerrado' : 'special',
-      title: isLocalCerrado ? ev.titulo : `${ev.emoji ? ev.emoji + ' ' : ''}${ev.titulo}`,
+      type: 'local_cerrado',
+      title: ev.titulo,
       descripcion: ev.descripcion ?? undefined,
-      color: isLocalCerrado ? COLOR_LOCAL_CLOSED : COLOR_SPECIAL,
+      color: COLOR_LOCAL_CLOSED,
       isPending: false,
-      hora,
+      hora: horaDe(ev),
+    })
+  }
+
+  for (const rows of gruposEsp.values()) {
+    const ev = rows[0]
+    const day = dateInMonth(ev.fecha, anio, mes)
+    if (!day) continue
+
+    if (canViewAll && isFiltered) {
+      const matches = rows.some(r =>
+        r.tipo_destinatario === 'all' ||
+        (filterTeam && r.tipo_destinatario === 'team'     && r.valor_destinatario === filterTeam) ||
+        (filterRole && r.tipo_destinatario === 'role'     && r.valor_destinatario === filterRole) ||
+        (filterUid  && r.tipo_destinatario === 'employee' && r.valor_destinatario === filterUid)
+      )
+      if (!matches) continue
+    }
+
+    // Lista de involucrados: solo tiene sentido en la vista de quien ve todo
+    // (cada empleada ve solo su propia fila, no hace falta listarla a sí misma).
+    const involucrados = canViewAll
+      ? rows
+          .filter(r => r.tipo_destinatario === 'employee' && r.valor_destinatario)
+          .map(r => empNombre.get(r.valor_destinatario!) || '')
+          .filter(Boolean)
+          .sort((a, b) => a.localeCompare(b, 'es'))
+      : []
+
+    add(day, {
+      id: `ev-${ev.grupo_id || ev.id}`,
+      sourceId: ev.id,
+      grupoIds: rows.map(r => r.id),
+      type: 'special',
+      title: `${ev.emoji ? ev.emoji + ' ' : ''}${ev.titulo}`,
+      involucrados: involucrados.length ? involucrados : undefined,
+      descripcion: ev.descripcion ?? undefined,
+      color: COLOR_SPECIAL,
+      isPending: false,
+      hora: horaDe(ev),
     })
   }
 
@@ -364,7 +407,7 @@ function DayModal({
   day: number; mes: number; anio: number
   events: CalEvent[]; isAdmin: boolean
   onClose: () => void
-  onDelete: (sourceId: string, type: CalEventType) => void
+  onDelete: (ev: CalEvent) => void
   onEditFeriado: (ev: CalEvent) => void
 }) {
   const typeLabel: Record<CalEventType, string> = {
@@ -406,6 +449,11 @@ function DayModal({
                 </p>
                 {ev.subtitle && ev.type !== 'local_cerrado' && <p className="text-[12px] text-gray-500 mt-0.5">{ev.subtitle}</p>}
                 {ev.hora        && <p className="text-[11px] text-gray-400 mt-0.5">{ev.hora}</p>}
+                {ev.involucrados && ev.involucrados.length > 0 && (
+                  <p className="text-[12px] text-gray-500 mt-1">
+                    <span className="text-gray-400">Para: </span>{ev.involucrados.join(', ')}
+                  </p>
+                )}
                 {ev.descripcion && <p className="text-[12px] text-gray-600 mt-1">{ev.descripcion}</p>}
                 <span className="text-[10px] font-medium uppercase tracking-wide mt-1 block" style={{ color: ev.color }}>
                   {typeLabel[ev.type]}
@@ -423,7 +471,7 @@ function DayModal({
               )}
               {canDelete(ev) && (
                 <button
-                  onClick={() => onDelete(ev.sourceId!, ev.type)}
+                  onClick={() => onDelete(ev)}
                   className="p-1.5 text-gray-300 hover:text-red-500 transition-colors cursor-pointer flex-shrink-0"
                 >
                   <IconTrash size={14} />
@@ -925,11 +973,16 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
 
     // Evento especial → API calendario
     const { selected_employees, ...rest } = payload
+    // Varios empleados específicos = N filas con un grupo_id en común, para poder
+    // mostrarlas como un solo evento (y borrarlas juntas) en la vista de calendario.
+    const grupoId = (rest.tipo_destinatario === 'employee' && selected_employees && selected_employees.length > 1)
+      ? (crypto.randomUUID?.() ?? `grp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+      : null
     const requests = (rest.tipo_destinatario === 'employee' && selected_employees && selected_employees.length > 0)
       ? selected_employees.map(id => fetch('/api/calendario', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...rest, tipo_destinatario: 'employee', valor_destinatario: id }),
+          body: JSON.stringify({ ...rest, tipo_destinatario: 'employee', valor_destinatario: id, grupo_id: grupoId }),
         }))
       : [fetch('/api/calendario', {
           method: 'POST',
@@ -948,15 +1001,16 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
     loadData(anio, mes)
   }
 
-  async function handleDeleteEvent(sourceId: string, evType: CalEventType) {
-    const url = evType === 'efemeride'
-      ? `/api/calendario/${sourceId}?type=efemeride`
-      : `/api/calendario/${sourceId}`
-    const r = await fetch(url, { method: 'DELETE' })
-    if (!r.ok) {
-      const body = await r.json().catch(() => ({}))
-      showToast(body.error ?? 'Error al eliminar')
-      return
+  async function handleDeleteEvent(ev: CalEvent) {
+    if (ev.type === 'efemeride') {
+      const r = await fetch(`/api/calendario/${ev.sourceId}?type=efemeride`, { method: 'DELETE' })
+      if (!r.ok) { const b = await r.json().catch(() => ({})); showToast(b.error ?? 'Error al eliminar'); return }
+    } else {
+      // Un evento para varios empleados son N filas con el mismo grupo_id: se borran todas.
+      const ids = ev.grupoIds?.length ? ev.grupoIds : [ev.sourceId!]
+      const results = await Promise.all(ids.map(id => fetch(`/api/calendario/${id}`, { method: 'DELETE' })))
+      const failed = results.find(r => !r.ok)
+      if (failed) { const b = await failed.json().catch(() => ({})); showToast(b.error ?? 'Error al eliminar'); return }
     }
     setDayModal(null)
     showToast('Eliminado')
