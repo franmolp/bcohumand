@@ -280,11 +280,39 @@ async function removeWhiteBg(dataUrl: string): Promise<Uint8Array> {
       const ctx = canvas.getContext('2d')!
       ctx.drawImage(img, 0, 0)
       const d = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      for (let i = 0; i < d.data.length; i += 4) {
-        if (d.data[i] > 210 && d.data[i+1] > 210 && d.data[i+2] > 210) d.data[i+3] = 0
+      const data = d.data
+      // 1) Blanco → transparente
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i] > 210 && data[i+1] > 210 && data[i+2] > 210) data[i+3] = 0
       }
       ctx.putImageData(d, 0, 0)
-      canvas.toBlob(b => {
+      // 2) Bounding box de los píxeles visibles, para recortar el margen
+      //    transparente (si no, la firma queda "flotando" lejos del renglón al
+      //    estamparla, porque la imagen original trae mucho espacio en blanco).
+      let minX = canvas.width, minY = canvas.height, maxX = -1, maxY = -1
+      for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+          if (data[(y * canvas.width + x) * 4 + 3] > 10) {
+            if (x < minX) minX = x
+            if (x > maxX) maxX = x
+            if (y < minY) minY = y
+            if (y > maxY) maxY = y
+          }
+        }
+      }
+      let out: HTMLCanvasElement = canvas
+      if (maxX >= minX && maxY >= minY) {
+        const pad = 2
+        const cx = Math.max(0, minX - pad)
+        const cy = Math.max(0, minY - pad)
+        const cw = Math.min(canvas.width - 1, maxX + pad) - cx + 1
+        const ch = Math.min(canvas.height - 1, maxY + pad) - cy + 1
+        const cropped = document.createElement('canvas')
+        cropped.width = cw; cropped.height = ch
+        cropped.getContext('2d')!.drawImage(canvas, cx, cy, cw, ch, 0, 0, cw, ch)
+        out = cropped
+      }
+      out.toBlob(b => {
         if (!b) { reject(new Error('canvas')); return }
         b.arrayBuffer().then(buf => resolve(new Uint8Array(buf)))
       }, 'image/png')
@@ -629,7 +657,7 @@ export function RecibosTab() {
         // 2026 (centro ≈ 32.4% del ancho, ≈ 5.5% de alto desde abajo).
         const fm            = pdfjsMeta[i]
         const sigCenterFrac = fm?.firmaX != null ? fm.firmaX : 0.324
-        const sigBottomFrac = fm?.firmaY != null ? fm.firmaY + 0.008 : 0.041
+        const sigBottomFrac = fm?.firmaY != null ? fm.firmaY + 0.014 : 0.047
         page.drawImage(sigImage, {
           x: sigCenterFrac * width - sigWidth / 2,
           y: sigBottomFrac * height,
