@@ -67,7 +67,7 @@ type PdfjsLib = {
   getDocument: (opts: object) => { promise: Promise<{
     numPages: number
     getPage: (n: number) => Promise<{
-      getTextContent: () => Promise<{ items: { str: string }[] }>
+      getTextContent: () => Promise<{ items: { str: string; transform?: number[]; width?: number }[] }>
       getViewport: (o: { scale: number }) => { width: number; height: number }
       render: (o: { canvasContext: CanvasRenderingContext2D; viewport: unknown }) => { promise: Promise<void> }
     }>
@@ -85,9 +85,16 @@ async function getPdfjsLib(): Promise<PdfjsLib> {
   return _pdfjs
 }
 
-interface PageMeta { nombre: string; mesStr: string | null }
+// firmaX/firmaY: centro y base (normalizados 0..1) de la etiqueta "Firma Empleador"
+// detectada en la página, para ubicar la firma del empleador arriba de ella.
+interface PageMeta { nombre: string; mesStr: string | null; firmaX?: number; firmaY?: number }
 
 const MESES_ES = 'Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre'
+
+function canonMes(s: string): string {
+  const i = MESES.findIndex(m => m.toLowerCase() === s.toLowerCase())
+  return i >= 0 ? MESES[i] : s
+}
 
 // Extract name + period from each page of the original PDF
 async function extractPageMeta(file: File): Promise<PageMeta[]> {
@@ -99,6 +106,7 @@ async function extractPageMeta(file: File): Promise<PageMeta[]> {
 
     for (let i = 1; i <= doc.numPages; i++) {
       const page    = await doc.getPage(i)
+      const vp      = page.getViewport({ scale: 1 })
       const content = await page.getTextContent()
       const strs    = content.items.map(it => it.str)
       const text    = strs.join(' ')
@@ -107,16 +115,48 @@ async function extractPageMeta(file: File): Promise<PageMeta[]> {
       console.log(`[PDF p${i}] items[0..15]:`, strs.slice(0, 15).join('|'))
       console.log(`[PDF p${i}] text:`, text.substring(0, 500))
 
-      // ── Período ────────────────────────────────────────────────────────────
+      // ── Posición de la etiqueta "Firma Empleador" (para ubicar la firma arriba
+      //    de ella). Coordenadas en espacio PDF (origen abajo-izquierda), igual que
+      //    pdf-lib, normalizadas 0..1. Si no se encuentra, queda undefined y se usa
+      //    un fallback fijo al firmar. OJO: "Firma Empleado" (sin 'r') NO matchea.
+      let firmaX: number | undefined, firmaY: number | undefined
+      for (const it of content.items) {
+        if (it.transform && /firma\s+empleador/i.test(it.str)) {
+          const w = it.width ?? 0
+          firmaX = (it.transform[4] + w / 2) / vp.width
+          firmaY = it.transform[5] / vp.height
+          break
+        }
+      }
+
+      let nombre = ''
+      let mesStr: string | null = null
+
+      // ── Formato nuevo (recibos 2026): fila "Mensual 09 2026 APELLIDO NOMBRE 27-...-x"
+      //    MES y AÑO vienen como números en columnas separadas y el nombre va entre
+      //    el AÑO y el CUIL del empleado (no confundir con el CUIT de la empresa). ──
+      {
+        const m = text.match(/\b(\d{1,2})\s+(20\d{2})\s+([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,}){1,5})\s+(\d{2}-\d{7,8}-\d)\b/)
+        if (m) {
+          const mn = parseInt(m[1], 10)
+          if (mn >= 1 && mn <= 12) mesStr = MESES[mn - 1]
+          const cand = m[3].trim().replace(/\s+/g, ' ')
+          if (!/\b(EMPRESA|DOMICILIO|CONCEPTO|APELLIDO|NOMBRE|LEGAJO|SUELDO|JORNAL|ANTIG|CATEGOR|FUNCI|BANCO|MONTO|UNIDAD|BASE|MENSUAL)\b/i.test(cand)) {
+            nombre = cand
+          }
+        }
+      }
+
+      // ── Período (fallback formato viejo) ──────────────────────────────────────
       // Acepta "Período Junio 2026", "Liquidación Junio 2026", o simplemente "Junio 2026"
       const rMeses = new RegExp(`(${MESES_ES})\\s+(20\\d{2})`, 'i')
       const periodMatch =
         text.match(new RegExp(`Per[ií]odo[\\s:]+(?:Liquidaci[oó]n[\\s]+)?(${MESES_ES})\\s+(20\\d{2})`, 'i')) ??
         text.match(new RegExp(`Liquidaci[oó]n[\\s:]+(?:Mensual[\\s]+)?(${MESES_ES})\\s+(20\\d{2})`, 'i')) ??
         text.match(rMeses)
+      if (!mesStr && periodMatch) mesStr = canonMes(periodMatch[1])
 
-      // ── Nombre — 5 estrategias, primera que resulte gana ──────────────────
-      let nombre = ''
+      // ── Nombre — fallbacks formato viejo, primera estrategia que resulte gana ──
 
       // S1: "Apellido y Nombre:" → captura hasta CUIL/DNI/número de CUIL
       if (!nombre) {
@@ -185,8 +225,8 @@ async function extractPageMeta(file: File): Promise<PageMeta[]> {
         else if (ap?.[1]) nombre = ap[1].trim()
       }
 
-      console.log(`[PDF p${i}] nombre="${nombre}" mes="${periodMatch?.[1] ?? ''}"`)
-      result.push({ nombre, mesStr: periodMatch ? periodMatch[1] : null })
+      console.log(`[PDF p${i}] nombre="${nombre}" mes="${mesStr ?? ''}" firma=(${firmaX?.toFixed(3)},${firmaY?.toFixed(3)})`)
+      result.push({ nombre, mesStr, firmaX, firmaY })
     }
     return result
   } catch (e) {
@@ -583,7 +623,18 @@ export function RecibosTab() {
         const sigImage          = await pageDoc.embedPng(sigBytes)
         const sigWidth          = width * 0.11
         const sigHeight         = sigWidth * (sigImage.height / sigImage.width)
-        page.drawImage(sigImage, { x: width * 0.62, y: height * 0.085, width: sigWidth, height: sigHeight, opacity: 0.92 })
+        // Firma del EMPLEADOR: centrada sobre la etiqueta "Firma Empleador" detectada
+        // en la página (robusto a cambios de formato), apoyada justo arriba del texto.
+        // Si no se detectó la etiqueta (ej. pdfjs falló en iOS), fallback al formato
+        // 2026 (centro ≈ 32.4% del ancho, ≈ 5.5% de alto desde abajo).
+        const fm            = pdfjsMeta[i]
+        const sigCenterFrac = fm?.firmaX != null ? fm.firmaX : 0.324
+        const sigBottomFrac = fm?.firmaY != null ? fm.firmaY + 0.02 : 0.055
+        page.drawImage(sigImage, {
+          x: sigCenterFrac * width - sigWidth / 2,
+          y: sigBottomFrac * height,
+          width: sigWidth, height: sigHeight, opacity: 0.92,
+        })
 
         const signedBytes  = await pageDoc.save()
         const pdfBase64    = uint8ToBase64(signedBytes)   // codificar acá, NO guardar Uint8Array en state

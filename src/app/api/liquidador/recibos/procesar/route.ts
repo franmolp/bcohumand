@@ -55,7 +55,13 @@ export async function POST(req: NextRequest) {
     const sigImage          = await newDoc.embedPng(firmaBytes)
     const sigWidth          = width * 0.11
     const sigHeight         = sigWidth * (sigImage.height / sigImage.width)
-    page.drawImage(sigImage, { x: width * 0.57, y: height * 0.085, width: sigWidth, height: sigHeight, opacity: 0.92 })
+    // Firma del EMPLEADOR (config/firma-empleador.png) → va sobre la etiqueta
+    // "Firma Empleador" del recibo (centro ≈ 32.4% del ancho en el formato 2026),
+    // apoyada justo arriba de ese texto (≈ 5.5% de la altura desde abajo).
+    // NOTA: el firmado real corre en el browser (ver dashboard/liquidador/recibos.tsx),
+    // esta ruta es un fallback; se mantiene alineada por consistencia.
+    const sigCenterX        = width * 0.324
+    page.drawImage(sigImage, { x: sigCenterX - sigWidth / 2, y: height * 0.055, width: sigWidth, height: sigHeight, opacity: 0.92 })
 
     const signedBytes = await newDoc.save()
 

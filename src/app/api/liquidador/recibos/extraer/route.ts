@@ -121,14 +121,46 @@ function extractTextFromBytes(pdfBytes: Buffer): string {
   return allText
 }
 
+function canonMes(s: string): string {
+  const i = MESES.findIndex(m => m.toLowerCase() === s.toLowerCase())
+  return i >= 0 ? MESES[i] : s
+}
+
 function parsearNombreMes(text: string, strs: string[]): { nombre: string; mesStr: string | null } {
-  const mesM =
-    text.match(new RegExp(`Per[ií]odo[\\s:]+(${MESES_RE})\\s+20\\d{2}`, 'i')) ??
-    text.match(new RegExp(`Liquidaci[oó]n[\\s:]+(${MESES_RE})\\s+20\\d{2}`, 'i')) ??
-    text.match(new RegExp(`\\b(${MESES_RE})\\s+20\\d{2}\\b`, 'i'))
-
   let nombre = ''
+  let mesStr: string | null = null
 
+  // ── Formato nuevo (recibos 2026 de la contadora): fila de datos del encabezado,
+  //    "Mensual 09 2026 APELLIDO NOMBRE 27-35609696-2 <fecha ing> <legajo> ..."
+  //    El período viene como MES (número) y AÑO en columnas separadas (ya no dice
+  //    "Septiembre 2026"), y el nombre de la empleada va entre el AÑO y su CUIL.
+  //    El CUIT de la empresa va con su etiqueta ("C.U.I.T. EMPRESA: 20-...") y no
+  //    lo precede un año+nombre, así que no se confunde con el CUIL del empleado.
+  {
+    const m = text.match(
+      /\b(\d{1,2})\s+(20\d{2})\s+([A-ZÁÉÍÓÚÜÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ]{2,}){1,5})\s+(\d{2}-\d{7,8}-\d)\b/
+    )
+    if (m) {
+      const mesNum = parseInt(m[1], 10)
+      if (mesNum >= 1 && mesNum <= 12) mesStr = MESES[mesNum - 1]
+      const cand = m[3].trim().replace(/\s+/g, ' ')
+      // Descartar si por algún motivo quedó una palabra de encabezado en el match
+      if (!/\b(EMPRESA|DOMICILIO|CONCEPTO|APELLIDO|NOMBRE|LEGAJO|SUELDO|JORNAL|ANTIG|CATEGOR|FUNCI|BANCO|MONTO|UNIDAD|BASE|MENSUAL)\b/i.test(cand)) {
+        nombre = cand
+      }
+    }
+  }
+
+  // ── Período (fallback formato viejo): nombre de mes + año ("Septiembre 2026") ──
+  if (!mesStr) {
+    const mesM =
+      text.match(new RegExp(`Per[ií]odo[\\s:]+(${MESES_RE})\\s+20\\d{2}`, 'i')) ??
+      text.match(new RegExp(`Liquidaci[oó]n[\\s:]+(${MESES_RE})\\s+20\\d{2}`, 'i')) ??
+      text.match(new RegExp(`\\b(${MESES_RE})\\s+20\\d{2}\\b`, 'i'))
+    if (mesM) mesStr = canonMes(mesM[1])
+  }
+
+  // ── Nombre (fallbacks formato viejo) ──
   if (!nombre) {
     const m = text.match(
       /(?:Apellido\s+y\s+Nombre[s]?|Nombre[s]?\s+y\s+Apellido)\s*[:\-]?\s*(.{1,80}?)(?=\s{2,}|\s+CUIL|\s+DNI|\s+\d{2}[-.\s]\d|\s+Per[ií]|\s+Concepto)/i
@@ -188,7 +220,7 @@ function parsearNombreMes(text: string, strs: string[]): { nombre: string; mesSt
     else if (ap?.[1]) nombre = ap[1].trim()
   }
 
-  return { nombre, mesStr: mesM ? mesM[1] : null }
+  return { nombre, mesStr }
 }
 
 export async function POST(req: NextRequest) {
