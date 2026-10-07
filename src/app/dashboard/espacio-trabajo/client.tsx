@@ -77,7 +77,15 @@ function assignLanes(shifts: Turno[]): (Turno & { lane: number })[] {
   const laneEndMins: number[] = []
   return sorted.map(s => {
     const startM = toMin(s.inicio)
-    let lane = laneEndMins.findIndex(end => end <= startM)
+    // Best-fit: entre las mesas libres, elegir la que se desocupó más tarde (la que
+    // recién quedó libre), para apilar turnos contiguos en la misma mesa y dejar los
+    // bloques libres grandes intactos (ofrecibles como turno completo o libres), en
+    // vez de partirlos en pedacitos. Misma cantidad de mesas; solo cambia a cuál va.
+    let lane = -1
+    let mejorEnd = -1
+    for (let i = 0; i < laneEndMins.length; i++) {
+      if (laneEndMins[i] <= startM && laneEndMins[i] > mejorEnd) { mejorEnd = laneEndMins[i]; lane = i }
+    }
     if (lane === -1) lane = laneEndMins.length
     laneEndMins[lane] = toMin(s.fin)
     return { ...s, lane }
