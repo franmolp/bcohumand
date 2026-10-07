@@ -3,21 +3,21 @@ import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { crearNotificacion, crearNotificaciones, getAdminIds } from '@/lib/notificaciones'
 import { DEFAULT_CONFIG } from './config/route'
+import { periodoLimites, periodoDeFecha, diaInicio, CierresMap } from '@/lib/adelantos'
 
 function nextMonthStr(mes: string): string {
   const [y, m] = mes.split('-').map(Number)
   return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
 }
 
-const DIA_CORTE = 8 // los ciclos cortan el día 8 (fecha de pago)
-
-function periodoLimites(mesStr: string): { desde: string; hasta: string } {
-  const [y, m] = mesStr.split('-').map(Number)
-  const desdeDate = new Date(y, m - 1, DIA_CORTE)
-  const hastaDate = new Date(y, m, DIA_CORTE) // 8 del mes siguiente, exclusive
-  const fmt = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T00:00:00`
-  return { desde: fmt(desdeDate), hasta: fmt(hastaDate) }
+async function getCierres(): Promise<CierresMap> {
+  const { data } = await supabaseAdmin
+    .from('configuracion')
+    .select('valor')
+    .eq('clave', 'adelantos_cierres')
+    .maybeSingle()
+  const v = data?.valor
+  return (v && typeof v === 'object') ? (v as CierresMap) : {}
 }
 
 async function getConfig() {
@@ -44,7 +44,8 @@ export async function GET(req: NextRequest) {
     query = query.eq('usuario_id', session.id)
   } else {
     if (mes) {
-      const { desde, hasta } = periodoLimites(mes)
+      const cierres = await getCierres()
+      const { desde, hasta } = periodoLimites(mes, cierres)
       query = query.gte('created_at', desde).lt('created_at', hasta)
     }
     if (estado) {
@@ -132,20 +133,21 @@ export async function POST(req: NextRequest) {
 
   // Employee request
   const config = await getConfig()
+  const cierres = await getCierres()
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
   const day = now.getDate()
   const month = now.getMonth() + 1
   const year = now.getFullYear()
-  // El período activo arranca el día 8: si hoy < 8, el período es del mes anterior
-  const periodoMes = day >= DIA_CORTE
-    ? `${year}-${String(month).padStart(2,'0')}`
-    : month === 1 ? `${year - 1}-12` : `${year}-${String(month - 1).padStart(2,'0')}`
-  const { desde: periodoDesde, hasta: periodoHasta } = periodoLimites(periodoMes)
+  // Período activo según el día de cierre (editable por período).
+  const periodoMes = periodoDeFecha(now, cierres)
+  const { desde: periodoDesde, hasta: periodoHasta } = periodoLimites(periodoMes, cierres)
   const monto = Number(body.monto)
 
-  // Solo aplica el umbral si estamos en la parte principal del período (día >= DIA_CORTE).
-  // Los días 1-7 son la "cola" del período anterior: el umbral ya se cumplió el mes pasado.
-  if (day >= DIA_CORTE && day < config.dia_habilitacion) {
+  // Solo aplica el umbral si estamos en la parte principal del período (desde el
+  // día en que arranca el período de este mes). Los días previos son la "cola"
+  // del período anterior: el umbral ya se cumplió el mes pasado.
+  const inicioEsteMes = diaInicio(`${year}-${String(month).padStart(2, '0')}`, cierres)
+  if (day >= inicioEsteMes && day < config.dia_habilitacion) {
     return NextResponse.json(
       { error: `Los adelantos se habilitan a partir del día ${config.dia_habilitacion} de cada mes` },
       { status: 400 }

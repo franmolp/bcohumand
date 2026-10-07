@@ -6,6 +6,9 @@ import type { SessionUser } from '@/types'
 import {
   IconDollar, IconPlus, IconX, IconCheck, IconSettings, IconAlertCircle, IconChevronLeft, IconChevronRight, IconTrash, IconClipboard,
 } from '@/components/ui/Icons'
+import {
+  CierresMap, DIA_CORTE_DEFAULT, periodoDeFecha, periodoLimites, diaCierre, nextPeriodo as nextPeriodoLib,
+} from '@/lib/adelantos'
 
 type Adelanto = {
   id: string
@@ -70,20 +73,6 @@ function nextMes(s: string) {
   return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
 }
 
-// Los períodos de adelantos cortan el día 8 (fecha de pago), no el 1 del mes —
-// coincide con DIA_CORTE del lado del servidor (src/app/api/adelantos/route.ts)
-const DIA_CORTE = 8
-function periodoKey(iso: string): string {
-  const d = new Date(iso)
-  let month = d.getMonth() + 1
-  let year = d.getFullYear()
-  if (d.getDate() < DIA_CORTE) {
-    month -= 1
-    if (month === 0) { month = 12; year -= 1 }
-  }
-  return `${year}-${String(month).padStart(2, '0')}`
-}
-
 function formatMiles(raw: string): string {
   const digits = raw.replace(/\D/g, '')
   if (!digits) return ''
@@ -116,6 +105,7 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
   const [adelantos, setAdelantos] = useState<Adelanto[]>([])
   const [loading, setLoading] = useState(true)
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG)
+  const [cierres, setCierres] = useState<CierresMap>({})
   const [usuarios, setUsuarios] = useState<{ id: string; nombre: string }[]>([])
 
   // Employee request form
@@ -182,6 +172,37 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
   useEffect(() => {
     fetch('/api/adelantos/config').then(r => r.json()).then(d => { setConfig(d); setConfigEdit(d) }).catch(() => {})
   }, [])
+
+  const loadCierres = useCallback(() => {
+    fetch('/api/adelantos/cierres').then(r => r.json()).then(d => setCierres(d && typeof d === 'object' ? d : {})).catch(() => {})
+  }, [])
+  useEffect(() => { loadCierres() }, [loadCierres])
+
+  // Guardar el día de cierre del período seleccionado (solo admin, tab "mes").
+  const [cierreSaving, setCierreSaving] = useState(false)
+  const [cierreMsg, setCierreMsg] = useState('')
+  const [cierreInput, setCierreInput] = useState('')
+  useEffect(() => { setCierreInput(String(diaCierre(mesFiltro, cierres))); setCierreMsg('') }, [mesFiltro, cierres])
+  async function guardarCierre(periodo: string, dia: number) {
+    setCierreSaving(true); setCierreMsg('')
+    try {
+      const res = await fetch('/api/adelantos/cierres', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ periodo, dia }),
+      })
+      if (res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setCierres(d.cierres && typeof d.cierres === 'object' ? d.cierres : {})
+        setCierreMsg('Día de cierre guardado')
+        setTimeout(() => setCierreMsg(''), 3000)
+        loadAdelantos()
+      } else {
+        const d = await res.json().catch(() => ({}))
+        setCierreMsg(d.error ?? 'Error al guardar')
+      }
+    } finally { setCierreSaving(false) }
+  }
 
   useEffect(() => {
     if (!puedeRegistrar) return
@@ -477,6 +498,17 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
     const mesTotal = adelantos.filter(a => a.estado === 'approved').reduce((s, a) => s + (a.monto_aprobado ?? a.monto), 0)
     const sorted = [...adelantos].sort((a, b) => a.empleado_nombre.localeCompare(b.empleado_nombre, 'es'))
 
+    // Editor de día de cierre del período seleccionado
+    const cierreDiaActual = diaCierre(mesFiltro, cierres)
+    const periodoSig = nextPeriodoLib(mesFiltro)
+    const nombreMesSig = MESES[Number(periodoSig.split('-')[1]) - 1]
+    const limSel = periodoLimites(mesFiltro, cierres)
+    const fmtDM = (iso: string, restarUno = false) => {
+      const d = new Date(iso); if (restarUno) d.setDate(d.getDate() - 1)
+      return `${d.getDate()}/${d.getMonth() + 1}`
+    }
+    const cierreDirty = cierreInput !== '' && Number(cierreInput) !== cierreDiaActual
+
     return (
       <div className="py-4 fade-in">
         <div className="flex items-center justify-between mb-4">
@@ -573,6 +605,40 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
               <button onClick={() => setMesFiltro(nextMes(mesFiltro))} className="p-2 rounded-xl border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
                 <IconChevronRight size={16} />
               </button>
+            </div>
+
+            {/* Editor del día de cierre de este período */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+              <p className="text-[13px] font-semibold text-[var(--text)]">Día de cierre del período</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                Este período se cierra el día indicado de {nombreMesSig}. Incluye del {fmtDM(limSel.desde)} al {fmtDM(limSel.hasta, true)}.
+              </p>
+              <div className="flex items-center gap-2 mt-3">
+                <input
+                  type="number" min={1} max={28} inputMode="numeric"
+                  value={cierreInput}
+                  onChange={e => setCierreInput(e.target.value)}
+                  className="w-20 h-10 px-3 border border-gray-200 rounded-xl text-sm text-center outline-none focus:border-[var(--primary)]"
+                  style={{ fontSize: 16 }}
+                />
+                <span className="text-[13px] text-gray-500">de {nombreMesSig}</span>
+                <button
+                  onClick={() => { const n = Number(cierreInput); if (n >= 1 && n <= 28) guardarCierre(mesFiltro, n) }}
+                  disabled={cierreSaving || !cierreDirty || !(Number(cierreInput) >= 1 && Number(cierreInput) <= 28)}
+                  className="ml-auto h-10 px-4 rounded-xl text-[13px] font-semibold bg-[var(--primary)] text-white cursor-pointer hover:opacity-90 disabled:opacity-40 transition-opacity"
+                >
+                  {cierreSaving ? 'Guardando…' : 'Guardar'}
+                </button>
+              </div>
+              {cierreDiaActual !== DIA_CORTE_DEFAULT && (
+                <button
+                  onClick={() => guardarCierre(mesFiltro, DIA_CORTE_DEFAULT)}
+                  className="text-[11px] text-gray-400 hover:text-[var(--primary)] mt-2 cursor-pointer"
+                >
+                  Volver al día {DIA_CORTE_DEFAULT} (por defecto)
+                </button>
+              )}
+              {cierreMsg && <p className="text-[11px] text-green-600 mt-2">{cierreMsg}</p>}
             </div>
 
             {mesTotal > 0 && (
@@ -715,15 +781,15 @@ export default function AdelantosClient({ user }: { user: SessionUser }) {
   // ─────────────────────────────────────────────
   // EMPLOYEE VIEW
   // ─────────────────────────────────────────────
-  const currentPeriodo = periodoKey(new Date().toISOString())
+  const currentPeriodo = periodoDeFecha(new Date(), cierres)
   const previousPeriodo = prevMes(currentPeriodo)
-  // Solo ven el período actual y el anterior (corte 8 al 7) — no todo el historial
+  // Solo ven el período actual y el anterior (corte editable) — no todo el historial
   const gruposPeriodo = [
     { key: currentPeriodo, label: 'Período actual' },
     { key: previousPeriodo, label: 'Período anterior' },
   ].map(({ key, label }) => {
     const items = adelantos
-      .filter(a => periodoKey(a.created_at) === key)
+      .filter(a => periodoDeFecha(new Date(a.created_at), cierres) === key)
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
     const total = items.filter(a => a.estado === 'approved').reduce((s, a) => s + (a.monto_aprobado ?? a.monto), 0)
     return { key, label, items, total }
