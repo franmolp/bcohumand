@@ -460,11 +460,19 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
 
   if (loading) return <Spinner />
 
-  // Build unified list of months from recibos + pagos
+  // Build unified list of months from recibos + pagos.
+  // Solo las últimas 3 liquidaciones CERRADAS: se excluye el mes en curso (no cerró)
+  // y se recortan a 3 — si no, los pagos de meses viejos (ej. junio) se colaban en
+  // la lista aunque no correspondieran mostrarse.
+  const now = new Date()
+  const curKey = `${now.getFullYear()}-${now.getMonth() + 1}`
   const keys = new Map<string, { anio: number; mes: number }>()
   recibos.forEach(r => keys.set(`${r.anio}-${r.mes}`, { anio: r.anio, mes: r.mes }))
   pagos.forEach(p => keys.set(`${p.anio}-${p.mes}`, { anio: p.anio, mes: p.mes }))
-  const meses = Array.from(keys.values()).sort((a, b) => b.anio - a.anio || b.mes - a.mes)
+  const meses = Array.from(keys.values())
+    .filter(m => `${m.anio}-${m.mes}` !== curKey)
+    .sort((a, b) => b.anio - a.anio || b.mes - a.mes)
+    .slice(0, 3)
 
   const reciboMap = new Map(recibos.map(r => [`${r.anio}-${r.mes}`, r]))
   const pagoMap   = new Map(pagos.map(p => [`${p.anio}-${p.mes}`, p]))
