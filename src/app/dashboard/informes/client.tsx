@@ -1240,6 +1240,15 @@ function VentasHistoricoChart({ mes, onSelectMes }: { mes: string; onSelectMes: 
   const VERDE = '#16a34a'
   const ROJO = '#dc2626'
 
+  // Etiqueta de % VERTICAL (rotada 90°) y chica: así entra en las barras finas sin
+  // pisarse con las de al lado y no queda gigante al escalar el SVG en PC.
+  const PctLabel = ({ x, y, fill, children }: { x: number; y: number; fill: string; children: string }) => (
+    <text x={x} y={y} textAnchor="middle" dominantBaseline="central"
+      transform={`rotate(-90, ${x}, ${y})`} fontSize={8} fontWeight={700} fill={fill}>
+      {children}
+    </text>
+  )
+
   const selIndex = meses.findIndex(m => m.mes === mes)
   const s = selIndex >= 0 ? meses[selIndex] : null
 
@@ -1309,41 +1318,30 @@ function VentasHistoricoChart({ mes, onSelectMes }: { mes: string; onSelectMes: 
                   : `${fmtMes(m.mes)} — Remanente ${fmt$(m.remanente)}`}</title>
               </rect>
 
-              {/* % de variación vs mes anterior, DENTRO de cada barra (o arriba si es muy baja) */}
+              {/* % de variación vs mes anterior, VERTICAL dentro de cada barra (o arriba si es baja) */}
               {dV && (() => {
-                // Mes en curso: el % corresponde al estimado, así que va dentro de la
-                // franja gris (en negro para contrastar). Resto: dentro del violeta (blanco).
+                const cxV = vx + VW / 2
+                // Mes en curso: el % corresponde al estimado → dentro de la franja gris, en negro.
                 const grisH = yVentas - yVentasProy
-                if (m.esActual && grisH >= 16) {
-                  return (
-                    <text x={vx + VW / 2} y={(yVentasProy + yVentas) / 2 + 4}
-                      textAnchor="middle" fontSize={11} fontWeight={700} fill="#111827">
-                      {dV.txt}
-                    </text>
-                  )
+                if (m.esActual && grisH >= 24) {
+                  return <PctLabel x={cxV} y={(yVentasProy + yVentas) / 2} fill="#111827">{dV.txt}</PctLabel>
                 }
-                const barH = zeroY - yVentas
-                const dentro = barH >= 20
-                return (
-                  <text x={vx + VW / 2} y={dentro ? yVentas + 14 : Math.max(TOP - 1, topVentas - 4)}
-                    textAnchor="middle" fontSize={11} fontWeight={700}
-                    fill={dentro ? '#ffffff' : (dV.up ? VERDE : ROJO)}>
-                    {dV.txt}
-                  </text>
-                )
+                const violetH = zeroY - yVentas
+                if (violetH >= 26) {
+                  return <PctLabel x={cxV} y={yVentas + 15} fill="#ffffff">{dV.txt}</PctLabel>
+                }
+                // barra muy baja: vertical justo arriba de la barra
+                return <PctLabel x={cxV} y={(m.esActual ? yVentasProy : yVentas) - 13} fill={dV.up ? VERDE : ROJO}>{dV.txt}</PctLabel>
               })()}
               {dR && (() => {
+                const cxR = rx + RW / 2
                 const rTop = yDe(Math.max(remView, 0))
                 const rBot = yDe(Math.min(remView, 0))
                 const barH = rBot - rTop
-                const dentro = barH >= 18
-                return (
-                  <text x={rx + RW / 2} y={dentro ? rTop + 13 : Math.max(TOP - 1, rTop - 4)}
-                    textAnchor="middle" fontSize={10} fontWeight={700}
-                    fill={dentro ? (m.esActual ? '#14532d' : '#ffffff') : (dR.up ? VERDE : ROJO)}>
-                    {dR.txt}
-                  </text>
-                )
+                if (barH >= 26) {
+                  return <PctLabel x={cxR} y={rTop + 14} fill={m.esActual ? '#14532d' : '#ffffff'}>{dR.txt}</PctLabel>
+                }
+                return <PctLabel x={cxR} y={rTop - 13} fill={dR.up ? VERDE : ROJO}>{dR.txt}</PctLabel>
               })()}
 
               {/* Etiqueta de mes */}
