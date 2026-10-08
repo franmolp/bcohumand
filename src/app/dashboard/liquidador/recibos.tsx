@@ -523,7 +523,7 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
               <div className="border-t border-gray-100 px-3.5 py-3 bg-gray-50/60 space-y-1.5">
                 {bruto != null && (
                   <div className="flex items-center justify-between">
-                    <span className="text-[12px] text-[var(--text-sub)]">Sueldo bruto</span>
+                    <span className="text-[12px] text-[var(--text-sub)]">Liquidación bruta</span>
                     <span className="text-[12px] font-medium text-[var(--text-main)]">
                       {montosVisible ? fmtPeso(bruto) : '$••••••'}
                     </span>
@@ -532,7 +532,7 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
                 {pago && (
                   <>
                     <div className="flex items-center justify-between">
-                      <span className="text-[12px] font-semibold text-[var(--text-main)]">Sueldo neto (con descuentos)</span>
+                      <span className="text-[12px] font-semibold text-[var(--text-main)]">Liquidación neta (con descuentos)</span>
                       <span className="text-[13px] font-bold text-[var(--primary)]">
                         {montosVisible ? fmtPeso(pago.total) : '$••••••'}
                       </span>
