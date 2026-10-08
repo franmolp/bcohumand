@@ -468,6 +468,7 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
 
   const reciboMap = new Map(recibos.map(r => [`${r.anio}-${r.mes}`, r]))
   const pagoMap   = new Map(pagos.map(p => [`${p.anio}-${p.mes}`, p]))
+  const brutoMap  = new Map(brutos.map(b => [`${b.anio}-${b.mes}`, b.bruto]))
 
   return (
     <div className="space-y-3 mt-4">
@@ -483,6 +484,7 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
       ) : meses.map(({ anio, mes }) => {
         const recibo = reciboMap.get(`${anio}-${mes}`)
         const pago   = pagoMap.get(`${anio}-${mes}`)
+        const bruto  = brutoMap.get(`${anio}-${mes}`)
         return (
           <div key={`${anio}-${mes}`} className="w-full bg-white rounded-xl border border-gray-200/60 overflow-hidden">
             {recibo && recibo.storage_url.startsWith('http') ? (
@@ -509,27 +511,39 @@ export function EmployeeRecibosView({ user }: { user: SessionUser }) {
                 </div>
               </div>
             )}
-            {pago && (
+            {(pago || bruto != null) && (
               <div className="border-t border-gray-100 px-3.5 py-3 bg-gray-50/60 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[12px] font-semibold text-[var(--text-main)]">Total a liquidar</span>
-                  <span className="text-[13px] font-bold text-[var(--primary)]">
-                    {montosVisible ? fmtPeso(pago.total) : '$••••••'}
-                  </span>
-                </div>
-                {(pago.efectivo > 0 || pago.transferencia > 0) && montosVisible && (
+                {bruto != null && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[12px] text-[var(--text-sub)]">Sueldo bruto</span>
+                    <span className="text-[12px] font-medium text-[var(--text-main)]">
+                      {montosVisible ? fmtPeso(bruto) : '$••••••'}
+                    </span>
+                  </div>
+                )}
+                {pago && (
                   <>
-                    {pago.efectivo > 0 && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-[var(--text-sub)]">Efectivo</span>
-                        <span className="text-[11px] font-medium text-[var(--text-main)]">{fmtPeso(pago.efectivo)}</span>
-                      </div>
-                    )}
-                    {pago.transferencia > 0 && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-[var(--text-sub)]">Transferencia</span>
-                        <span className="text-[11px] font-medium text-[var(--text-main)]">{fmtPeso(pago.transferencia)}</span>
-                      </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[12px] font-semibold text-[var(--text-main)]">Sueldo neto (con descuentos)</span>
+                      <span className="text-[13px] font-bold text-[var(--primary)]">
+                        {montosVisible ? fmtPeso(pago.total) : '$••••••'}
+                      </span>
+                    </div>
+                    {(pago.efectivo > 0 || pago.transferencia > 0) && montosVisible && (
+                      <>
+                        {pago.efectivo > 0 && (
+                          <div className="flex items-center justify-between pl-3">
+                            <span className="text-[11px] text-[var(--text-sub)]">· Efectivo</span>
+                            <span className="text-[11px] font-medium text-[var(--text-main)]">{fmtPeso(pago.efectivo)}</span>
+                          </div>
+                        )}
+                        {pago.transferencia > 0 && (
+                          <div className="flex items-center justify-between pl-3">
+                            <span className="text-[11px] text-[var(--text-sub)]">· Transferencia</span>
+                            <span className="text-[11px] font-medium text-[var(--text-main)]">{fmtPeso(pago.transferencia)}</span>
+                          </div>
+                        )}
+                      </>
                     )}
                   </>
                 )}
