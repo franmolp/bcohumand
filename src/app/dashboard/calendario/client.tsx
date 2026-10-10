@@ -336,12 +336,16 @@ function buildDayMap(
       if (!matches) continue
     }
 
-    // Lista de involucrados: solo tiene sentido en la vista de quien ve todo
-    // (cada empleada ve solo su propia fila, no hace falta listarla a sí misma).
+    // Lista de involucrados (empleadas, equipos o roles): solo tiene sentido en la
+    // vista de quien ve todo — cada empleada ve solo su propia fila.
     const involucrados = canViewAll
       ? rows
-          .filter(r => r.tipo_destinatario === 'employee' && r.valor_destinatario)
-          .map(r => empNombre.get(r.valor_destinatario!) || '')
+          .map(r => {
+            if (!r.valor_destinatario) return ''
+            if (r.tipo_destinatario === 'employee') return empNombre.get(r.valor_destinatario) || ''
+            if (r.tipo_destinatario === 'team' || r.tipo_destinatario === 'role') return r.valor_destinatario
+            return ''
+          })
           .filter(Boolean)
           .sort((a, b) => a.localeCompare(b, 'es'))
       : []
@@ -491,7 +495,7 @@ function CreateEventModal({
   onClose, onSave, empleados, equipos, roles,
 }: {
   onClose: () => void
-  onSave: (payload: typeof BLANK_EVENT & { selected_employees?: string[] }) => Promise<void>
+  onSave: (payload: typeof BLANK_EVENT & { selected_employees?: string[]; selected_teams?: string[] }) => Promise<void>
   empleados: EmpleadoOption[]
   equipos: string[]
   roles: string[]
@@ -499,6 +503,7 @@ function CreateEventModal({
   const [form, setForm] = useState({ ...BLANK_EVENT })
   const [saving, setSaving] = useState(false)
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([])
+  const [selectedTeams, setSelectedTeams] = useState<string[]>([])
   const [empSearch, setEmpSearch] = useState('')
 
   const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }))
@@ -514,10 +519,14 @@ function CreateEventModal({
       valor_destinatario: '',
     }))
     setSelectedEmployees([])
+    setSelectedTeams([])
   }
 
   function toggleEmployee(id: string) {
     setSelectedEmployees(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+  function toggleTeam(id: string) {
+    setSelectedTeams(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
   async function submit() {
@@ -527,8 +536,13 @@ function CreateEventModal({
       if (!form.titulo.trim() || !form.fecha) return
       if (form.tipo_destinatario === 'employee' && selectedEmployees.length === 0) return
     }
+    if (form.tipo_destinatario === 'team' && selectedTeams.length === 0) return
     setSaving(true)
-    await onSave({ ...form, selected_employees: form.tipo_destinatario === 'employee' ? selectedEmployees : undefined })
+    await onSave({
+      ...form,
+      selected_employees: form.tipo_destinatario === 'employee' ? selectedEmployees : undefined,
+      selected_teams: form.tipo_destinatario === 'team' ? selectedTeams : undefined,
+    })
     setSaving(false)
   }
 
@@ -539,11 +553,11 @@ function CreateEventModal({
     [empleados, empSearch]
   )
 
+  // El dropdown simple queda solo para "Rol". "Equipo" pasa a multi-selección.
   const valOptions = useMemo(() => {
-    if (form.tipo_destinatario === 'team') return equipos.map(e => ({ id: e, label: e }))
     if (form.tipo_destinatario === 'role') return roles.map(r => ({ id: r, label: r }))
     return []
-  }, [form.tipo_destinatario, equipos, roles])
+  }, [form.tipo_destinatario, roles])
 
   const modalTitle = isLocalCerrado ? 'Local cerrado' : 'Nuevo evento especial'
 
@@ -724,10 +738,10 @@ function CreateEventModal({
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] bg-white"
                 style={{ fontSize: 16 }}
                 value={form.tipo_destinatario}
-                onChange={e => { set('tipo_destinatario', e.target.value); set('valor_destinatario', ''); setSelectedEmployees([]) }}
+                onChange={e => { set('tipo_destinatario', e.target.value); set('valor_destinatario', ''); setSelectedEmployees([]); setSelectedTeams([]) }}
               >
                 <option value="all">Todos</option>
-                <option value="team">Equipo</option>
+                <option value="team">Equipos específicos</option>
                 <option value="role">Rol</option>
                 <option value="employee">Empleados específicos</option>
               </select>
@@ -735,9 +749,7 @@ function CreateEventModal({
 
             {valOptions.length > 0 && (
               <div>
-                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">
-                  {form.tipo_destinatario === 'team' ? 'Equipo' : 'Rol'}
-                </label>
+                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Rol</label>
                 <select
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] bg-white"
                   style={{ fontSize: 16 }}
@@ -747,6 +759,28 @@ function CreateEventModal({
                   <option value="">Seleccionar…</option>
                   {valOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
                 </select>
+              </div>
+            )}
+
+            {form.tipo_destinatario === 'team' && (
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">
+                  Equipos {selectedTeams.length > 0 && <span className="text-[var(--primary)]">({selectedTeams.length} seleccionados)</span>}
+                </label>
+                <div className="border border-gray-200 rounded-xl overflow-y-auto max-h-44">
+                  {[...equipos].sort((a, b) => a.localeCompare(b, 'es')).map(eq => (
+                    <label key={eq} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0">
+                      <input
+                        type="checkbox"
+                        checked={selectedTeams.includes(eq)}
+                        onChange={() => toggleTeam(eq)}
+                        className="w-4 h-4 accent-[var(--primary)]"
+                      />
+                      <span className="text-[13px] text-gray-700">{eq}</span>
+                    </label>
+                  ))}
+                  {equipos.length === 0 && <p className="text-[13px] text-gray-400 text-center py-4">Sin equipos</p>}
+                </div>
               </div>
             )}
 
@@ -806,7 +840,9 @@ function CreateEventModal({
             onClick={submit}
             disabled={saving || (isLocalCerrado
               ? (!form.fecha_inicio || !form.fecha_fin)
-              : (!form.titulo.trim() || !form.fecha || (form.tipo_destinatario === 'employee' && selectedEmployees.length === 0))
+              : (!form.titulo.trim() || !form.fecha
+                  || (form.tipo_destinatario === 'employee' && selectedEmployees.length === 0)
+                  || (form.tipo_destinatario === 'team' && selectedTeams.length === 0))
             )}
             className="flex-1 py-2.5 rounded-xl bg-[var(--primary)] text-white text-[14px] font-semibold disabled:opacity-50 cursor-pointer"
           >
@@ -950,7 +986,7 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
     return buildDayMap(data, anio, mes, canViewAll, user, filterUid, filterTeam, filterRole)
   }, [data, anio, mes, canViewAll, user, filterUid, filterTeam, filterRole])
 
-  async function handleCreateEvent(payload: typeof BLANK_EVENT & { selected_employees?: string[] }) {
+  async function handleCreateEvent(payload: typeof BLANK_EVENT & { selected_employees?: string[]; selected_teams?: string[] }) {
     // Local cerrado → solicitud masiva para todos los empleados activos
     if (payload.categoria === 'local_cerrado') {
       const r = await fetch('/api/solicitudes/masiva', {
@@ -972,23 +1008,29 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
     }
 
     // Evento especial → API calendario
-    const { selected_employees, ...rest } = payload
-    // Varios empleados específicos = N filas con un grupo_id en común, para poder
-    // mostrarlas como un solo evento (y borrarlas juntas) en la vista de calendario.
-    const grupoId = (rest.tipo_destinatario === 'employee' && selected_employees && selected_employees.length > 1)
-      ? (crypto.randomUUID?.() ?? `grp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
-      : null
-    const requests = (rest.tipo_destinatario === 'employee' && selected_employees && selected_employees.length > 0)
-      ? selected_employees.map(id => fetch('/api/calendario', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...rest, tipo_destinatario: 'employee', valor_destinatario: id, grupo_id: grupoId }),
-        }))
-      : [fetch('/api/calendario', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(rest),
-        })]
+    const { selected_employees, selected_teams, ...rest } = payload
+    // Varias empleadas / varios equipos específicos = N filas con un grupo_id en
+    // común, para mostrarlas como un solo evento (y borrarlas juntas) en el calendario.
+    const nuevoGrupo = () => (crypto.randomUUID?.() ?? `grp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+    let requests: Promise<Response>[]
+    if (rest.tipo_destinatario === 'employee' && selected_employees && selected_employees.length > 0) {
+      const grupoId = selected_employees.length > 1 ? nuevoGrupo() : null
+      requests = selected_employees.map(id => fetch('/api/calendario', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...rest, tipo_destinatario: 'employee', valor_destinatario: id, grupo_id: grupoId }),
+      }))
+    } else if (rest.tipo_destinatario === 'team' && selected_teams && selected_teams.length > 0) {
+      const grupoId = selected_teams.length > 1 ? nuevoGrupo() : null
+      requests = selected_teams.map(eq => fetch('/api/calendario', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...rest, tipo_destinatario: 'team', valor_destinatario: eq, grupo_id: grupoId }),
+      }))
+    } else {
+      requests = [fetch('/api/calendario', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rest),
+      })]
+    }
     const results = await Promise.all(requests)
     const failed = results.find(r => !r.ok)
     if (failed) {
