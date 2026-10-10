@@ -428,7 +428,7 @@ function PostComposer({
         <div className="flex bg-gray-100 rounded-xl p-0.5 mb-3 gap-0.5">
           {(['post', 'encuesta', 'pregunta'] as const).map(t => (
             <button key={t} onClick={() => { setTipo(t); setError('') }}
-              className={`flex-1 py-1.5 text-[12px] font-medium rounded-[10px] transition-all cursor-pointer ${tipo === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+              className={`flex-1 py-1.5 text-[12px] font-medium rounded-[10px] transition-all cursor-pointer whitespace-nowrap ${tipo === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
               {t === 'post' ? 'Publicar' : t === 'encuesta' ? 'Encuesta' : 'Pregunta abierta'}
             </button>
           ))}
@@ -607,22 +607,22 @@ function PostCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[13px] font-semibold">{post.autor.nombre}</span>
-              {tipoBadge && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tipoBadge.bg} ${tipoBadge.text}`}>{tipoBadge.label}</span>}
-              {post.cerrado && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Cerrado</span>}
+              {tipoBadge && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${tipoBadge.bg} ${tipoBadge.text}`}>{tipoBadge.label}</span>}
+              {post.cerrado && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 whitespace-nowrap shrink-0">Cerrado</span>}
             </div>
             <span className="text-[11px] text-gray-400">{timeAgo(post.created_at)}</span>
           </div>
           {/* Admin controls */}
-          <div className="flex gap-1 items-center">
+          <div className="flex gap-1 items-center shrink-0">
             {isAdmin && (post.tipo === 'encuesta' || post.tipo === 'pregunta') && (
               <>
                 <button onClick={toggleCerrado}
-                  className={`text-[11px] px-2 py-1 rounded-lg font-medium cursor-pointer transition-colors ${post.cerrado ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-500 hover:bg-gray-100'}`}>
+                  className={`text-[11px] px-2 py-1 rounded-lg font-medium cursor-pointer transition-colors whitespace-nowrap ${post.cerrado ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-500 hover:bg-gray-100'}`}>
                   {post.cerrado ? 'Reabrir' : 'Cerrar'}
                 </button>
                 {!post.resultados_publicados && (
                   <button onClick={publicarResultados}
-                    className="text-[11px] px-2 py-1 rounded-lg font-medium text-violet-600 hover:bg-violet-50 cursor-pointer transition-colors">
+                    className="text-[11px] px-2 py-1 rounded-lg font-medium text-violet-600 hover:bg-violet-50 cursor-pointer transition-colors whitespace-nowrap">
                     Publicar resultados
                   </button>
                 )}
