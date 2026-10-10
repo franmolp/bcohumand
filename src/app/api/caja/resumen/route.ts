@@ -183,12 +183,13 @@ export async function GET(req: NextRequest) {
         .order('receipt_date', { ascending: true }),
     ),
 
-    // Compras pagadas en efectivo: el otro motivo válido de salida de caja además del sobre
+    // Compras pagadas en efectivo: solo DISPLAY (matcheo de salidas del día), no
+    // tocan el saldo → alcanza con las del mes visualizado, no toda la historia.
     supabaseAdmin
       .from('compras')
       .select('id, fecha, monto, detalle, proveedor_nombre, created_at')
-      .gte('fecha', queryFrom)
-      .lte('fecha', calcEnd)
+      .gte('fecha', mesStart)
+      .lte('fecha', mesEnd)
       .eq('estado_pago', 'efectivo')
       .order('fecha')
       .order('created_at'),
@@ -200,19 +201,19 @@ export async function GET(req: NextRequest) {
       .select('monto')
       .eq('tipo', 'sobre'),
 
-    // Movimientos individuales de caja (pay-in/pay-out) de Loyverse, para cruzar
-    // cada salida uno a uno contra sobres y compras en vez de comparar el total del turno
+    // Movimientos individuales de caja (pay-in/pay-out) de Loyverse: solo DISPLAY
+    // (cruce de cada salida contra sobres/compras). No tocan el saldo → solo el mes.
     paginar<{ fecha: string; tipo: string; monto: number; comentario: string | null; movimiento_en: string }>(
       'loyverse_movimientos_caja', 'fecha, tipo, monto, comentario, movimiento_en',
-      q => q.gte('fecha', queryFrom).lte('fecha', calcEnd).order('movimiento_en'),
+      q => q.gte('fecha', mesStart).lte('fecha', mesEnd).order('movimiento_en'),
     ),
 
-    // Salidas de caja de Loyverse ya asignadas a una empleada (ver claveMovimiento)
+    // Salidas de caja ya asignadas a una empleada: solo DISPLAY → solo el mes.
     supabaseAdmin
       .from('caja_salidas_asignadas')
       .select('movimiento_en, monto, empleado_nombre')
-      .gte('fecha', queryFrom)
-      .lte('fecha', calcEnd),
+      .gte('fecha', mesStart)
+      .lte('fecha', mesEnd),
   ])
 
   const salidasAsignadasMap = new Map<string, string>()
