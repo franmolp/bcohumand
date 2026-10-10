@@ -127,14 +127,36 @@ export async function GET(req: NextRequest) {
   const queryFrom = mesStart < trackFrom ? mesStart : trackFrom
   const hayTracking = trackFrom <= calcEnd
 
+  // Supabase/PostgREST corta cada consulta en 1000 filas. loyverse_pagos y
+  // loyverse_movimientos_caja crecen por transacción, así que en rangos de varios
+  // meses pasan ese tope y se perdían filas (ej. el "Efectivo" diario daba $0 en
+  // los días recientes porque solo entraban las primeras 1000, las más viejas).
+  // Este helper pagina para traer TODAS las filas del rango.
+  function paginar<T extends Record<string, unknown>>(
+    table: string, select: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    filters: (q: any) => any,
+  ): Promise<{ data: T[]; error: null }> {
+    return (async () => {
+      const all: T[] = []
+      const PAGE = 1000
+      let from = 0
+      while (true) {
+        const { data, error } = await filters(supabaseAdmin.from(table).select(select)).range(from, from + PAGE - 1)
+        if (error || !data || data.length === 0) break
+        all.push(...(data as T[]))
+        if (data.length < PAGE) break
+        from += PAGE
+      }
+      return { data: all, error: null }
+    })()
+  }
+
   const [cierresRes, retirosRes, ajustesRes, pagosRes, comprasRes, sobresTotalRes, movimientosRes, salidasAsignadasRes] = await Promise.all([
-    supabaseAdmin
-      .from('loyverse_cierres')
-      .select('id, fecha, opened_at, closed_at, starting_cash, cash_payments, actual_cash, expected_cash, paid_out')
-      .gte('fecha', queryFrom)
-      .lte('fecha', calcEnd)
-      .order('fecha')
-      .order('opened_at'),
+    paginar<{ id: string; fecha: string; opened_at: string; closed_at: string | null; starting_cash: number; cash_payments: number; actual_cash: number; expected_cash: number; paid_out: number }>(
+      'loyverse_cierres', 'id, fecha, opened_at, closed_at, starting_cash, cash_payments, actual_cash, expected_cash, paid_out',
+      q => q.gte('fecha', queryFrom).lte('fecha', calcEnd).order('fecha').order('opened_at'),
+    ),
 
     supabaseAdmin
       .from('retiros_caja')
@@ -152,12 +174,14 @@ export async function GET(req: NextRequest) {
       .order('fecha')
       .order('created_at', { ascending: false }),
 
-    supabaseAdmin
-      .from('loyverse_pagos')
-      .select('receipt_date, payment_money')
-      .gte('receipt_date', `${queryFrom}T03:00:00.000Z`)
-      .lte('receipt_date', `${addDays(calcEnd, 1)}T02:59:59.999Z`)
-      .ilike('payment_name', `%${config.payment_name_efectivo}%`),
+    paginar<{ receipt_date: string; payment_money: number }>(
+      'loyverse_pagos', 'receipt_date, payment_money',
+      q => q
+        .gte('receipt_date', `${queryFrom}T03:00:00.000Z`)
+        .lte('receipt_date', `${addDays(calcEnd, 1)}T02:59:59.999Z`)
+        .ilike('payment_name', `%${config.payment_name_efectivo}%`)
+        .order('receipt_date', { ascending: true }),
+    ),
 
     // Compras pagadas en efectivo: el otro motivo válido de salida de caja además del sobre
     supabaseAdmin
@@ -178,12 +202,10 @@ export async function GET(req: NextRequest) {
 
     // Movimientos individuales de caja (pay-in/pay-out) de Loyverse, para cruzar
     // cada salida uno a uno contra sobres y compras en vez de comparar el total del turno
-    supabaseAdmin
-      .from('loyverse_movimientos_caja')
-      .select('fecha, tipo, monto, comentario, movimiento_en')
-      .gte('fecha', queryFrom)
-      .lte('fecha', calcEnd)
-      .order('movimiento_en'),
+    paginar<{ fecha: string; tipo: string; monto: number; comentario: string | null; movimiento_en: string }>(
+      'loyverse_movimientos_caja', 'fecha, tipo, monto, comentario, movimiento_en',
+      q => q.gte('fecha', queryFrom).lte('fecha', calcEnd).order('movimiento_en'),
+    ),
 
     // Salidas de caja de Loyverse ya asignadas a una empleada (ver claveMovimiento)
     supabaseAdmin
