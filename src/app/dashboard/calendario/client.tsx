@@ -495,7 +495,7 @@ function CreateEventModal({
   onClose, onSave, empleados, equipos, roles,
 }: {
   onClose: () => void
-  onSave: (payload: typeof BLANK_EVENT & { selected_employees?: string[]; selected_teams?: string[] }) => Promise<void>
+  onSave: (payload: typeof BLANK_EVENT & { selected_employees?: string[]; selected_teams?: string[]; selected_roles?: string[] }) => Promise<void>
   empleados: EmpleadoOption[]
   equipos: string[]
   roles: string[]
@@ -504,6 +504,7 @@ function CreateEventModal({
   const [saving, setSaving] = useState(false)
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([])
   const [selectedTeams, setSelectedTeams] = useState<string[]>([])
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([])
   const [empSearch, setEmpSearch] = useState('')
 
   const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }))
@@ -520,6 +521,7 @@ function CreateEventModal({
     }))
     setSelectedEmployees([])
     setSelectedTeams([])
+    setSelectedRoles([])
   }
 
   function toggleEmployee(id: string) {
@@ -527,6 +529,9 @@ function CreateEventModal({
   }
   function toggleTeam(id: string) {
     setSelectedTeams(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+  function toggleRole(id: string) {
+    setSelectedRoles(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
   async function submit() {
@@ -537,11 +542,13 @@ function CreateEventModal({
       if (form.tipo_destinatario === 'employee' && selectedEmployees.length === 0) return
     }
     if (form.tipo_destinatario === 'team' && selectedTeams.length === 0) return
+    if (form.tipo_destinatario === 'role' && selectedRoles.length === 0) return
     setSaving(true)
     await onSave({
       ...form,
       selected_employees: form.tipo_destinatario === 'employee' ? selectedEmployees : undefined,
       selected_teams: form.tipo_destinatario === 'team' ? selectedTeams : undefined,
+      selected_roles: form.tipo_destinatario === 'role' ? selectedRoles : undefined,
     })
     setSaving(false)
   }
@@ -552,12 +559,6 @@ function CreateEventModal({
       .filter(e => e.nombre.toLowerCase().includes(empSearch.toLowerCase())),
     [empleados, empSearch]
   )
-
-  // El dropdown simple queda solo para "Rol". "Equipo" pasa a multi-selección.
-  const valOptions = useMemo(() => {
-    if (form.tipo_destinatario === 'role') return roles.map(r => ({ id: r, label: r }))
-    return []
-  }, [form.tipo_destinatario, roles])
 
   const modalTitle = isLocalCerrado ? 'Local cerrado' : 'Nuevo evento especial'
 
@@ -738,29 +739,14 @@ function CreateEventModal({
                 className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] bg-white"
                 style={{ fontSize: 16 }}
                 value={form.tipo_destinatario}
-                onChange={e => { set('tipo_destinatario', e.target.value); set('valor_destinatario', ''); setSelectedEmployees([]); setSelectedTeams([]) }}
+                onChange={e => { set('tipo_destinatario', e.target.value); set('valor_destinatario', ''); setSelectedEmployees([]); setSelectedTeams([]); setSelectedRoles([]) }}
               >
                 <option value="all">Todos</option>
                 <option value="team">Equipos específicos</option>
-                <option value="role">Rol</option>
+                <option value="role">Roles específicos</option>
                 <option value="employee">Empleados específicos</option>
               </select>
             </div>
-
-            {valOptions.length > 0 && (
-              <div>
-                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Rol</label>
-                <select
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)] bg-white"
-                  style={{ fontSize: 16 }}
-                  value={form.valor_destinatario}
-                  onChange={e => set('valor_destinatario', e.target.value)}
-                >
-                  <option value="">Seleccionar…</option>
-                  {valOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-                </select>
-              </div>
-            )}
 
             {form.tipo_destinatario === 'team' && (
               <div>
@@ -780,6 +766,28 @@ function CreateEventModal({
                     </label>
                   ))}
                   {equipos.length === 0 && <p className="text-[13px] text-gray-400 text-center py-4">Sin equipos</p>}
+                </div>
+              </div>
+            )}
+
+            {form.tipo_destinatario === 'role' && (
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">
+                  Roles {selectedRoles.length > 0 && <span className="text-[var(--primary)]">({selectedRoles.length} seleccionados)</span>}
+                </label>
+                <div className="border border-gray-200 rounded-xl overflow-y-auto max-h-44">
+                  {[...roles].sort((a, b) => a.localeCompare(b, 'es')).map(rol => (
+                    <label key={rol} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0">
+                      <input
+                        type="checkbox"
+                        checked={selectedRoles.includes(rol)}
+                        onChange={() => toggleRole(rol)}
+                        className="w-4 h-4 accent-[var(--primary)]"
+                      />
+                      <span className="text-[13px] text-gray-700">{rol}</span>
+                    </label>
+                  ))}
+                  {roles.length === 0 && <p className="text-[13px] text-gray-400 text-center py-4">Sin roles</p>}
                 </div>
               </div>
             )}
@@ -842,7 +850,8 @@ function CreateEventModal({
               ? (!form.fecha_inicio || !form.fecha_fin)
               : (!form.titulo.trim() || !form.fecha
                   || (form.tipo_destinatario === 'employee' && selectedEmployees.length === 0)
-                  || (form.tipo_destinatario === 'team' && selectedTeams.length === 0))
+                  || (form.tipo_destinatario === 'team' && selectedTeams.length === 0)
+                  || (form.tipo_destinatario === 'role' && selectedRoles.length === 0))
             )}
             className="flex-1 py-2.5 rounded-xl bg-[var(--primary)] text-white text-[14px] font-semibold disabled:opacity-50 cursor-pointer"
           >
@@ -986,7 +995,7 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
     return buildDayMap(data, anio, mes, canViewAll, user, filterUid, filterTeam, filterRole)
   }, [data, anio, mes, canViewAll, user, filterUid, filterTeam, filterRole])
 
-  async function handleCreateEvent(payload: typeof BLANK_EVENT & { selected_employees?: string[]; selected_teams?: string[] }) {
+  async function handleCreateEvent(payload: typeof BLANK_EVENT & { selected_employees?: string[]; selected_teams?: string[]; selected_roles?: string[] }) {
     // Local cerrado → solicitud masiva para todos los empleados activos
     if (payload.categoria === 'local_cerrado') {
       const r = await fetch('/api/solicitudes/masiva', {
@@ -1008,7 +1017,7 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
     }
 
     // Evento especial → API calendario
-    const { selected_employees, selected_teams, ...rest } = payload
+    const { selected_employees, selected_teams, selected_roles, ...rest } = payload
     // Varias empleadas / varios equipos específicos = N filas con un grupo_id en
     // común, para mostrarlas como un solo evento (y borrarlas juntas) en el calendario.
     const nuevoGrupo = () => (crypto.randomUUID?.() ?? `grp-${Date.now()}-${Math.random().toString(36).slice(2)}`)
@@ -1024,6 +1033,12 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
       requests = selected_teams.map(eq => fetch('/api/calendario', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...rest, tipo_destinatario: 'team', valor_destinatario: eq, grupo_id: grupoId }),
+      }))
+    } else if (rest.tipo_destinatario === 'role' && selected_roles && selected_roles.length > 0) {
+      const grupoId = selected_roles.length > 1 ? nuevoGrupo() : null
+      requests = selected_roles.map(rol => fetch('/api/calendario', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...rest, tipo_destinatario: 'role', valor_destinatario: rol, grupo_id: grupoId }),
       }))
     } else {
       requests = [fetch('/api/calendario', {
