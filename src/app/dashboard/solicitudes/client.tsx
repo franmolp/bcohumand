@@ -6,6 +6,7 @@ import { IconPlus, IconCheck, IconX, IconTrash, IconCalendar, IconEdit, IconAler
 import type { SessionUser, Solicitud } from '@/types'
 import { compressImage } from '@/lib/compress-image'
 import FileViewer from '@/components/FileViewer'
+import Hora24 from '@/components/Hora24'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -185,6 +186,14 @@ function FormFields({
 
   const inp = (label: string, k: keyof Form, type = 'text', placeholder = '') => {
     const isDateField = type === 'date'
+    if (type === 'time') {
+      return (
+        <div className="min-w-0">
+          <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">{label}</label>
+          <Hora24 value={form[k] as string} onChange={v => setForm({ ...form, [k]: v })} />
+        </div>
+      )
+    }
     return (
       <div className="min-w-0">
         <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">{label}</label>

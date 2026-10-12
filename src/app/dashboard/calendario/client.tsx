@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import type { SessionUser } from '@/types'
 import { Modal, Toast, Spinner, Button } from '@/components/ui'
 import { IconCalendar, IconChevronLeft, IconChevronRight, IconPlus, IconTrash, IconX, IconEdit } from '@/components/ui/Icons'
+import Hora24 from '@/components/Hora24'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -696,21 +697,11 @@ function CreateEventModal({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Desde</label>
-                  <input
-                    type="time"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]"
-                    value={form.hora_desde}
-                    onChange={e => set('hora_desde', e.target.value)}
-                  />
+                  <Hora24 value={form.hora_desde} onChange={v => set('hora_desde', v)} />
                 </div>
                 <div>
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Hasta</label>
-                  <input
-                    type="time"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-[var(--primary)]"
-                    value={form.hora_hasta}
-                    onChange={e => set('hora_hasta', e.target.value)}
-                  />
+                  <Hora24 value={form.hora_hasta} onChange={v => set('hora_hasta', v)} />
                 </div>
               </div>
             )}

@@ -5,6 +5,7 @@ import { Button, Spinner, Toast, Modal } from '@/components/ui'
 import { IconRefresh, IconChevronRight, IconChevronLeft, IconUpload, IconCheck, IconEdit, IconFileText, IconPlus, IconTrash, IconX, IconClipboard, IconClock } from '@/components/ui/Icons'
 import { CHIP_INFO, calcPresentismo, DEFAULT_CONFIG, AsistenciaConfig, toMinutes } from '@/lib/asistencia'
 import { AsistenciaProcesada, SessionUser } from '@/types'
+import Hora24 from '@/components/Hora24'
 
 interface Empleado {
   id: string; nombre: string; email: string
@@ -1062,29 +1063,21 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
           <div className="grid grid-cols-2 gap-3">
             <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Entrada</label>
-              <input type="time" value={editEntrada} onChange={e => setEditEntrada(e.target.value)}
-                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
+              <Hora24 value={editEntrada} onChange={setEditEntrada} minuteStep={1} />
             </div>
             <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Salida</label>
-              <input type="time" value={editSalida} onChange={e => setEditSalida(e.target.value)}
-                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
+              <Hora24 value={editSalida} onChange={setEditSalida} minuteStep={1} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Entrada base</label>
-              <input type="time" value={editBaseEntrada} onChange={e => setEditBaseEntrada(e.target.value)}
-                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
+              <Hora24 value={editBaseEntrada} onChange={setEditBaseEntrada} minuteStep={1} />
             </div>
             <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Salida base</label>
-              <input type="time" value={editBaseSalida} onChange={e => setEditBaseSalida(e.target.value)}
-                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
+              <Hora24 value={editBaseSalida} onChange={setEditBaseSalida} minuteStep={1} />
             </div>
           </div>
           {editHoras !== null && (
@@ -1410,29 +1403,21 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
           <div className="grid grid-cols-2 gap-3">
             <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Entrada</label>
-              <input type="time" value={editEntrada} onChange={e => setEditEntrada(e.target.value)}
-                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
+              <Hora24 value={editEntrada} onChange={setEditEntrada} minuteStep={1} />
             </div>
             <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Salida</label>
-              <input type="time" value={editSalida} onChange={e => setEditSalida(e.target.value)}
-                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
+              <Hora24 value={editSalida} onChange={setEditSalida} minuteStep={1} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Entrada base</label>
-              <input type="time" value={editBaseEntrada} onChange={e => setEditBaseEntrada(e.target.value)}
-                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
+              <Hora24 value={editBaseEntrada} onChange={setEditBaseEntrada} minuteStep={1} />
             </div>
             <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Salida base</label>
-              <input type="time" value={editBaseSalida} onChange={e => setEditBaseSalida(e.target.value)}
-                className="w-full min-w-0 h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-sm text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                style={{ fontSize: 16, WebkitAppearance: 'none' }} />
+              <Hora24 value={editBaseSalida} onChange={setEditBaseSalida} minuteStep={1} />
             </div>
           </div>
           {editHoras !== null && (
