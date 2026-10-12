@@ -697,11 +697,11 @@ function CreateEventModal({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Desde</label>
-                  <Hora24 value={form.hora_desde} onChange={v => set('hora_desde', v)} />
+                  <Hora24 value={form.hora_desde} onChange={v => set('hora_desde', v)} fullRange />
                 </div>
                 <div>
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 block">Hasta</label>
-                  <Hora24 value={form.hora_hasta} onChange={v => set('hora_hasta', v)} />
+                  <Hora24 value={form.hora_hasta} onChange={v => set('hora_hasta', v)} fullRange />
                 </div>
               </div>
             )}

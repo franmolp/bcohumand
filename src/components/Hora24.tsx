@@ -10,18 +10,24 @@ export default function Hora24({
   onChange,
   minuteStep = 5,
   className = '',
+  fullRange = false,
 }: {
   value: string
   onChange: (v: string) => void
   minuteStep?: number
   className?: string
+  // fullRange: habilita las 24hs (00–23). Se usa para eventos del calendario
+  // (ej. la fiesta aniversario es de noche). Por defecto el rango es laboral 08–21.
+  fullRange?: boolean
 }) {
   const parts = (value || '').split(':')
   const hh = parts[0] ?? ''
   const mm = parts[1] ?? ''
 
-  // Rango 08–21hs: nunca se elige nada fuera de ese horario laboral.
-  const horas = Array.from({ length: 14 }, (_, i) => String(i + 8).padStart(2, '0'))
+  // Rango laboral 08–21hs por defecto (nunca se elige nada fuera). Con fullRange, 00–23.
+  const horas = fullRange
+    ? Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
+    : Array.from({ length: 14 }, (_, i) => String(i + 8).padStart(2, '0'))
   // Si la hora guardada queda fuera del rango (ej. un valor viejo), se agrega igual.
   if (hh && !horas.includes(hh)) { horas.push(hh); horas.sort() }
   const minutos: string[] = []

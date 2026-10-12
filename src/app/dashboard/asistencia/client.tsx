@@ -1063,21 +1063,21 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
           <div className="grid grid-cols-2 gap-3">
             <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Entrada</label>
-              <Hora24 value={editEntrada} onChange={setEditEntrada} minuteStep={1} />
+              <Hora24 value={editEntrada} onChange={setEditEntrada} minuteStep={1} fullRange />
             </div>
             <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Salida</label>
-              <Hora24 value={editSalida} onChange={setEditSalida} minuteStep={1} />
+              <Hora24 value={editSalida} onChange={setEditSalida} minuteStep={1} fullRange />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Entrada base</label>
-              <Hora24 value={editBaseEntrada} onChange={setEditBaseEntrada} minuteStep={1} />
+              <Hora24 value={editBaseEntrada} onChange={setEditBaseEntrada} minuteStep={1} fullRange />
             </div>
             <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Salida base</label>
-              <Hora24 value={editBaseSalida} onChange={setEditBaseSalida} minuteStep={1} />
+              <Hora24 value={editBaseSalida} onChange={setEditBaseSalida} minuteStep={1} fullRange />
             </div>
           </div>
           {editHoras !== null && (
@@ -1403,21 +1403,21 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
           <div className="grid grid-cols-2 gap-3">
             <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Entrada</label>
-              <Hora24 value={editEntrada} onChange={setEditEntrada} minuteStep={1} />
+              <Hora24 value={editEntrada} onChange={setEditEntrada} minuteStep={1} fullRange />
             </div>
             <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Salida</label>
-              <Hora24 value={editSalida} onChange={setEditSalida} minuteStep={1} />
+              <Hora24 value={editSalida} onChange={setEditSalida} minuteStep={1} fullRange />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Entrada base</label>
-              <Hora24 value={editBaseEntrada} onChange={setEditBaseEntrada} minuteStep={1} />
+              <Hora24 value={editBaseEntrada} onChange={setEditBaseEntrada} minuteStep={1} fullRange />
             </div>
             <div className="min-w-0">
               <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Salida base</label>
-              <Hora24 value={editBaseSalida} onChange={setEditBaseSalida} minuteStep={1} />
+              <Hora24 value={editBaseSalida} onChange={setEditBaseSalida} minuteStep={1} fullRange />
             </div>
           </div>
           {editHoras !== null && (
