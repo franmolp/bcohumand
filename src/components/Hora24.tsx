@@ -1,6 +1,6 @@
 'use client'
 
-// Selector de hora en formato 24hs con dropdowns (hora 00–23 y minutos). Se usa
+// Selector de hora en formato 24hs con dropdowns (hora 08–21 y minutos). Se usa
 // en vez de <input type="time"> porque en el iPhone ese input muestra 1–12 con
 // AM/PM según el idioma del celular, y las empleadas confunden la mañana con la
 // noche (ponen 9 PM en vez de 9 AM). Con 24hs no hay ambigüedad.
@@ -20,7 +20,10 @@ export default function Hora24({
   const hh = parts[0] ?? ''
   const mm = parts[1] ?? ''
 
-  const horas = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
+  // Rango 08–21hs: nunca se elige nada fuera de ese horario laboral.
+  const horas = Array.from({ length: 14 }, (_, i) => String(i + 8).padStart(2, '0'))
+  // Si la hora guardada queda fuera del rango (ej. un valor viejo), se agrega igual.
+  if (hh && !horas.includes(hh)) { horas.push(hh); horas.sort() }
   const minutos: string[] = []
   for (let m = 0; m < 60; m += minuteStep) minutos.push(String(m).padStart(2, '0'))
   // Si el minuto guardado no cae en el paso (ej. un valor viejo), se agrega igual.
