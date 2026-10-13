@@ -115,41 +115,104 @@ export async function POST(
     }
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('pedidos_items')
-    .insert({
-      ciclo_id: id,
-      producto_id: producto_id ?? null,
-      variante_id: variante_id ?? null,
-      nombre_libre: nombre_libre?.trim() ?? null,
-      cantidad: Number(cantidad),
-      unidad: unidad ?? 'unidad',
-      notas: notas?.trim() ?? null,
-      urgente: urgente === true,
-      usuario_id: session.id,
-      estado: 'pendiente',
-    })
-    .select('*, producto:pedidos_productos(id, nombre, categoria, unidad, proveedor_id, proveedor:proveedores(id, nombre)), variante:pedidos_variantes(id, nombre)')
-    .single()
+  const cantNum = Number(cantidad)
+  const uni = unidad ?? 'unidad'
+  const notaTrim = notas?.trim() || null
+  const nombreLibreTrim = nombre_libre?.trim() || null
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // Si el mismo producto (y misma variante y misma unidad) ya está en este pedido
+  // y sigue pendiente, en vez de crear otra línea se SUMA la cantidad a la existente.
+  // Así evitamos líneas duplicadas (ej: un día agregan 4 y otro día 2 → queda una de 6).
+  // Los ítems por nombre libre se agrupan por el texto del nombre.
+  let existente: { id: string; cantidad: number; notas: string | null; urgente: boolean } | null = null
+  {
+    let q = supabaseAdmin
+      .from('pedidos_items')
+      .select('id, cantidad, notas, urgente')
+      .eq('ciclo_id', id)
+      .eq('estado', 'pendiente')
+      .or('archivado.is.null,archivado.eq.false')
+      .eq('unidad', uni)
+    if (producto_id) {
+      q = q.eq('producto_id', producto_id)
+      q = variante_id ? q.eq('variante_id', variante_id) : q.is('variante_id', null)
+    } else {
+      q = q.is('producto_id', null).ilike('nombre_libre', nombreLibreTrim ?? '')
+    }
+    const { data: encontrados } = await q.limit(1)
+    existente = encontrados?.[0] ?? null
+  }
+
+  let data: Record<string, unknown> | null = null
+  let error: { message: string } | null = null
+  let sumado = false
+  let cantidadTotal = cantNum
+
+  if (existente) {
+    // Sumar sobre la línea que ya estaba
+    sumado = true
+    cantidadTotal = Number(existente.cantidad) + cantNum
+    // Combinar notas (sin repetir) y urgencia (si alguna es urgente, queda urgente)
+    const notasPrev = existente.notas?.trim() || ''
+    let notasFinal: string | null = notasPrev || null
+    if (notaTrim && notaTrim !== notasPrev) {
+      notasFinal = notasPrev ? `${notasPrev} · ${notaTrim}` : notaTrim
+    }
+    const res = await supabaseAdmin
+      .from('pedidos_items')
+      .update({
+        cantidad: cantidadTotal,
+        notas: notasFinal,
+        urgente: existente.urgente || urgente === true,
+      })
+      .eq('id', existente.id)
+      .select('*, producto:pedidos_productos(id, nombre, categoria, unidad, proveedor_id, proveedor:proveedores(id, nombre)), variante:pedidos_variantes(id, nombre)')
+      .single()
+    data = res.data
+    error = res.error
+  } else {
+    const res = await supabaseAdmin
+      .from('pedidos_items')
+      .insert({
+        ciclo_id: id,
+        producto_id: producto_id ?? null,
+        variante_id: variante_id ?? null,
+        nombre_libre: nombreLibreTrim,
+        cantidad: cantNum,
+        unidad: uni,
+        notas: notaTrim,
+        urgente: urgente === true,
+        usuario_id: session.id,
+        estado: 'pendiente',
+      })
+      .select('*, producto:pedidos_productos(id, nombre, categoria, unidad, proveedor_id, proveedor:proveedores(id, nombre)), variante:pedidos_variantes(id, nombre)')
+      .single()
+    data = res.data
+    error = res.error
+  }
+
+  if (error || !data) return NextResponse.json({ error: error?.message ?? 'Error al agregar' }, { status: 500 })
 
   // Audit log
   await supabaseAdmin.from('pedidos_items_auditoria').insert({
     item_id: data.id,
     usuario_id: session.id,
-    accion: 'creó',
-    detalle: null,
+    accion: sumado ? 'sumó' : 'creó',
+    detalle: sumado ? `+${cantNum} ${uni} (total ${cantidadTotal})` : null,
   })
 
+  // Al sumar, la línea conserva su dueño original; al crear, es quien la cargó.
+  const dueñoId = (data.usuario_id as string) ?? session.id
   const { data: u } = await supabase
     .from('usuarios')
     .select('nombre, foto_perfil')
-    .eq('id', session.id)
+    .eq('id', dueñoId)
     .single()
 
   return NextResponse.json({
     ...data,
+    sumado,
+    cantidad_total: cantidadTotal,
     usuario: { nombre: (u as { nombre: string; foto_perfil?: string | null } | null)?.nombre ?? session.nombre, foto_perfil: (u as { nombre: string; foto_perfil?: string | null } | null)?.foto_perfil ?? null },
   })
 }

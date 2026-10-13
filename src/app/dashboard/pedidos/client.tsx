@@ -300,7 +300,11 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
       }),
     })
     setGuardando(false)
-    if (res.ok) { setShowAdd(false); cargar() }
+    if (res.ok) {
+      const r = await res.json().catch(() => null)
+      if (r?.sumado) showToast(`Se sumó al pedido. Ahora hay ${r.cantidad_total} ${r.unidad ?? ''}`.trim())
+      setShowAdd(false); cargar()
+    }
     else setGuardandoError('Error al agregar. Intentá de nuevo.')
   }
 
@@ -388,10 +392,17 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
     if (b === 'Sin proveedor') return -1
     return a.localeCompare(b)
   })
+  // Nombre visible de un ítem (producto de catálogo o nombre libre) + variante, para ordenar.
+  const nombreItem = (i: Item) =>
+    `${i.producto?.nombre ?? i.nombre_libre ?? ''} ${i.variante?.nombre ?? ''}`.trim()
   for (const prov of provKeys) {
     const cats = Object.entries(mapProv[prov])
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([cat, catItems]) => ({ cat, items: catItems }))
+      .map(([cat, catItems]) => ({
+        cat,
+        // Ítems ordenados alfabéticamente dentro de cada categoría.
+        items: [...catItems].sort((a, b) => nombreItem(a).localeCompare(nombreItem(b), 'es', { sensitivity: 'base' })),
+      }))
     grouped.push({ prov, cats })
   }
 
@@ -541,7 +552,7 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
               <Button variant="secondary" onClick={() => setAddStep(productoSel && productoSel.variantes_count > 0 ? 'variantes' : 'search')}>Volver</Button>
               <Button className="flex-1" onClick={agregarExistente} loading={guardando}
                 disabled={!cantidad || Number(cantidad) <= 0 || (!productoSel?.proveedor_id && !provConfig)}>
-                Agregar
+                {duplicado ? 'Sumar al pedido' : 'Agregar'}
               </Button>
             </>
           ) : addStep === 'new' ? (
@@ -703,7 +714,10 @@ function TabLista({ cicloActivo, productos, proveedores, onCiclosChange, onRefre
             {duplicado && (
               <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
                 <p className="text-[12px] text-amber-700">
-                  Ya fue pedido por <span className="font-semibold">{duplicado.usuario.nombre}</span>. Podés agregar igual o editar el ítem existente.
+                  Ya hay <span className="font-semibold">{duplicado.cantidad} {duplicado.unidad}</span> en este pedido
+                  {' '}(cargado por <span className="font-semibold">{duplicado.usuario.nombre}</span>).
+                  {' '}Si agregás <span className="font-semibold">{Number(cantidad) || 0}</span> más, se suman y queda{' '}
+                  <span className="font-semibold">{(Number(duplicado.cantidad) + (Number(cantidad) || 0))} {duplicado.unidad}</span> en una sola línea.
                 </p>
               </div>
             )}
@@ -1332,7 +1346,9 @@ function TabEnviados({ cicloActivo, isAdmin, onRefresh }: { cicloActivo: Ciclo |
               </button>
               {abierto && (
               <div className="divide-y divide-gray-50 px-4 border-t border-[var(--border)]">
-                {g.items.map(item => {
+                {[...g.items].sort((a, b) =>
+                  `${a.nombre} ${a.variante_nombre ?? ''}`.trim().localeCompare(`${b.nombre} ${b.variante_nombre ?? ''}`.trim(), 'es', { sensitivity: 'base' })
+                ).map(item => {
                   const marcado = borrador[item.id]
                   const yaMarcado = marcado !== undefined
                   return (
