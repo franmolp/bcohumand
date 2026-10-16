@@ -141,6 +141,37 @@ export function assignLanes<T extends { inicio: string; fin: string }>(shifts: T
   })
 }
 
+// Tramos de [start, end] donde la ocupación real (cantidad de turnos solapados) es
+// MENOR a la capacidad — o sea, donde de verdad hay al menos una mesa/box libre.
+// Sirve para no ofrecer un puesto en un horario que ya está lleno aunque un carril
+// quede ocioso: eso pasa cuando un turno quedó sobrecargado (ej. 9 personas en 8
+// mesas), porque el carril extra deja un hueco "fantasma" en la otra mitad del día.
+function tramosConCupo(
+  intervalos: { inicio: number; fin: number }[],
+  capacity: number,
+  start: number,
+  end: number
+): { start: number; end: number }[] {
+  const puntos = new Set<number>([start, end])
+  for (const iv of intervalos) {
+    if (iv.inicio > start && iv.inicio < end) puntos.add(iv.inicio)
+    if (iv.fin > start && iv.fin < end) puntos.add(iv.fin)
+  }
+  const orden = [...puntos].sort((a, b) => a - b)
+  const tramos: { start: number; end: number }[] = []
+  for (let i = 0; i < orden.length - 1; i++) {
+    const a = orden[i], b = orden[i + 1]
+    const medio = (a + b) / 2
+    const ocup = intervalos.filter(iv => iv.inicio <= medio && iv.fin > medio).length
+    if (ocup < capacity) {
+      const ultimo = tramos[tramos.length - 1]
+      if (ultimo && ultimo.end === a) ultimo.end = b // fusiona tramos contiguos
+      else tramos.push({ start: a, end: b })
+    }
+  }
+  return tramos
+}
+
 // Huecos >= MIN_GAP_MINUTOS por carril, para un solo día de un solo equipo.
 export function findGapsForDay<T extends { inicio: string; fin: string }>(
   shifts: T[],
@@ -151,7 +182,26 @@ export function findGapsForDay<T extends { inicio: string; fin: string }>(
   const usedLanes = withLanes.length > 0 ? Math.max(...withLanes.map(t => t.lane)) + 1 : 0
   const totalLanes = Math.max(capacity > 0 ? capacity : 0, usedLanes)
 
+  // Tramos del día con cupo real (ocupación < capacidad). Si no hay capacidad
+  // definida (<=0) no recortamos nada y se comporta como antes.
+  const conCupo = capacity > 0
+    ? tramosConCupo(shifts.map(s => ({ inicio: toMin(s.inicio), fin: toMin(s.fin) })), capacity, GANTT_START, GANTT_END)
+    : null
+
   const result: { lane: number; start: number; end: number }[] = []
+
+  // Agrega un hueco recortado a los tramos con cupo (para que un carril ocioso no
+  // ofrezca mesa en un horario que en realidad está lleno). Cada pedazo que sigue
+  // siendo >= al mínimo se agrega por separado.
+  const pushGap = (lane: number, gStart: number, gEnd: number) => {
+    if (gEnd - gStart < minGapMinutos) return
+    if (!conCupo) { result.push({ lane, start: gStart, end: gEnd }); return }
+    for (const t of conCupo) {
+      const s = Math.max(gStart, t.start)
+      const e = Math.min(gEnd, t.end)
+      if (e - s >= minGapMinutos) result.push({ lane, start: s, end: e })
+    }
+  }
 
   for (let lane = 0; lane < totalLanes; lane++) {
     const laneShifts = withLanes
@@ -162,10 +212,10 @@ export function findGapsForDay<T extends { inicio: string; fin: string }>(
     for (const shift of laneShifts) {
       const s = toMin(shift.inicio)
       const e = toMin(shift.fin)
-      if (s - cursor >= minGapMinutos) result.push({ lane, start: cursor, end: s })
+      if (s - cursor >= minGapMinutos) pushGap(lane, cursor, s)
       cursor = Math.max(cursor, e)
     }
-    if (GANTT_END - cursor >= minGapMinutos) result.push({ lane, start: cursor, end: GANTT_END })
+    if (GANTT_END - cursor >= minGapMinutos) pushGap(lane, cursor, GANTT_END)
   }
 
   return result

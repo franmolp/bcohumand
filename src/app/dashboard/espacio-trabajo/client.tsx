@@ -109,10 +109,39 @@ function minToStr(m: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
 }
 
+// Tramos de [start, end] donde la ocupación real (turnos solapados) es MENOR a la
+// capacidad: ahí sí hay mesa/box libre. Evita ofrecer un hueco "fantasma" cuando un
+// turno quedó sobrecargado (ej. 9 personas en 8 mesas: el carril extra deja ocioso
+// medio día aunque ese medio día en realidad está lleno).
+function tramosConCupo(intervalos: { inicio: number; fin: number }[], capacity: number, start: number, end: number): { start: number; end: number }[] {
+  const puntos = new Set<number>([start, end])
+  for (const iv of intervalos) {
+    if (iv.inicio > start && iv.inicio < end) puntos.add(iv.inicio)
+    if (iv.fin > start && iv.fin < end) puntos.add(iv.fin)
+  }
+  const orden = [...puntos].sort((a, b) => a - b)
+  const tramos: { start: number; end: number }[] = []
+  for (let i = 0; i < orden.length - 1; i++) {
+    const a = orden[i], b = orden[i + 1]
+    const medio = (a + b) / 2
+    const ocup = intervalos.filter(iv => iv.inicio <= medio && iv.fin > medio).length
+    if (ocup < capacity) {
+      const ultimo = tramos[tramos.length - 1]
+      if (ultimo && ultimo.end === a) ultimo.end = b
+      else tramos.push({ start: a, end: b })
+    }
+  }
+  return tramos
+}
+
 function findGaps(shifts: Turno[], capacity: number, minGap: number = MIN_GAP): { lane: number; gaps: { start: number; end: number }[] }[] {
   const withLanes = assignLanes(shifts)
   const usedLanes = withLanes.length > 0 ? Math.max(...withLanes.map(t => t.lane)) + 1 : 0
   const totalLanes = Math.max(capacity > 0 ? capacity : 0, usedLanes)
+
+  const conCupo = capacity > 0
+    ? tramosConCupo(shifts.map(s => ({ inicio: toMin(s.inicio), fin: toMin(s.fin) })), capacity, GANTT_START, GANTT_END)
+    : null
 
   const result: { lane: number; gaps: { start: number; end: number }[] }[] = []
 
@@ -121,16 +150,27 @@ function findGaps(shifts: Turno[], capacity: number, minGap: number = MIN_GAP): 
       .filter(t => t.lane === lane)
       .sort((a, b) => toMin(a.inicio) - toMin(b.inicio))
 
-    const gaps: { start: number; end: number }[] = []
+    const crudos: { start: number; end: number }[] = []
     let cursor = GANTT_START
 
     for (const shift of laneShifts) {
       const s = toMin(shift.inicio)
       const e = toMin(shift.fin)
-      if (s - cursor >= minGap) gaps.push({ start: cursor, end: s })
+      if (s - cursor >= minGap) crudos.push({ start: cursor, end: s })
       cursor = Math.max(cursor, e)
     }
-    if (GANTT_END - cursor >= minGap) gaps.push({ start: cursor, end: GANTT_END })
+    if (GANTT_END - cursor >= minGap) crudos.push({ start: cursor, end: GANTT_END })
+
+    // Recorta cada hueco a los tramos con cupo real (si hay capacidad definida).
+    const gaps: { start: number; end: number }[] = []
+    for (const g of crudos) {
+      if (!conCupo) { gaps.push(g); continue }
+      for (const t of conCupo) {
+        const s = Math.max(g.start, t.start)
+        const e = Math.min(g.end, t.end)
+        if (e - s >= minGap) gaps.push({ start: s, end: e })
+      }
+    }
 
     if (gaps.length > 0) result.push({ lane, gaps })
   }
