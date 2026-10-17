@@ -3,8 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { getSession } from '@/lib/auth'
 import { crearNotificacion } from '@/lib/notificaciones'
 import { avisarTurnos } from '@/lib/bco-turnos'
-import { supabaseAdmin } from '@/lib/supabase-admin'
-import { aplicarCambio, esCambioHorario, evaluarCambio } from '@/lib/cambio-horario'
+import { aplicarCambio, esCambioHorario, evaluarCambio, leerSolicitud, revertirCambio } from '@/lib/cambio-horario'
 
 async function regenerarAsistencia(req: NextRequest, usuarioId: string, fechaInicio: string, fechaFin: string | null) {
   const hoy = new Date().toISOString().split('T')[0]
@@ -80,13 +79,15 @@ export async function PUT(
     // Admin: aprobar / rechazar (acción rápida)
     if (body.action === 'approve' || body.action === 'reject') {
       const estado = body.action === 'approve' ? 'approved' : 'rejected'
-      // Cambio de horario/día: solo se aprueba si hay espacio de trabajo libre (salvo que se fuerce)
-      if (estado === 'approved') {
-        const { data: sol } = await supabaseAdmin.from('solicitudes').select('id, usuario_id, tipo, subtipo_horario, fecha_inicio, fecha_compensacion, horario_nuevo').eq('id', id).single()
-        if (sol && esCambioHorario(sol.tipo)) {
-          const ev = await evaluarCambio(sol)
+      // Cambio de horario/día: solo se aprueba si hay espacio de trabajo libre (salvo que se fuerce);
+      // si estaba aprobada y se rechaza, vuelve el horario que tenía
+      const previa = await leerSolicitud(id)
+      if (previa && esCambioHorario(previa.tipo)) {
+        if (estado === 'approved' && previa.estado !== 'approved') {
+          const ev = await evaluarCambio(previa)
           if (!ev.posible && !body.forzar) return NextResponse.json({ error: ev.mensaje, sin_lugar: true }, { status: 409 })
         }
+        if (estado === 'rejected' && previa.estado === 'approved') await revertirCambio(previa)
       }
 
       const { data, error } = await supabase
@@ -104,7 +105,7 @@ export async function PUT(
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
       // Aprobado un cambio de horario/día: el horario se modifica solo
-      if (estado === 'approved' && data && esCambioHorario(data.tipo)) await aplicarCambio(data)
+      if (estado === 'approved' && previa?.estado !== 'approved' && data && esCambioHorario(data.tipo)) await aplicarCambio({ ...data, horario_previo: null })
 
       // Notificar al empleado dueño de la solicitud
       if (data?.usuario_id && data.usuario_id !== session.id) {
@@ -169,6 +170,15 @@ export async function PUT(
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+    // Cambio de horario/día editado: si estaba aprobado se vuelve atrás, y si queda aprobado se aplica de nuevo
+    if (esCambioHorario(old.tipo) || esCambioHorario(data.tipo)) {
+      const tocaHorario = ['estado', 'tipo', 'subtipo_horario', 'fecha_inicio', 'fecha_compensacion', 'horario_nuevo'].some(k => k in updates)
+      if (tocaHorario) {
+        if (old.estado === 'approved' && esCambioHorario(old.tipo)) await revertirCambio(old)
+        if (data.estado === 'approved' && esCambioHorario(data.tipo)) await aplicarCambio({ ...data, horario_previo: null })
+      }
+    }
+
     const estadoNuevo = updates.estado as string | undefined
     const comentNuevo = updates.comentario_admin as string | null | undefined
     const comentCambio = 'comentario_admin' in updates && comentNuevo !== (old.comentario_admin ?? null)
@@ -231,7 +241,7 @@ export async function DELETE(
 
   const { data: sol } = await supabase
     .from('solicitudes')
-    .select('usuario_id, estado')
+    .select('usuario_id, estado, tipo')
     .eq('id', id)
     .single()
 
@@ -248,6 +258,8 @@ export async function DELETE(
     return NextResponse.json({ error: 'Solo se pueden eliminar solicitudes pendientes' }, { status: 400 })
   }
 
+  // Cambio de horario/día aprobado que se borra: vuelve el horario que tenía
+  if (sol.estado === 'approved' && esCambioHorario(sol.tipo)) { const completa = await leerSolicitud(id); if (completa) await revertirCambio(completa) }
   const { error } = await supabase.from('solicitudes').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })

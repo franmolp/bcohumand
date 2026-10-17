@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     // Cambio de horario/día cargado ya aprobado: el horario se modifica solo
-    if (data?.estado === 'approved' && esCambioHorario(data.tipo)) await aplicarCambio(data)
+    if (data?.estado === 'approved' && esCambioHorario(data.tipo)) await aplicarCambio({ ...data, horario_previo: null })
 
     // Notificaciones
     const isFeriadoApproved = tipo === 'Feriado/Local cerrado'
