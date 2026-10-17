@@ -3,9 +3,11 @@ import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/auth'
 import { crearNotificaciones } from '@/lib/notificaciones'
+import { avisarTurnos } from '@/lib/bco-turnos'
 
 // POST — crea Feriado/Local cerrado para todos los empleados activos
 export async function POST(request: NextRequest) {
+  avisarTurnos()
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 

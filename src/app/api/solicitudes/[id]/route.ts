@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { getSession } from '@/lib/auth'
 import { crearNotificacion } from '@/lib/notificaciones'
+import { avisarTurnos } from '@/lib/bco-turnos'
 
 async function regenerarAsistencia(req: NextRequest, usuarioId: string, fechaInicio: string, fechaFin: string | null) {
   const hoy = new Date().toISOString().split('T')[0]
@@ -32,6 +33,7 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  avisarTurnos()
   const { id } = await params
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
@@ -209,6 +211,7 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  avisarTurnos()
   const { id } = await params
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })

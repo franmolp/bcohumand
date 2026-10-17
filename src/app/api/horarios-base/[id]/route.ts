@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
+import { avisarTurnos } from '@/lib/bco-turnos'
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  avisarTurnos()
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'
@@ -41,6 +43,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  avisarTurnos()
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'

@@ -9,7 +9,7 @@ interface Rol { id: number; nombre: string }
 interface Empleado {
   id: string; usuario: string; reloj: string | null; nombre: string; email: string
   estado_cuenta: string; foto_perfil?: string | null; telefono: string | null; dni: string | null
-  fecha_nacimiento: string | null; ultimo_login: string | null
+  fecha_nacimiento: string | null; ultimo_login: string | null; usa_bco_turnos?: boolean
   ultimo_acceso: string | null; ultimo_dispositivo: string | null
   equipo: Equipo | null; rol: Rol | null
 }
@@ -27,7 +27,7 @@ function EmpAvatar({ emp, size }: { emp: Empleado; size: number }) {
   )
 }
 
-const blank = { nombre: '', email: '', usuario: '', telefono: '', dni: '', fecha_nacimiento: '', reloj: '', password: '', equipo_id: '', rol_id: '2' }
+const blank = { nombre: '', email: '', usuario: '', telefono: '', dni: '', fecha_nacimiento: '', reloj: '', password: '', equipo_id: '', rol_id: '2', usa_bco_turnos: true }
 
 export default function EmpleadosClient() {
   const [list, setList] = useState<Empleado[]>([])
@@ -69,7 +69,7 @@ export default function EmpleadosClient() {
 
   function openNew() { setForm(blank); setEditId(null); setError(''); setModal(true) }
   function openEdit(e: Empleado) {
-    setForm({ nombre: e.nombre, email: e.email, usuario: e.usuario || '', telefono: e.telefono || '', dni: e.dni || '', fecha_nacimiento: e.fecha_nacimiento?.split('T')[0] || '', reloj: e.reloj || '', password: '', equipo_id: e.equipo?.id?.toString() || '', rol_id: e.rol?.id?.toString() || '2' })
+    setForm({ nombre: e.nombre, email: e.email, usuario: e.usuario || '', telefono: e.telefono || '', dni: e.dni || '', fecha_nacimiento: e.fecha_nacimiento?.split('T')[0] || '', reloj: e.reloj || '', password: '', equipo_id: e.equipo?.id?.toString() || '', rol_id: e.rol?.id?.toString() || '2' , usa_bco_turnos: e.usa_bco_turnos ?? true })
     setEditId(e.id); setError(''); setModal(true)
   }
 
@@ -308,6 +308,10 @@ export default function EmpleadosClient() {
             <Select label="Equipo" value={form.equipo_id} onChange={v => setForm({ ...form, equipo_id: v })}><option value="">Sin equipo</option>{equipos.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}</Select>
             <Select label="Rol" value={form.rol_id} onChange={v => setForm({ ...form, rol_id: v })}>{roles.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}</Select>
           </div>
+          <label className="flex items-center justify-between gap-3 p-3 rounded-xl border border-gray-200 cursor-pointer">
+            <span><span className="block text-[14px] font-semibold">Usa BCO Turnos</span><span className="block text-[12px] text-gray-500">Aparece en el equipo de BCO Turnos con su rol. Si se apaga o se archiva, pierde el acceso.</span></span>
+            <input type="checkbox" checked={form.usa_bco_turnos} onChange={e => setForm({ ...form, usa_bco_turnos: e.target.checked })} className="w-5 h-5 accent-[#764ba2] shrink-0" />
+          </label>
           <div className="grid grid-cols-2 gap-3">
             <Input label="Teléfono" value={form.telefono} onChange={f('telefono')} placeholder="2216044653" />
             <Input label="DNI" value={form.dni} onChange={f('dni')} placeholder="36778408" />

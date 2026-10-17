@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
+import { avisarTurnos } from '@/lib/bco-turnos'
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
@@ -34,6 +35,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  avisarTurnos()
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   const isAdmin = session.rol === 'admin' || session.rol === 'Admin'

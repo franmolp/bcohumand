@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { avisarTurnos } from '@/lib/bco-turnos'
 
 interface Row { nombre: string; fecha: string; inicio: string; fin: string; horas: number }
 
 export async function POST(req: NextRequest) {
+  avisarTurnos()
   const auth = req.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
   const viaCron = cronSecret && auth === `Bearer ${cronSecret}`

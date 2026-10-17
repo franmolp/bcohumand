@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/auth'
 import { crearNotificacion, crearNotificaciones, getAdminAndHRIds } from '@/lib/notificaciones'
+import { avisarTurnos } from '@/lib/bco-turnos'
 
 function fmtF(iso: string): string { const [, m, d] = iso.split('-'); return `${parseInt(d)}/${parseInt(m)}` }
 
@@ -57,6 +58,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  avisarTurnos()
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 

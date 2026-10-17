@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { fmtFechaLarga } from '@/lib/fecha'
 import { deArticulo } from '@/lib/gaps'
 import { crearNotificacion } from '@/lib/notificaciones'
+import { avisarTurnos } from '@/lib/bco-turnos'
 
 function puedeAprobar(rol: string): boolean {
   return rol === 'admin' || rol === 'Admin' || rol === 'Encargada'
@@ -15,6 +16,7 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  avisarTurnos()
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   if (!puedeAprobar(session.rol)) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })

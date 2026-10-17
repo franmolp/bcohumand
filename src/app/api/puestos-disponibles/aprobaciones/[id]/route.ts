@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { fmtFechaLarga } from '@/lib/fecha'
 import { crearNotificacion, crearNotificaciones } from '@/lib/notificaciones'
+import { avisarTurnos } from '@/lib/bco-turnos'
 
 function puedeAprobar(rol: string): boolean {
   return rol === 'admin' || rol === 'Admin' || rol === 'Encargada'
@@ -16,6 +17,7 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  avisarTurnos()
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   if (!puedeAprobar(session.rol)) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
@@ -100,6 +102,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  avisarTurnos()
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   if (!esAdmin(session.rol)) return NextResponse.json({ error: 'Prohibido' }, { status: 403 })
