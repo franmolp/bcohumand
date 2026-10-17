@@ -3,6 +3,8 @@ import { supabase } from '@/lib/supabase'
 import { getSession } from '@/lib/auth'
 import { crearNotificacion } from '@/lib/notificaciones'
 import { avisarTurnos } from '@/lib/bco-turnos'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+import { aplicarCambio, esCambioHorario, evaluarCambio } from '@/lib/cambio-horario'
 
 async function regenerarAsistencia(req: NextRequest, usuarioId: string, fechaInicio: string, fechaFin: string | null) {
   const hoy = new Date().toISOString().split('T')[0]
@@ -78,6 +80,14 @@ export async function PUT(
     // Admin: aprobar / rechazar (acción rápida)
     if (body.action === 'approve' || body.action === 'reject') {
       const estado = body.action === 'approve' ? 'approved' : 'rejected'
+      // Cambio de horario/día: solo se aprueba si hay espacio de trabajo libre (salvo que se fuerce)
+      if (estado === 'approved') {
+        const { data: sol } = await supabaseAdmin.from('solicitudes').select('id, usuario_id, tipo, subtipo_horario, fecha_inicio, fecha_compensacion, horario_nuevo').eq('id', id).single()
+        if (sol && esCambioHorario(sol.tipo)) {
+          const ev = await evaluarCambio(sol)
+          if (!ev.posible && !body.forzar) return NextResponse.json({ error: ev.mensaje, sin_lugar: true }, { status: 409 })
+        }
+      }
 
       const { data, error } = await supabase
         .from('solicitudes')
@@ -92,6 +102,9 @@ export async function PUT(
         .single()
 
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+      // Aprobado un cambio de horario/día: el horario se modifica solo
+      if (estado === 'approved' && data && esCambioHorario(data.tipo)) await aplicarCambio(data)
 
       // Notificar al empleado dueño de la solicitud
       if (data?.usuario_id && data.usuario_id !== session.id) {

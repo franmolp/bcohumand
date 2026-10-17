@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { avisarTurnos } from '@/lib/bco-turnos'
+import { reaplicarCambios } from '@/lib/cambio-horario'
 
 interface Row { nombre: string; fecha: string; inicio: string; fin: string; horas: number }
 
@@ -66,6 +67,9 @@ export async function POST(req: NextRequest) {
       .insert(records.slice(i, i + BATCH))
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  // Los cambios de horario aprobados en Humand mandan sobre lo que trae Fresha
+  await reaplicarCambios(fechaMin, fechaMax)
 
   await supabaseAdmin
     .from('configuracion')

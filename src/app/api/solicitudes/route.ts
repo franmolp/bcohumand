@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/auth'
 import { crearNotificacion, crearNotificaciones, getAdminAndHRIds } from '@/lib/notificaciones'
 import { avisarTurnos } from '@/lib/bco-turnos'
+import { aplicarCambio, esCambioHorario } from '@/lib/cambio-horario'
 
 function fmtF(iso: string): string { const [, m, d] = iso.split('-'); return `${parseInt(d)}/${parseInt(m)}` }
 
@@ -157,6 +158,9 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // Cambio de horario/día cargado ya aprobado: el horario se modifica solo
+    if (data?.estado === 'approved' && esCambioHorario(data.tipo)) await aplicarCambio(data)
 
     // Notificaciones
     const isFeriadoApproved = tipo === 'Feriado/Local cerrado'

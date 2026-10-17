@@ -687,6 +687,15 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
   const [comentario, setComentario]   = useState('')
   const [processing, setProcessing]   = useState(false)
   const [approveItem, setApproveItem] = useState<Solicitud | null>(null)
+  // Cambio de horario/día: si hay espacio de trabajo libre en el horario nuevo
+  const [evalCambio, setEvalCambio] = useState<{ id: string; posible: boolean; mensaje: string } | null>(null)
+  const [sinLugar, setSinLugar] = useState(false)
+  useEffect(() => {
+    if (!approveItem || !(approveItem.tipo === 'Cambio de horario/día' || approveItem.tipo === 'Cambio de Horario')) return
+    let vivo = true
+    fetch(`/api/solicitudes/${approveItem.id}/evaluar-cambio`).then(r => r.json()).then(d => { if (vivo && d.aplica) setEvalCambio({ id: approveItem.id, posible: d.posible, mensaje: d.mensaje }) }).catch(() => {})
+    return () => { vivo = false }
+  }, [approveItem])
   const [deleteItem, setDeleteItem]   = useState<Solicitud | null>(null)
 
   // Ver certificado
@@ -926,15 +935,16 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
   }
 
   // ─── Aprobar ───
-  async function approve() {
+  async function approve(forzar = false) {
     if (!approveItem) return
     setProcessing(true)
-    await fetch(`/api/solicitudes/${approveItem.id}`, {
+    const r = await fetch(`/api/solicitudes/${approveItem.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'approve', comentario_admin: comentario || null }),
+      body: JSON.stringify({ action: 'approve', comentario_admin: comentario || null, forzar }),
     })
-    setApproveItem(null); setComentario(''); setProcessing(false); setToast('Solicitud aprobada'); load()
+    if (r.status === 409) { setSinLugar(true); setProcessing(false); return }
+    setApproveItem(null); setComentario(''); setSinLugar(false); setEvalCambio(null); setProcessing(false); setToast('Solicitud aprobada'); load()
   }
 
   // ─── Rechazar ───
@@ -1531,11 +1541,11 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
       )}
 
       {/* ─── Modal: Aprobar ─── */}
-      <Modal open={!!approveItem} onClose={() => { setApproveItem(null); setComentario('') }}
+      <Modal open={!!approveItem} onClose={() => { setApproveItem(null); setComentario(''); setSinLugar(false); setEvalCambio(null) }}
         title="Aprobar solicitud"
         footer={<>
           <Button variant="secondary" onClick={() => { setApproveItem(null); setComentario('') }} className="flex-1 lg:flex-none">Cancelar</Button>
-          <Button onClick={approve} loading={processing} className="flex-1 lg:flex-none">Aprobar</Button>
+          <Button onClick={() => approve(sinLugar)} loading={processing} className="flex-1 lg:flex-none">{sinLugar ? 'Aprobar igual' : 'Aprobar'}</Button>
         </>}>
         {approveItem && (
           <div className="space-y-4">
@@ -1549,6 +1559,13 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
               {approveItem.motivo && <p className="text-[12px] text-gray-500 mt-1 italic">"{approveItem.motivo}"</p>}
             </div>
             <Advertencias v={validaciones[approveItem.id]} />
+            {evalCambio?.id === approveItem.id && (
+              <div className={`p-3 rounded-xl text-[13px] ${evalCambio.posible ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'}`}>
+                <p className="font-semibold">{evalCambio.posible ? 'Se puede hacer el cambio' : 'No hay espacio de trabajo para este cambio'}</p>
+                <p>{evalCambio.mensaje}</p>
+                <p className="mt-1 opacity-80">{evalCambio.posible ? 'Al aprobar, el horario se modifica solo.' : sinLugar ? 'Si igual lo aprobás, el horario se modifica aunque se superpongan puestos.' : 'Para aprobarlo igual, tocá Aprobar y confirmá.'}</p>
+              </div>
+            )}
             <div>
               <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">Comentario al empleado <span className="font-normal text-[var(--text-muted)]">(opcional)</span></label>
               <textarea value={comentario} onChange={e => setComentario(e.target.value)}
