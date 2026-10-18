@@ -93,12 +93,15 @@ export async function POST(req: Request) {
 
   // Si es un pedido de LIMPIEZA, avisar al equipo de limpieza (además del admin),
   // que es quien lo va a resolver. Se excluye a quien lo cargó.
+  // ANÓNIMO: al equipo de limpieza NO se le dice quién lo pidió (solo el título),
+  // para que no quede expuesto quién hizo la solicitud. El admin sí ve el nombre
+  // (en su propia notificación de arriba y en la lista de solicitudes).
   if ((categoria || 'otro') === 'limpieza') {
     const limpiezaIds = (await getUserIdsByEquipo('Limpieza')).filter(id => id !== session.id)
     if (limpiezaIds.length) {
       await crearNotificaciones(limpiezaIds, {
         titulo: 'Nueva solicitud especial de limpieza',
-        mensaje: `${targetNombre}: ${titulo.trim()}`,
+        mensaje: titulo.trim(),
         tipo: 'limpieza_pedido',
         url: '/dashboard/limpieza?tab=pedidos',
       }).catch(() => {})

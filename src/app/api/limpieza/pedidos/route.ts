@@ -22,5 +22,12 @@ export async function GET() {
     .eq('categoria', 'limpieza')
     .order('creado_en', { ascending: false })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data ?? [])
+
+  // ANÓNIMO para el equipo de limpieza: no exponemos quién hizo la solicitud
+  // (ni en la respuesta de la API). El admin sí puede ver el nombre.
+  const rows = data ?? []
+  if (!esAdmin(session.rol)) {
+    return NextResponse.json(rows.map(({ nombre_empleada, ...resto }) => resto)) // eslint-disable-line @typescript-eslint/no-unused-vars
+  }
+  return NextResponse.json(rows)
 }
