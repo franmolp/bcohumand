@@ -1,4 +1,4 @@
-name: Importar datos Fresha
+name: Importar citas (BCO Turnos)
 
 on:
   schedule:
@@ -17,38 +17,20 @@ jobs:
   import:
     name: Descargar e importar reportes
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Instalar dependencias
-        run: npm ci
-
-      - name: Instalar Chromium para Playwright
-        run: npx playwright install chromium --with-deps
-
-      - name: Importar datos de Fresha
+      # Fresha quedó apagado: las citas por empleada salen de BCO Turnos. Los horarios del equipo se cargan en Humand.
+      - name: Importar citas desde BCO Turnos
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          FRESHA_SESSION: ${{ secrets.FRESHA_SESSION }}
           FROM: ${{ inputs.from }}
           TO: ${{ inputs.to }}
-        run: node scripts/fresha-scraper.mjs
-
-      - name: Subir screenshots de debug si el job falló
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: fresha-debug-screenshots
-          path: /tmp/fresha-*-debug.png
-          if-no-files-found: ignore
-          retention-days: 3
+        run: |
+          Q=""
+          if [ -n "$FROM" ] && [ -n "$TO" ]; then Q="?desde=$FROM&hasta=$TO"; fi
+          R=$(curl -sS -m 90 -w '\n%{http_code}' -X POST -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/importar/citas-turnos$Q")
+          echo "$R"
+          echo "::notice::$(echo "$R" | head -1)"
+          [ "$(echo "$R" | tail -1)" = "200" ]
