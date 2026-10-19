@@ -20,7 +20,8 @@ export async function GET(req: NextRequest) {
   const [roles, sol, hor, pue] = await Promise.all([
     supabaseAdmin.from('roles').select('id, nombre').order('id'),
     supabaseAdmin.from('solicitudes').select('id, usuario_id, tipo, fecha_inicio, fecha_fin, motivo, comentario_admin, moderador').eq('estado', 'approved').in('tipo', TIPOS_AUSENCIA).gte('fecha_fin', desde).lte('fecha_inicio', hasta),
-    supabaseAdmin.from('horarios_base').select('usuario_id, fecha, inicio_base, fin_base').gte('fecha', desde).lte('fecha', hasta).order('fecha').range(0, 9999),
+    // editado: cambiado en Humand (cambio de horario aprobado o corrección en Asistencia); el resto es el horario que manda BCO Turnos
+    supabaseAdmin.from('horarios_base').select('usuario_id, fecha, inicio_base, fin_base, editado').gte('fecha', desde).lte('fecha', hasta).order('fecha').range(0, 9999),
     supabaseAdmin.from('solicitudes_puesto').select('id, usuario_id, equipo_nombre, tipo_recurso, fecha, hora_inicio, hora_fin').eq('estado', 'approved').gte('fecha', desde).lte('fecha', hasta),
   ])
   for (const r of [roles, sol, hor, pue]) if (r.error) return NextResponse.json({ error: r.error.message }, { status: 500 })
@@ -35,7 +36,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     desde, hasta, tipos_ausencia: TIPOS_AUSENCIA, roles: roles.data ?? [], empleados,
     ausencias: (sol.data ?? []).map(s => ({ id: s.id, usuario_id: s.usuario_id, tipo: s.tipo, desde: String(s.fecha_inicio).slice(0, 10), hasta: String(s.fecha_fin ?? s.fecha_inicio).slice(0, 10), motivo: s.motivo, comentario: s.comentario_admin, aprobado_por: s.moderador })),
-    horarios: (hor.data ?? []).filter(h => h.inicio_base && h.fin_base).map(h => ({ usuario_id: h.usuario_id, fecha: String(h.fecha).slice(0, 10), desde: hm(h.inicio_base), hasta: hm(h.fin_base) })),
+    horarios: (hor.data ?? []).filter(h => h.inicio_base && h.fin_base).map(h => ({ usuario_id: h.usuario_id, fecha: String(h.fecha).slice(0, 10), desde: hm(h.inicio_base), hasta: hm(h.fin_base), editado: !!h.editado })),
     puestos: (pue.data ?? []).map(p => ({ id: p.id, usuario_id: p.usuario_id, recurso: p.tipo_recurso, equipo: p.equipo_nombre, fecha: String(p.fecha).slice(0, 10), desde: hm(p.hora_inicio), hasta: hm(p.hora_fin) })),
   })
 }

@@ -1,4 +1,4 @@
-name: Importar citas (BCO Turnos)
+name: Importar citas y horarios (BCO Turnos)
 
 on:
   schedule:
@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      # Fresha quedó apagado: las citas por empleada salen de BCO Turnos. Los horarios del equipo se cargan en Humand.
+      # Fresha quedó apagado: las citas por empleada y los horarios del equipo (turnos programados) salen de BCO Turnos.
       - name: Importar citas desde BCO Turnos
         env:
           APP_URL: ${{ secrets.APP_URL }}
@@ -31,6 +31,16 @@ jobs:
           Q=""
           if [ -n "$FROM" ] && [ -n "$TO" ]; then Q="?desde=$FROM&hasta=$TO"; fi
           R=$(curl -sS -m 90 -w '\n%{http_code}' -X POST -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/importar/citas-turnos$Q")
+          echo "$R"
+          echo "::notice::$(echo "$R" | head -1)"
+          [ "$(echo "$R" | tail -1)" = "200" ]
+
+      - name: Importar horarios del equipo desde BCO Turnos
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          R=$(curl -sS -m 90 -w '\n%{http_code}' -X POST -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/importar/horarios-turnos")
           echo "$R"
           echo "::notice::$(echo "$R" | head -1)"
           [ "$(echo "$R" | tail -1)" = "200" ]
