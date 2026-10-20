@@ -152,12 +152,13 @@ export default function Navigation({ user, hasPedidosAccess = false, hasPuestosA
         setModulos(mods ?? {})
       } catch { /* ignore */ }
     }
-    let interval: ReturnType<typeof setInterval> | null = setInterval(fetchUnread, 5000)
+    // Cada 30 s con la pantalla a la vista (los avisos importantes llegan además por push); menos uso de servidor en Vercel
+    let interval: ReturnType<typeof setInterval> | null = setInterval(fetchUnread, 30000)
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         // Restart interval fresh — prevents burst of stale ticks after iOS resume
         if (interval) clearInterval(interval)
-        interval = setInterval(fetchUnread, 5000)
+        interval = setInterval(fetchUnread, 30000)
         // Force iOS Safari to recalculate touch targets (clears stale layout cache)
         document.documentElement.getBoundingClientRect()
         fetchUnread()

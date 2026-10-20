@@ -289,7 +289,7 @@ function TabCaja({ mes }: { mes: string }) {
   // otra pestaña o dispositivo mientras esta pantalla queda abierta, se termina
   // viendo solo (no hace falta salir y volver a la pestaña para que aparezca)
   useEffect(() => {
-    const interval = setInterval(() => { cargar(true) }, 15000)
+    const interval = setInterval(() => { if (!document.hidden) cargar(true) }, 60000)
     return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mes])
