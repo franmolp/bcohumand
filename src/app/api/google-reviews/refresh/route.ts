@@ -92,8 +92,10 @@ async function acumularMenciones(
   const empleadas = armarEmpleadas(usuarios ?? [], aliases)
 
   const { data: existentes } = await supabaseAdmin
-    .from('google_menciones').select('review_key').eq('mes', mes)
+    .from('google_menciones').select('review_key, texto, revisado').eq('mes', mes)
   const conocidas = new Set((existentes ?? []).map(r => r.review_key as string))
+  // Texto guardado de cada reseña: si la clienta la edita en Google, se actualiza acá
+  const guardadas = new Map((existentes ?? []).map(r => [r.review_key as string, { texto: (r.texto as string) ?? '', revisado: !!r.revisado }]))
 
   const hoyISO = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
 
@@ -135,7 +137,18 @@ async function acumularMenciones(
         continue // sin iso y fecha relativa fuera del mes → saltarla
       }
       const rk = reviewKey(r)
-      if (conocidas.has(rk)) { yaConocidas++; if (iso) backfill.push({ rk, iso }); continue }
+      if (conocidas.has(rk)) {
+        yaConocidas++
+        if (iso) backfill.push({ rk, iso })
+        // Reseña editada en Google: texto nuevo y empleadas detectadas de nuevo (la asignación manual ya revisada no se toca)
+        const g = guardadas.get(rk)
+        if (g && texto && texto !== g.texto) {
+          const detectados = detectarEmpleadas(texto, empleadas)
+          await supabaseAdmin.from('google_menciones').update({ texto, detectados, ...(g.revisado ? {} : { asignados: detectados }) }).eq('review_key', rk)
+          g.texto = texto
+        }
+        continue
+      }
       conocidas.add(rk)
       const detectados = detectarEmpleadas(texto, empleadas)
       nuevas.push({
