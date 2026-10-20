@@ -20,7 +20,10 @@ export async function GET() {
 
   if (rows && rows.length > 0) {
     const shuffled = [...rows].sort(() => Math.random() - 0.5)
-    return NextResponse.json({ reviews: shuffled })
+    // Calificación y total de Google (los guarda la actualización diaria, una consulta por semana): BCO Turnos los toma de acá
+    const { data: lugar } = await supabaseAdmin.from('configuracion').select('valor').eq('clave', 'google_lugar').maybeSingle()
+    const l = lugar?.valor as { rating?: number | null; total?: number } | undefined
+    return NextResponse.json({ reviews: shuffled, rating: l?.rating ?? null, total: l?.total ?? 0 })
   }
 
   // Fallback cuando la tabla está vacía (primer deploy): llama a SerpAPI y puebla la tabla

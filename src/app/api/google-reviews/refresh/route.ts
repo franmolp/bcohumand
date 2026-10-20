@@ -27,14 +27,22 @@ function textoDeReview(r: SerpReview): string {
   return partes.join(' · ')
 }
 
+// Datos del local en Google (id, calificación promedio y total de reseñas): se guardan y se piden a SerpAPI
+// como mucho una vez por semana (BCO Turnos también los toma de acá, así no gasta créditos aparte)
+export type LugarGoogle = { data_id: string | null; rating: number | null; total: number; en: string }
 async function fetchDataId(key: string): Promise<string | null> {
-  const dataId = process.env.GOOGLE_PLACE_DATA_ID
-  if (dataId) return dataId
-  const url = `https://serpapi.com/search.json?engine=google_maps&q=Beauty+Co+Centro+de+Belleza+y+Peluqueria+La+Plata&ll=@-34.9195,-57.9545,13z&api_key=${key}`
+  const { data } = await supabaseAdmin.from('configuracion').select('valor').eq('clave', 'google_lugar').maybeSingle()
+  const lugar = data?.valor as LugarGoogle | undefined
+  const envId = process.env.GOOGLE_PLACE_DATA_ID ?? null
+  if (lugar?.en && Date.now() - Date.parse(lugar.en) < 7 * 86_400_000 && (envId || lugar.data_id)) return envId || lugar.data_id
+  const url = `https://serpapi.com/search.json?engine=google_maps&q=Beauty+Co+Centro+de+Belleza+y+Peluqueria+La+Plata&ll=@-34.9195,-57.9545,13z&hl=es&api_key=${key}`
   const res = await fetch(url)
-  if (!res.ok) return null
-  const data = await res.json()
-  return (data.local_results?.[0]?.data_id as string) ?? null
+  if (!res.ok) return envId || lugar?.data_id || null
+  const d = await res.json()
+  const l = d.place_results ?? d.local_results?.[0]
+  const nuevo: LugarGoogle = { data_id: envId || (l?.data_id as string) || lugar?.data_id || null, rating: l?.rating ?? lugar?.rating ?? null, total: l?.reviews ?? lugar?.total ?? 0, en: new Date().toISOString() }
+  await supabaseAdmin.from('configuracion').upsert({ clave: 'google_lugar', valor: nuevo }, { onConflict: 'clave' })
+  return nuevo.data_id
 }
 
 // Trae una página de reseñas (opcionalmente con token de paginación) y el token
@@ -105,6 +113,7 @@ async function acumularMenciones(
     // siempre viene 100% ordenado (y algunas reseñas no traen iso_date), eso dejaba
     // afuera reseñas del mes que venían un poco más abajo.
     let hayDelMesEnPagina = false
+    let yaConocidas = 0 // del mes y ya guardadas en una corrida anterior
     for (const r of pagina) {
       leidas++
       if ((r.rating ?? 0) < 4) continue
@@ -126,7 +135,7 @@ async function acumularMenciones(
         continue // sin iso y fecha relativa fuera del mes → saltarla
       }
       const rk = reviewKey(r)
-      if (conocidas.has(rk)) { if (iso) backfill.push({ rk, iso }); continue }
+      if (conocidas.has(rk)) { yaConocidas++; if (iso) backfill.push({ rk, iso }); continue }
       conocidas.add(rk)
       const detectados = detectarEmpleadas(texto, empleadas)
       nuevas.push({
@@ -157,7 +166,9 @@ async function acumularMenciones(
     vueltas++
     // Se frena cuando una página entera ya no tiene reseñas del mes (newest-first, así que
     // más abajo solo hay más viejas), sin token, o al tope de seguridad.
-    if (!hayDelMesEnPagina || !token || vueltas >= 10) break
+    // Ahorro de créditos de SerpAPI: si la página no trajo ninguna nueva y sí del mes ya guardadas, lo que sigue
+    // (más viejo) ya se leyó en días anteriores: no se pide la próxima página
+    if (!hayDelMesEnPagina || !token || vueltas >= 10 || (nuevas.length === 0 && yaConocidas > 0)) break
     const sig = await fetchPagina(dataId, key, token)
     pagina = sig.reviews
     token = sig.next
