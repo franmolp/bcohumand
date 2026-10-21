@@ -101,8 +101,10 @@ export async function POST(req: NextRequest) {
     })()
   }
 
-  // Cargar fuentes de datos en paralelo
-  const [horariosRes, rawRes, primerTurnoRes, solicitudesRes, citasDetalleRes] = await Promise.all([
+  // Cargar fuentes de datos en paralelo. Las CITAS salen SOLO del detalle de BCO Turnos
+  // (fresha_citas_detalle, una fila por cita con su estado y franja). Ya NO se usa
+  // primer_turno_dia (resumen viejo de Fresha, que incluía canceladas y quedó residual).
+  const [horariosRes, rawRes, solicitudesRes, citasDetalleRes] = await Promise.all([
     paginate<{ usuario_id: string; fecha: string; inicio_base: string; fin_base: string; horas_base: number }>(
       'horarios_base', 'usuario_id, fecha, inicio_base, fin_base, horas_base',
       q => q.gte('fecha', fechaInicio).lte('fecha', fechaFinEfectiva)
@@ -111,21 +113,14 @@ export async function POST(req: NextRequest) {
       'asistencia_raw', 'usuario_id, fecha, hora',
       q => q.gte('fecha', fechaInicio).lte('fecha', fechaFinEfectiva)
     ),
-    paginate<{ usuario_id: string; fecha: string; primer_turno: string; cant_citas: number }>(
-      'primer_turno_dia', 'usuario_id, fecha, primer_turno, cant_citas',
-      q => q.gte('fecha', fechaInicio).lte('fecha', fechaFinEfectiva)
-    ),
     supabase.from('solicitudes')
       .select('usuario_id, tipo, fecha_inicio, fecha_fin, estado')
       .in('estado', ['approved', 'pending'])
       .lte('fecha_inicio', fechaFinEfectiva)
       .or(`fecha_fin.gte.${fechaInicio},fecha_fin.is.null`)
       .limit(10000),
-    // Detalle de citas (una fila por cita, con su estado). Lo llena BCO Turnos; sirve
-    // para contar las citas REALES excluyendo canceladas/no-show, porque el cant_citas
-    // de primer_turno_dia viene de BCO incluyendo las canceladas.
-    paginate<{ usuario_id: string; fecha: string; estado: string | null }>(
-      'fresha_citas_detalle', 'usuario_id, fecha, estado',
+    paginate<{ usuario_id: string; fecha: string; estado: string | null; franja_inicio: string | null }>(
+      'fresha_citas_detalle', 'usuario_id, fecha, estado, franja_inicio',
       q => q.gte('fecha', fechaInicio).lte('fecha', fechaFinEfectiva)
     ),
   ])
@@ -160,24 +155,22 @@ export async function POST(req: NextRequest) {
     rawMap.get(key)!.push(r.hora)
   }
 
-  const primerTurnoMap = new Map<string, { primer_turno: string; cant_citas: number }>()
-  for (const pt of primerTurnoRes.data ?? []) {
-    primerTurnoMap.set(`${pt.usuario_id}|${pt.fecha}`, {
-      primer_turno: pt.primer_turno,
-      cant_citas: pt.cant_citas ?? 0,
-    })
-  }
-
-  // Conteo de citas REALES por uid|fecha desde el detalle: total de filas y cuántas NO
-  // están canceladas. Si hay detalle para ese día, manda este conteo (excluye canceladas);
-  // si no hay detalle, se cae al cant_citas de primer_turno_dia.
+  // Citas de BCO Turnos (ÚNICA fuente, desde el detalle). Por uid|fecha:
+  //  - citasRealesMap: cantidad de citas NO canceladas (0 ⇒ "Sin turnos").
+  //  - primerTurnoMap: horario de la PRIMERA cita real, para la regla de "llegada tarde
+  //    justificada" (si la primera cita arranca bastante después del horario base).
+  // Ya no se usa primer_turno_dia (resumen viejo de Fresha, residual).
   const citasRealesMap = new Map<string, number>()
-  const tieneDetalle = new Set<string>()
+  const primerTurnoMap = new Map<string, string>()
   for (const c of citasDetalleRes.data ?? []) {
-    // fecha normalizada a YYYY-MM-DD por si la columna viene como timestamp.
+    if (esCancelada(c.estado)) continue
     const key = `${c.usuario_id}|${String(c.fecha).slice(0, 10)}`
-    tieneDetalle.add(key)
-    if (!esCancelada(c.estado)) citasRealesMap.set(key, (citasRealesMap.get(key) ?? 0) + 1)
+    citasRealesMap.set(key, (citasRealesMap.get(key) ?? 0) + 1)
+    const ini = (c.franja_inicio ?? '').slice(0, 5)
+    if (ini) {
+      const prev = primerTurnoMap.get(key)
+      if (!prev || ini < prev) primerTurnoMap.set(key, ini)
+    }
   }
 
   // Solicitudes: uid|fecha → { tipo, estado } (approved tiene prioridad sobre pending)
@@ -235,26 +228,20 @@ export async function POST(req: NextRequest) {
       const key = `${usuario.id}|${fecha}`
       const horario = horarioMap.get(key) ?? null
       const fichadas = rawMap.get(key) ?? []
-      const turnoData = primerTurnoMap.get(key) ?? null
       const solicitud = solicitudMap.get(key) ?? null
 
       // No generar fila si no hay datos
       if (!horario && fichadas.length === 0 && !solicitud) continue
 
-      // Citas REALES del día (para decidir "Sin turnos" vs "Sin fichada"):
-      // - Si hay detalle de citas ese día (BCO), se cuentan las NO canceladas. Así, si
-      //   todas sus citas se cancelaron (no fue a trabajar), quedan 0 => "Sin turnos".
-      // - Si no hay detalle, se cae al cant_citas de primer_turno_dia (que BCO manda
-      //   incluyendo canceladas, pero es lo único disponible en ese caso).
-      // "Sin fichada" solo con citas reales > 0; null/0/vacío => 0 => "Sin turnos".
-      const cantCitas = tieneDetalle.has(key)
-        ? (citasRealesMap.get(key) ?? 0)
-        : (Number(turnoData?.cant_citas) || 0)
+      // Citas reales del día (BCO Turnos): cantidad de citas no canceladas. 0 => "Sin
+      // turnos"; > 0 y sin fichada => "Sin fichada". No hay fallback a Fresha.
+      const cantCitas = citasRealesMap.get(key) ?? 0
+      const primerTurno = primerTurnoMap.get(key) ?? null
 
       const result = computeChip({
         horario: horario ? { inicio: horario.inicio, fin: horario.fin, horas: horario.horas } : null,
         fichadas,
-        primerTurno: turnoData?.primer_turno ?? null,
+        primerTurno,
         cantCitas,
         solicitudTipo: solicitud?.tipo ?? null,
         solicitudEstado: (solicitud?.estado ?? null) as 'pending' | 'approved' | 'rejected' | null,

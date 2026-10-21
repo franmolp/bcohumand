@@ -77,17 +77,20 @@ export async function GET(req: NextRequest) {
     const fichadas = (raw.data ?? []).map(r => r.hora as string)
     const pt = primerTurno.data?.[0] ?? null
 
-    // Conteo real de citas (igual que la regeneración): si hay detalle, se cuentan las
-    // NO canceladas; si no, se cae al cant_citas de primer_turno_dia.
+    // Citas SOLO de BCO Turnos (detalle). cant_citas de primer_turno_dia (Fresha) ya NO
+    // se usa — se muestra abajo solo como referencia residual.
     const detalle = citas.data ?? []
-    const citasReales = detalle.length
-      ? detalle.filter(c => !esCancelada(c.estado as string | null)).length
-      : (Number(pt?.cant_citas) || 0)
+    const noCanceladas = detalle.filter(c => !esCancelada(c.estado as string | null))
+    const citasReales = noCanceladas.length
+    const primerTurnoReal = noCanceladas
+      .map(c => ((c.franja_inicio as string | null) ?? '').slice(0, 5))
+      .filter(Boolean)
+      .sort()[0] ?? null
 
     const recomputed = computeChip({
       horario,
       fichadas,
-      primerTurno: pt?.primer_turno ?? null,
+      primerTurno: primerTurnoReal,
       cantCitas: citasReales,
       solicitudTipo: null,
       solicitudEstado: null,
@@ -104,18 +107,18 @@ export async function GET(req: NextRequest) {
       horario_base: horarios.data ?? [],
       horario_base_efectivo: horario,
       fichadas_raw: fichadas,
-      primer_turno_dia: pt,
-      citas_reales_sin_canceladas: citasReales,
+      // Fuente ÚNICA de citas = BCO Turnos (fresha_citas_detalle):
+      citas_bco_reales_sin_canceladas: citasReales,
+      citas_bco_canceladas: canceladas,
       // Diagnóstico directo del problema "Sin fichada vs Sin turnos":
       diagnostico: citasReales > 0
-        ? `Hay ${citasReales} cita(s) reales (no canceladas) → se clasifica "Sin fichada" si no fichó.`
+        ? `BCO: ${citasReales} cita(s) reales (no canceladas) → "Sin fichada" si no fichó.`
         : detalle.length > 0
-          ? `Las ${detalle.length} cita(s) del día están TODAS canceladas → citas reales = 0 → debería dar "Sin turnos" (BCO manda cant_citas=${cantCitasBruto} contando las canceladas).`
-          : !pt
-            ? 'No hay citas ni fila en primer_turno_dia → "Sin turnos".'
-            : `Sin detalle de citas y cant_citas=${pt.cant_citas ?? 'null'} → ${cantCitasBruto > 0 ? '"Sin fichada"' : '"Sin turnos"'}.`,
-      cant_citas_bruto_bco: cantCitasBruto,
-      citas_canceladas: canceladas,
+          ? `BCO: las ${detalle.length} cita(s) del día están TODAS canceladas → 0 reales → "Sin turnos".`
+          : 'BCO no tiene citas ese día (detalle vacío) → 0 citas → "Sin turnos".',
+      // Residual de Fresha (ya NO se usa para el cálculo, solo referencia):
+      primer_turno_dia_RESIDUAL_FRESHA: pt,
+      cant_citas_residual_fresha: cantCitasBruto,
       fresha_citas_detalle: citas.data ?? [],
       asistencia_procesada_guardada: guardada,
       chip_recalculado_ahora: recomputed,
