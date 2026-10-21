@@ -204,7 +204,13 @@ export async function POST(req: NextRequest) {
         horario: horario ? { inicio: horario.inicio, fin: horario.fin, horas: horario.horas } : null,
         fichadas,
         primerTurno: turnoData?.primer_turno ?? null,
-        cantCitas: turnoData?.cant_citas ?? (turnoData ? 1 : 0),
+        // "Sin fichada" (vs "Sin turnos") SOLO cuando hay evidencia positiva de citas:
+        // cant_citas > 0. Todo lo demás (null, 0, vacío o sin número) => 0 citas =>
+        // "Sin turnos". BCO Turnos manda fila también para días SIN turnos; si ahí
+        // cant_citas viene null, antes se asumía 1 cita y las marcaba "Sin fichada",
+        // disparándoles el aviso de "te olvidaste de fichar". Number(null|''|undefined)
+        // || 0 = 0, así que esos casos quedan bien; una cantidad real (>=1) se respeta.
+        cantCitas: Number(turnoData?.cant_citas) || 0,
         solicitudTipo: solicitud?.tipo ?? null,
         solicitudEstado: (solicitud?.estado ?? null) as 'pending' | 'approved' | 'rejected' | null,
         teamType,
