@@ -39,6 +39,12 @@ export async function GET(req: NextRequest) {
     ? { ...DEFAULT_CONFIG, ...(configData.valor as object) }
     : DEFAULT_CONFIG
 
+  // Timestamps de última importación, para detectar datos residuales/viejos.
+  const { data: tsRows } = await supabaseAdmin
+    .from('configuracion').select('clave, valor')
+    .in('clave', ['ultima_importacion_citas_fresha', 'ultima_importacion_fichadas'])
+  const tsMap = new Map((tsRows ?? []).map(r => [r.clave, (r.valor as { fecha?: string } | null)?.fecha ?? null]))
+
   const out = []
   for (const u of matches) {
     const equipoRaw = u.equipos as { nombre: string } | { nombre: string }[] | null
@@ -74,7 +80,8 @@ export async function GET(req: NextRequest) {
       horario,
       fichadas,
       primerTurno: pt?.primer_turno ?? null,
-      cantCitas: pt?.cant_citas ?? (pt ? 1 : 0),
+      // Mismo criterio que la regeneración: "Sin fichada" solo con cant_citas > 0.
+      cantCitas: Number(pt?.cant_citas) || 0,
       solicitudTipo: null,
       solicitudEstado: null,
       teamType,
@@ -82,22 +89,37 @@ export async function GET(req: NextRequest) {
       esRecepcion,
     })
 
+    const guardada = procesada.data?.[0] ?? null
+    const cantCitasNum = Number(pt?.cant_citas) || 0
     out.push({
       usuario: { id: u.id, nombre: u.nombre, reloj: u.reloj, equipo: equipoNombre, teamType, esRecepcion },
       horario_base: horarios.data ?? [],
       horario_base_efectivo: horario,
       fichadas_raw: fichadas,
       primer_turno_dia: pt,
+      // Diagnóstico directo del problema "Sin fichada vs Sin turnos":
+      diagnostico: !pt
+        ? 'NO hay fila en primer_turno_dia para este día → cant_citas=0 → debería dar "Sin turnos".'
+        : cantCitasNum > 0
+          ? `HAY fila con cant_citas=${cantCitasNum} (>0) → se clasifica "Sin fichada". Si no tuvo turnos, este número está MAL (turno fantasma/residual: BCO mandó una cita que no corresponde, o quedó un dato viejo).`
+          : `HAY fila pero cant_citas=${pt.cant_citas ?? 'null'} (=0) → debería dar "Sin turnos".`,
       fresha_citas_detalle: citas.data ?? [],
-      asistencia_procesada_guardada: procesada.data?.[0] ?? null,
+      asistencia_procesada_guardada: guardada,
       chip_recalculado_ahora: recomputed,
-      nota_editado_manual: procesada.data?.[0]?.editado_manual
-        ? 'ESTE DÍA ESTÁ MARCADO COMO EDITADO MANUALMENTE → la regeneración NO lo pisa.'
+      coincide_guardado_vs_recalculado: guardada?.estado === recomputed.estado,
+      nota_editado_manual: guardada?.editado_manual
+        ? 'ESTE DÍA ESTÁ MARCADO COMO EDITADO MANUALMENTE → la regeneración NO lo pisa (por eso puede no cambiar al regenerar).'
         : 'No está editado manualmente.',
     })
   }
 
-  return NextResponse.json({ fecha, config: { toleranciaEntrada: config.toleranciaEntrada }, resultados: out }, {
+  return NextResponse.json({
+    fecha,
+    ultima_importacion_citas: tsMap.get('ultima_importacion_citas_fresha') ?? null,
+    ultima_importacion_fichadas: tsMap.get('ultima_importacion_fichadas') ?? null,
+    config: { toleranciaEntrada: config.toleranciaEntrada },
+    resultados: out,
+  }, {
     headers: { 'Cache-Control': 'no-store' },
   })
 }

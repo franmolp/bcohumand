@@ -26,13 +26,11 @@ export async function POST(req: NextRequest) {
 
   const records: Record<string, unknown>[] = []
   const noEncontrados = new Set<string>()
-  const matchedIds = new Set<string>()
   const dates = new Set<string>()
 
   for (const row of rows) {
     const uid = nameMap.get(norm(row.nombre))
     if (!uid) { noEncontrados.add(row.nombre); continue }
-    matchedIds.add(uid)
     dates.add(row.fecha)
     records.push({
       usuario_id: uid,
@@ -45,11 +43,16 @@ export async function POST(req: NextRequest) {
 
   if (!records.length) return NextResponse.json({ ok: 0, noEncontrados: [...noEncontrados], total: rows.length })
 
-  // Replace primer_turno_dia for affected users + dates
+  // Reemplazo por FECHA (no por usuario+fecha). El import es un snapshot completo de
+  // las citas de esas fechas, así que para cada fecha borramos TODO y reinsertamos lo
+  // que vino. Antes se borraba solo por usuario+fecha: si una empleada tenía turnos y
+  // después se los cancelaban (y BCO/Fresha ya no la mandaba en el import), su fila
+  // vieja con cant_citas>0 quedaba para siempre y la marcaba "Sin fichada" sin haber
+  // tenido turnos (el "turno fantasma/residual" que notaste). Borrando por fecha, la
+  // que no viene en el payload queda sin fila → cant_citas=0 → "Sin turnos".
   const { error: delErr } = await supabaseAdmin
     .from('primer_turno_dia')
     .delete()
-    .in('usuario_id', [...matchedIds])
     .in('fecha', [...dates])
   if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 })
 
