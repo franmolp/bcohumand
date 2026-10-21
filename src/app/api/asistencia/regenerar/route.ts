@@ -28,12 +28,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'fechaInicio y fechaFin requeridos' }, { status: 400 })
   }
 
-  // Nunca procesar hoy ni fechas futuras — siempre cap a ayer
-  const ayerD = new Date(); ayerD.setDate(ayerD.getDate() - 1)
-  const ayerStr = ayerD.toISOString().split('T')[0]
+  // Nunca procesar hoy ni fechas futuras — cap a AYER en hora Argentina. OJO: en
+  // Vercel new Date() es UTC, y de tarde/noche en Argentina (UTC-3) eso ya es el
+  // día siguiente; "ayer UTC" podía ser HOY en Argentina y se procesaba el día en
+  // curso con las citas de BCO (que conoce los turnos) pero sin las fichadas de
+  // HikVision todavía, marcándolo "Sin turnos/Sin fichada" con datos incompletos.
+  const hoyAR = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+  const ayerAR = new Date(hoyAR + 'T12:00:00Z'); ayerAR.setUTCDate(ayerAR.getUTCDate() - 1)
+  const ayerStr = ayerAR.toISOString().split('T')[0]
   const fechaFinEfectiva = fechaFin > ayerStr ? ayerStr : fechaFin
+  // Rango a BORRAR = el pedido completo (incluye hoy/futuro), para limpiar filas
+  // que hayan quedado de una corrida vieja con el bug de arriba. Se reinsertan solo
+  // los días <= ayer, así hoy y el futuro quedan SIN registro => la vista muestra
+  // "Sin datos" hasta que el día cierre y lleguen las fichadas.
+  const fechaFinBorrar = fechaFin
 
   if (fechaFinEfectiva < fechaInicio) {
+    // El rango pedido es íntegramente hoy/futuro: no hay nada que procesar, pero
+    // igual limpiamos cualquier registro no-manual que haya quedado de antes.
+    let delQ = supabaseAdmin
+      .from('asistencia_procesada')
+      .delete()
+      .gte('fecha', fechaInicio)
+      .lte('fecha', fechaFinBorrar)
+      .or('editado_manual.is.null,editado_manual.eq.false')
+    if (usuarioId) delQ = delQ.eq('usuario_id', usuarioId)
+    await delQ
     return NextResponse.json({ procesados: 0 })
   }
 
@@ -254,28 +274,30 @@ export async function POST(req: NextRequest) {
       .delete()
       .in('usuario_id', sinRelojIds)
       .gte('fecha', fechaInicio)
-      .lte('fecha', fechaFinEfectiva)
+      .lte('fecha', fechaFinBorrar)
   }
 
-  // Preservar registros editados manualmente
+  // Preservar registros editados manualmente (en todo el rango pedido, incl. hoy/futuro)
   const userIds = usuarios.map(u => u.id)
   const { data: manuales } = await supabaseAdmin
     .from('asistencia_procesada')
     .select('usuario_id, fecha')
     .in('usuario_id', userIds)
     .gte('fecha', fechaInicio)
-    .lte('fecha', fechaFinEfectiva)
+    .lte('fecha', fechaFinBorrar)
     .eq('editado_manual', true)
 
   const manualSet = new Set((manuales ?? []).map(r => `${r.usuario_id}|${r.fecha}`))
 
-  // Borrar solo los no editados manualmente
+  // Borrar solo los no editados manualmente, en todo el rango pedido. Al reinsertar
+  // solo días <= ayer, los registros de hoy/futuro quedan borrados y no se recrean
+  // (así se limpian los que hubieran quedado de una corrida vieja con datos a medias).
   const { error: delErr } = await supabaseAdmin
     .from('asistencia_procesada')
     .delete()
     .in('usuario_id', userIds)
     .gte('fecha', fechaInicio)
-    .lte('fecha', fechaFinEfectiva)
+    .lte('fecha', fechaFinBorrar)
     .or('editado_manual.is.null,editado_manual.eq.false')
 
   if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 })
