@@ -174,7 +174,8 @@ export async function POST(req: NextRequest) {
   const citasRealesMap = new Map<string, number>()
   const tieneDetalle = new Set<string>()
   for (const c of citasDetalleRes.data ?? []) {
-    const key = `${c.usuario_id}|${c.fecha}`
+    // fecha normalizada a YYYY-MM-DD por si la columna viene como timestamp.
+    const key = `${c.usuario_id}|${String(c.fecha).slice(0, 10)}`
     tieneDetalle.add(key)
     if (!esCancelada(c.estado)) citasRealesMap.set(key, (citasRealesMap.get(key) ?? 0) + 1)
   }
