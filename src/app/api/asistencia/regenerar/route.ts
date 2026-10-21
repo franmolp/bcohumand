@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { computeChip, getTeamType, DEFAULT_CONFIG, AsistenciaConfig } from '@/lib/asistencia'
 import { isRecepcion } from '@/lib/gaps'
+import { esCancelada } from '@/lib/citas'
 
 export const maxDuration = 60
 
@@ -101,7 +102,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Cargar fuentes de datos en paralelo
-  const [horariosRes, rawRes, primerTurnoRes, solicitudesRes] = await Promise.all([
+  const [horariosRes, rawRes, primerTurnoRes, solicitudesRes, citasDetalleRes] = await Promise.all([
     paginate<{ usuario_id: string; fecha: string; inicio_base: string; fin_base: string; horas_base: number }>(
       'horarios_base', 'usuario_id, fecha, inicio_base, fin_base, horas_base',
       q => q.gte('fecha', fechaInicio).lte('fecha', fechaFinEfectiva)
@@ -120,6 +121,13 @@ export async function POST(req: NextRequest) {
       .lte('fecha_inicio', fechaFinEfectiva)
       .or(`fecha_fin.gte.${fechaInicio},fecha_fin.is.null`)
       .limit(10000),
+    // Detalle de citas (una fila por cita, con su estado). Lo llena BCO Turnos; sirve
+    // para contar las citas REALES excluyendo canceladas/no-show, porque el cant_citas
+    // de primer_turno_dia viene de BCO incluyendo las canceladas.
+    paginate<{ usuario_id: string; fecha: string; estado: string | null }>(
+      'fresha_citas_detalle', 'usuario_id, fecha, estado',
+      q => q.gte('fecha', fechaInicio).lte('fecha', fechaFinEfectiva)
+    ),
   ])
 
   // Construir mapas. horarios_base puede traer más de una fila el mismo día
@@ -158,6 +166,17 @@ export async function POST(req: NextRequest) {
       primer_turno: pt.primer_turno,
       cant_citas: pt.cant_citas ?? 0,
     })
+  }
+
+  // Conteo de citas REALES por uid|fecha desde el detalle: total de filas y cuántas NO
+  // están canceladas. Si hay detalle para ese día, manda este conteo (excluye canceladas);
+  // si no hay detalle, se cae al cant_citas de primer_turno_dia.
+  const citasRealesMap = new Map<string, number>()
+  const tieneDetalle = new Set<string>()
+  for (const c of citasDetalleRes.data ?? []) {
+    const key = `${c.usuario_id}|${c.fecha}`
+    tieneDetalle.add(key)
+    if (!esCancelada(c.estado)) citasRealesMap.set(key, (citasRealesMap.get(key) ?? 0) + 1)
   }
 
   // Solicitudes: uid|fecha → { tipo, estado } (approved tiene prioridad sobre pending)
@@ -212,25 +231,30 @@ export async function POST(req: NextRequest) {
     const esRecepcion = equipoNombre ? isRecepcion(equipoNombre) : false
 
     for (const fecha of dias) {
-      const horario = horarioMap.get(`${usuario.id}|${fecha}`) ?? null
-      const fichadas = rawMap.get(`${usuario.id}|${fecha}`) ?? []
-      const turnoData = primerTurnoMap.get(`${usuario.id}|${fecha}`) ?? null
-      const solicitud = solicitudMap.get(`${usuario.id}|${fecha}`) ?? null
+      const key = `${usuario.id}|${fecha}`
+      const horario = horarioMap.get(key) ?? null
+      const fichadas = rawMap.get(key) ?? []
+      const turnoData = primerTurnoMap.get(key) ?? null
+      const solicitud = solicitudMap.get(key) ?? null
 
       // No generar fila si no hay datos
       if (!horario && fichadas.length === 0 && !solicitud) continue
+
+      // Citas REALES del día (para decidir "Sin turnos" vs "Sin fichada"):
+      // - Si hay detalle de citas ese día (BCO), se cuentan las NO canceladas. Así, si
+      //   todas sus citas se cancelaron (no fue a trabajar), quedan 0 => "Sin turnos".
+      // - Si no hay detalle, se cae al cant_citas de primer_turno_dia (que BCO manda
+      //   incluyendo canceladas, pero es lo único disponible en ese caso).
+      // "Sin fichada" solo con citas reales > 0; null/0/vacío => 0 => "Sin turnos".
+      const cantCitas = tieneDetalle.has(key)
+        ? (citasRealesMap.get(key) ?? 0)
+        : (Number(turnoData?.cant_citas) || 0)
 
       const result = computeChip({
         horario: horario ? { inicio: horario.inicio, fin: horario.fin, horas: horario.horas } : null,
         fichadas,
         primerTurno: turnoData?.primer_turno ?? null,
-        // "Sin fichada" (vs "Sin turnos") SOLO cuando hay evidencia positiva de citas:
-        // cant_citas > 0. Todo lo demás (null, 0, vacío o sin número) => 0 citas =>
-        // "Sin turnos". BCO Turnos manda fila también para días SIN turnos; si ahí
-        // cant_citas viene null, antes se asumía 1 cita y las marcaba "Sin fichada",
-        // disparándoles el aviso de "te olvidaste de fichar". Number(null|''|undefined)
-        // || 0 = 0, así que esos casos quedan bien; una cantidad real (>=1) se respeta.
-        cantCitas: Number(turnoData?.cant_citas) || 0,
+        cantCitas,
         solicitudTipo: solicitud?.tipo ?? null,
         solicitudEstado: (solicitud?.estado ?? null) as 'pending' | 'approved' | 'rejected' | null,
         teamType,
