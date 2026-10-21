@@ -2384,23 +2384,6 @@ type ImportStep = 'idle' | 'working' | 'done' | 'error'
 interface ImportResult { ok: number; noEncontrados: string[]; total: number }
 
 function ImportarTab() {
-  const [disparando, setDisparando] = useState(false)
-  const [disparoMsg, setDisparoMsg] = useState<{ texto: string; error: boolean } | null>(null)
-
-  async function dispararFresha() {
-    setDisparando(true); setDisparoMsg(null)
-    try {
-      const res = await fetch('/api/importar/turnos-fresha/disparar', { method: 'POST' })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) { setDisparoMsg({ texto: data.error ?? 'No se pudo disparar la importación', error: true }); return }
-      setDisparoMsg({ texto: 'Importación disparada — tarda unos minutos en terminar (Playwright + scraping)', error: false })
-    } catch {
-      setDisparoMsg({ texto: 'No se pudo disparar la importación', error: true })
-    } finally {
-      setDisparando(false)
-    }
-  }
-
   const [turnosFile, setTurnosFile] = useState<File | null>(null)
   const [turnosStep, setTurnosStep] = useState<ImportStep>('idle')
   const [turnosResult, setTurnosResult] = useState<ImportResult | null>(null)
@@ -2442,31 +2425,9 @@ function ImportarTab() {
 
   return (
     <div className="py-4 space-y-4">
-      <div className="bg-white rounded-2xl border border-[var(--border)] p-4 space-y-3">
-        <div>
-          <div className="text-sm font-semibold text-[var(--text)]">Importación automática de Fresha</div>
-          <div className="text-xs text-[var(--text-muted)] mt-0.5 leading-relaxed">
-            Dispara ahora el mismo proceso que corre solo todas las noches (scrapea Fresha y actualiza los horarios base).
-            Tarda unos minutos en terminar — no hace falta esperar en esta pantalla.
-          </div>
-        </div>
-        <button
-          onClick={dispararFresha}
-          disabled={disparando}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-[var(--primary)] text-white font-medium disabled:opacity-60 hover:opacity-90 transition-opacity"
-        >
-          {disparando && <Spinner size={12} inline />}
-          <IconRefresh size={14} className="flex-shrink-0" />
-          {disparando ? 'Disparando…' : 'Traer turnos de Fresha ahora'}
-        </button>
-        {disparoMsg && (
-          <p className={`text-xs ${disparoMsg.error ? 'text-red-600' : 'text-emerald-600'}`}>{disparoMsg.texto}</p>
-        )}
-      </div>
-
       <ImportSection
-        title="Turnos programados Fresha"
-        desc="Reporte de turnos del equipo exportado desde Fresha. Puede cubrir varios meses. Se guarda en horarios base."
+        title="Turnos programados"
+        desc="Reporte de turnos del equipo (CSV de BCO Turnos). Puede cubrir varios meses. Se guarda en horarios base."
         file={turnosFile}
         onFile={f => { setTurnosFile(f); setTurnosStep('idle'); setTurnosResult(null); setTurnosErr('') }}
         step={turnosStep} result={turnosResult} error={turnosErr}
@@ -2489,8 +2450,8 @@ function ImportarTab() {
         )}
       />
       <ImportSection
-        title="Citas Fresha"
-        desc="Reporte de citas atendidas. Determina el primer/último turno del día y presencia efectiva de cada empleado."
+        title="Citas"
+        desc="Reporte de citas (CSV de BCO Turnos). Determina el primer/último turno del día y la presencia efectiva de cada empleada. Las citas canceladas no cuentan como turno."
         file={citasFile}
         onFile={f => { setCitasFile(f); setCitasStep('idle'); setCitasResult(null); setCitasErr('') }}
         step={citasStep} result={citasResult} error={citasErr}
