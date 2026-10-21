@@ -51,7 +51,7 @@ async function fetchPagina(dataId: string, key: string, token: string | null): P
   let url = `https://serpapi.com/search.json?engine=google_maps_reviews&data_id=${dataId}&hl=es&sort_by=newestFirst&api_key=${key}`
   if (token) url += `&next_page_token=${encodeURIComponent(token)}`
   const res = await fetch(url)
-  if (!res.ok) throw new Error('serpapi_error')
+  if (!res.ok) throw new Error(`SerpAPI ${res.status}: ${((await res.json().catch(() => ({}))) as { error?: string }).error ?? 'sin detalle'}`)
   const data = await res.json()
   const reviews: SerpReview[] = data.reviews ?? data.reviews_results?.reviews ?? []
   const next = (data.serpapi_pagination?.next_page_token as string) ?? null
@@ -190,7 +190,21 @@ async function acumularMenciones(
   return { insertadas: total, error, camposSinComentario, leidas, paginas: vueltas }
 }
 
+// Queda guardado el resultado de la última actualización (fecha, si anduvo y el error), para ver por qué no se actualizan
 export async function ejecutarGoogleReviewsRefresh() {
+  const en = new Date().toISOString()
+  try {
+    const r = await refrescar()
+    await supabaseAdmin.from('configuracion').upsert({ clave: 'google_reviews_estado', valor: { en, ok: true, ...r } }, { onConflict: 'clave' })
+    return r
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e)
+    await supabaseAdmin.from('configuracion').upsert({ clave: 'google_reviews_estado', valor: { en, ok: false, error } }, { onConflict: 'clave' })
+    throw e
+  }
+}
+
+async function refrescar() {
   const key = process.env.SERPAPI_KEY
   if (!key) throw new Error('no_key')
 
