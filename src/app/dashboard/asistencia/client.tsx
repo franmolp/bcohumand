@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Button, Spinner, Toast, Modal } from '@/components/ui'
 import { IconRefresh, IconChevronRight, IconChevronLeft, IconUpload, IconCheck, IconEdit, IconFileText, IconPlus, IconTrash, IconX, IconClipboard, IconClock } from '@/components/ui/Icons'
+import { esCancelada } from '@/lib/citas'
 import { CHIP_INFO, calcPresentismo, DEFAULT_CONFIG, AsistenciaConfig, toMinutes } from '@/lib/asistencia'
 import { AsistenciaProcesada, SessionUser } from '@/types'
 import Hora24 from '@/components/Hora24'
@@ -2246,10 +2247,8 @@ function parseCitasFresha(text: string): { nombre: string; fecha: string; primer
   const map = new Map<string, { s: string; e: string }[]>()
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i]
-    // Fresha exporta el estado en femenino ("Cancelada"), así que un === 'cancelado'
-    // nunca matcheaba y las citas canceladas se contaban como turno (ej. una cita
-    // cancelada a las 9:00 pisaba el primer turno real de las 11:30).
-    if (iE >= 0 && (r[iE] ?? '').trim().toLowerCase().startsWith('cancel')) continue
+    // Excluir canceladas / no-show (misma lógica que el servidor): no cuentan como turno.
+    if (iE >= 0 && esCancelada(r[iE] ?? '')) continue
     const nombre = r[iN]?.trim() ?? ''
     const fecha = freshaDate(r[iF] ?? '')
     const franja = r[iFr]?.trim() ?? ''
