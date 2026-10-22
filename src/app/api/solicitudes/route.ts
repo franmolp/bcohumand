@@ -77,6 +77,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Tipo y fecha inicio son requeridos' }, { status: 400 })
     }
 
+    // La fecha fin nunca puede ser anterior a la fecha inicio.
+    if (fecha_fin && fecha_fin < fecha_inicio) {
+      return NextResponse.json({ error: 'La fecha fin no puede ser anterior a la fecha inicio' }, { status: 400 })
+    }
+
     const isAdmin    = session.rol === 'admin' || session.rol === 'Admin'
     const isHR       = session.rol === 'HR'
     const canManage  = isAdmin || isHR
