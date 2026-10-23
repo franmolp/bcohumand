@@ -173,7 +173,33 @@ export async function GET(req: NextRequest) {
       }
     })
 
-  const turnos = [...turnosFresha, ...turnosSolicitudes]
+  // Fusionar, por persona / día / equipo, los turnos que se pisan o se tocan en un solo
+  // bloque. Una persona ocupa UNA sola mesa aunque tenga su horario base + un doble turno
+  // aprobado que se solapan (ej. base 13–20 + aprobado 09–14:30 => un bloque 09–20). Si no
+  // se fusionara, aparecería en dos carriles y el equipo figuraría en sobrecupo (9/8).
+  type T = { usuario_id: string; nombre: string; equipo: string; fecha: string; inicio: string; fin: string }
+  const porPersona = new Map<string, T[]>()
+  for (const t of [...turnosFresha, ...turnosSolicitudes] as T[]) {
+    const k = `${t.usuario_id}|${t.fecha}|${t.equipo}`
+    if (!porPersona.has(k)) porPersona.set(k, [])
+    porPersona.get(k)!.push(t)
+  }
+  const turnos: T[] = []
+  for (const grupo of porPersona.values()) {
+    const ord = [...grupo].sort((a, b) => toMin(a.inicio) - toMin(b.inicio))
+    let cur: T | null = null
+    let curFin = 0
+    for (const t of ord) {
+      const ini = toMin(t.inicio), fin = toMin(t.fin)
+      if (cur && ini <= curFin) {
+        if (fin > curFin) { curFin = fin; cur.fin = t.fin }
+      } else {
+        cur = { ...t }
+        curFin = fin
+        turnos.push(cur)
+      }
+    }
+  }
 
   // Build capacidades map: equipo_nombre → capacity
   const equipoNames = [...new Set(turnos.map(t => t.equipo).filter(Boolean))]
