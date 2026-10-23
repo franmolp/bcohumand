@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { toMin, overlaps } from '@/lib/gaps'
+import { toMin } from '@/lib/gaps'
 
 export const dynamic = 'force-dynamic'
 
@@ -141,9 +141,12 @@ export async function GET(req: NextRequest) {
   // Solicitudes de puesto aprobadas: se ocupa el equipo/lane del recurso solicitado
   // (no el equipo real de quien pidió el puesto), para que aparezca en la sección
   // correcta de Ocupación y deje de contarse como hueco libre en Disponibles.
-  // Es solo un overlay TEMPORAL: si ya bajó de Fresha un turno real de esa misma
-  // persona ese día que se pisa con el horario pedido, se asume que Fresha ya
-  // formalizó el cambio y se deja de mostrar el sintético para no duplicar la mesa.
+  // Es solo un overlay TEMPORAL: si un turno real de esa misma persona ese día ya
+  // CONTIENE entero el horario pedido, se asume que BCO Turnos ya formalizó el cambio
+  // y se deja de mostrar el sintético para no duplicar la mesa. OJO: tiene que
+  // contenerlo entero — si la base es 13–20 y el puesto aprobado 09–14:30, la base NO
+  // cubre la mañana, así que el puesto se sigue mostrando y ocupando esa mesa (si no,
+  // el admin no ve que la persona trabaja la mañana y esa mesa figura libre para otra).
   const turnosRealesPorUsuarioFecha = new Map<string, { inicio: number; fin: number }[]>()
   for (const t of turnosFresha) {
     const key = `${t.usuario_id}|${t.fecha}`
@@ -156,7 +159,7 @@ export async function GET(req: NextRequest) {
       const reales = turnosRealesPorUsuarioFecha.get(`${s.usuario_id}|${s.fecha}`) ?? []
       const inicio = toMin(normalizeTime(s.hora_inicio as string))
       const fin = toMin(normalizeTime(s.hora_fin as string))
-      return !reales.some(r => overlaps(inicio, fin, r.inicio, r.fin))
+      return !reales.some(r => r.inicio <= inicio && r.fin >= fin)
     })
     .map(s => {
       const user = userMap.get(s.usuario_id as string)

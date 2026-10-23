@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Spinner } from '@/components/ui'
 import { IconCalendarCheck, IconClock } from '@/components/ui/Icons'
 
-interface Turno { inicio: string; fin: string; origen: 'fresha' | 'aprobado'; equipo: string }
+interface Turno { inicio: string; fin: string; origen: 'fresha' | 'aprobado' | 'doble'; equipo: string }
 interface Dia { fecha: string; turnos: Turno[]; ausencia: string | null }
 
 const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
@@ -77,12 +77,13 @@ export default function MisHorarios() {
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {d.turnos.map((t, ti) => (
                       <span key={ti} className={`text-[11px] font-medium px-2 py-1 rounded-lg flex items-center gap-1 border ${
-                        t.origen === 'aprobado'
-                          ? 'bg-amber-50 text-amber-700 border-amber-100'
-                          : 'bg-gray-50 text-[var(--text-sub)] border-gray-100'
+                        t.origen === 'fresha'
+                          ? 'bg-gray-50 text-[var(--text-sub)] border-gray-100'
+                          : 'bg-amber-50 text-amber-700 border-amber-100'
                       }`}>
                         <IconClock size={11} />
                         {t.inicio}–{t.fin}
+                        {t.origen === 'doble' && ' · doble turno'}
                         {t.origen === 'aprobado' && ' (extra)'}
                       </span>
                     ))}
