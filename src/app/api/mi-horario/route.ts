@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { toMin, overlaps } from '@/lib/gaps'
+import { toMin } from '@/lib/gaps'
 
 function addDays(date: string, n: number): string {
   const d = new Date(date + 'T12:00:00Z')
@@ -75,7 +75,11 @@ export async function GET() {
     const reales = porDia.get(s.fecha)?.filter(t => t.origen === 'fresha') ?? []
     const inicio = toMin(normalizeTime(s.hora_inicio))
     const fin = toMin(normalizeTime(s.hora_fin))
-    const yaFormalizado = reales.some(r => overlaps(inicio, fin, toMin(r.inicio), toMin(r.fin)))
+    // Se asume formalizado (ya bajó al horario base) SOLO si un turno real CONTIENE
+    // entero el puesto aprobado. Si apenas se pisan de forma parcial (ej. base 13–20 y
+    // puesto aprobado 09–14:30), el horario base NO cubre la mañana, así que el extra
+    // tiene que seguir mostrándose o la empleada no se entera de que trabaja ese bloque.
+    const yaFormalizado = reales.some(r => toMin(r.inicio) <= inicio && toMin(r.fin) >= fin)
     if (yaFormalizado) continue
     const lista = porDia.get(s.fecha)
     if (lista) lista.push({ inicio: normalizeTime(s.hora_inicio), fin: normalizeTime(s.hora_fin), origen: 'aprobado', equipo: s.equipo_nombre })

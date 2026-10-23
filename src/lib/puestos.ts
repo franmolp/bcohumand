@@ -187,17 +187,18 @@ export async function getPuestosDisponibles(
     const misTurnosMin = misTurnosDia.map(t => ({ inicio: toMin(t.inicio), fin: toMin(t.fin) }))
 
     // Resta lo ya aprobado (puede partir un hueco en dos) antes de ofrecer nada.
-    // Ignora solicitudes aprobadas OBSOLETAS: si la persona ya tiene un turno regular
-    // (horarios_base) ese día que se pisa con lo que pidió, no puede estar además
-    // cubriendo otra mesa a esa hora — la solicitud quedó vieja (ej. tras reimportar
-    // Fresha su horario pasó a día completo). Si la contáramos, taparía una mesa que
-    // en realidad está libre.
+    // Ignora solicitudes aprobadas OBSOLETAS: si un turno regular (horarios_base) ya
+    // CONTIENE entero lo que pidió, la solicitud quedó vieja (ej. tras formalizarse su
+    // horario pasó a día completo) y no debe seguir ocupando el carril. OJO: tiene que
+    // contenerlo ENTERO, no apenas pisarse — si la base es 13–20 y el puesto aprobado
+    // 09–14:30, la base NO cubre la mañana, así que el puesto sigue ocupando esa mesa
+    // (si lo descartáramos, la mañana figuraría libre y se la ofreceríamos a otra).
     const turnosDia = turnosPorFecha.get(fecha) ?? []
     const aprobadosDia = solicitudesDia
       .filter(s => s.estado === 'approved')
       .filter(s => {
         const ini = toMin(s.hora_inicio.slice(0, 5)), fin = toMin(s.hora_fin.slice(0, 5))
-        return !turnosDia.some(t => t.usuario_id === s.usuario_id && overlaps(ini, fin, toMin(t.inicio), toMin(t.fin)))
+        return !turnosDia.some(t => t.usuario_id === s.usuario_id && toMin(t.inicio) <= ini && toMin(t.fin) >= fin)
       })
       .map(s => ({ lane: s.lane, start: toMin(s.hora_inicio.slice(0, 5)), end: toMin(s.hora_fin.slice(0, 5)) }))
     const gapsLibres = restarAprobados(gapsCrudos, aprobadosDia, piso)
