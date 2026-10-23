@@ -2307,6 +2307,30 @@ function ImportarTab() {
   const [hikResult, setHikResult] = useState<ImportResult | null>(null)
   const [hikErr, setHikErr] = useState('')
 
+  const [refrescando, setRefrescando] = useState(false)
+  const [refreshMsg, setRefreshMsg] = useState<{ texto: string; error: boolean } | null>(null)
+
+  // Re-sincroniza desde BCO Turnos: horarios base (turnos programados) y citas.
+  // Útil cuando lo que ven las empleadas no coincide con lo que se cargó en BCO.
+  async function refrescarBCO() {
+    setRefrescando(true); setRefreshMsg(null)
+    try {
+      const [hr, cr] = await Promise.all([
+        fetch('/api/importar/horarios-turnos', { method: 'POST' }).then(r => r.json()).catch(() => ({ error: 'sin conexión' })),
+        fetch('/api/importar/citas-turnos', { method: 'POST' }).then(r => r.json()).catch(() => ({ error: 'sin conexión' })),
+      ])
+      if (hr.error || cr.error) {
+        setRefreshMsg({ texto: `Horarios: ${hr.error ?? `${hr.ok ?? 0} ok`} · Citas: ${cr.error ?? `${cr.ok ?? 0} ok`}`, error: true })
+      } else {
+        setRefreshMsg({ texto: `Listo. Horarios actualizados (${hr.ok ?? 0}) y citas (${cr.ok ?? 0}). Si tocaste días pasados, regenerá el mes en Asistencia.`, error: false })
+      }
+    } catch {
+      setRefreshMsg({ texto: 'No se pudo refrescar desde BCO Turnos', error: true })
+    } finally {
+      setRefrescando(false)
+    }
+  }
+
   async function run(
     parse: () => Promise<unknown[]>,
     endpoint: string,
@@ -2333,6 +2357,27 @@ function ImportarTab() {
 
   return (
     <div className="py-4 space-y-4">
+      <div className="bg-white rounded-2xl border border-[var(--border)] p-4 space-y-3">
+        <div>
+          <div className="text-sm font-semibold text-[var(--text)]">Refrescar desde BCO Turnos</div>
+          <div className="text-xs text-[var(--text-muted)] mt-0.5 leading-relaxed">
+            Vuelve a traer de BCO Turnos los horarios programados y las citas. Usalo cuando lo que
+            ven las empleadas no coincide con lo cargado en BCO. Tarda unos segundos.
+          </div>
+        </div>
+        <button
+          onClick={refrescarBCO}
+          disabled={refrescando}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-[var(--primary)] text-white font-medium disabled:opacity-60 hover:opacity-90 transition-opacity"
+        >
+          {refrescando ? <Spinner size={12} inline /> : <IconRefresh size={14} className="flex-shrink-0" />}
+          {refrescando ? 'Refrescando…' : 'Refrescar ahora'}
+        </button>
+        {refreshMsg && (
+          <p className={`text-xs ${refreshMsg.error ? 'text-red-600' : 'text-emerald-600'}`}>{refreshMsg.texto}</p>
+        )}
+      </div>
+
       <p className="text-xs text-[var(--text-muted)] leading-relaxed px-1">
         Los turnos programados y las citas entran solos desde BCO Turnos (no se cargan a mano).
         Acá solo se importan las fichadas del reloj biométrico.
