@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { CAMPOS_SOL, destinoDe } from '@/lib/cambio-horario'
 
 // Datos que BCO Turnos lee de Humand (solo lectura, con INTEGRACION_SECRET):
-// roles, empleados (con el interruptor "Usa BCO Turnos"), solicitudes aprobadas, horarios y puestos aprobados.
+// roles, empleados (con el interruptor "Usa BCO Turnos"), solicitudes aprobadas, horarios, cambios de horario/día aprobados y puestos aprobados.
 const TIPOS_AUSENCIA = ['Vacaciones', 'Ausencia por Salud', 'Solicitud de Días', 'Ausencia Injustificada', 'Feriado/Local cerrado']
 
 export async function GET(req: NextRequest) {
@@ -17,14 +18,17 @@ export async function GET(req: NextRequest) {
   if (usu.error && /usa_bco_turnos/.test(usu.error.message)) usu = await supabaseAdmin.from('usuarios').select('id, nombre, email, telefono, dni, fecha_nacimiento, estado_cuenta, equipo:equipos(id,nombre), rol:roles(id,nombre)') as typeof usu
   if (usu.error) return NextResponse.json({ error: usu.error.message }, { status: 500 })
 
-  const [roles, sol, hor, pue] = await Promise.all([
+  const [roles, sol, hor, pue, cam] = await Promise.all([
     supabaseAdmin.from('roles').select('id, nombre').order('id'),
     supabaseAdmin.from('solicitudes').select('id, usuario_id, tipo, fecha_inicio, fecha_fin, motivo, comentario_admin, moderador').eq('estado', 'approved').in('tipo', TIPOS_AUSENCIA).gte('fecha_fin', desde).lte('fecha_inicio', hasta),
     // editado: cambiado en Humand (cambio de horario aprobado o corrección en Asistencia); el resto es el horario que manda BCO Turnos
     supabaseAdmin.from('horarios_base').select('usuario_id, fecha, inicio_base, fin_base, editado').gte('fecha', desde).lte('fecha', hasta).order('fecha').range(0, 9999),
     supabaseAdmin.from('solicitudes_puesto').select('id, usuario_id, equipo_nombre, tipo_recurso, fecha, hora_inicio, hora_fin').eq('estado', 'approved').gte('fecha', desde).lte('fecha', hasta),
+    // Cambios de horario/día aprobados (también compensación): BCO Turnos los toma como cambio del día
+    supabaseAdmin.from('solicitudes').select(CAMPOS_SOL).in('tipo', ['Cambio de horario/día', 'Cambio de Horario']).eq('estado', 'approved')
+      .or(`and(fecha_inicio.gte.${desde},fecha_inicio.lte.${hasta}),and(fecha_compensacion.gte.${desde},fecha_compensacion.lte.${hasta})`),
   ])
-  for (const r of [roles, sol, hor, pue]) if (r.error) return NextResponse.json({ error: r.error.message }, { status: 500 })
+  for (const r of [roles, sol, hor, pue, cam]) if (r.error) return NextResponse.json({ error: r.error.message }, { status: 500 })
 
   const uno = <T,>(x: T | T[] | null) => (Array.isArray(x) ? x[0] : x) ?? null
   const empleados = (usu.data ?? []).map(u => {
@@ -33,10 +37,19 @@ export async function GET(req: NextRequest) {
     return { id: u.id, nombre: u.nombre, email: u.email, telefono: u.telefono, dni: u.dni, fecha_nacimiento: u.fecha_nacimiento, estado: u.estado_cuenta, usa_bco_turnos: usa, equipo: equipo?.nombre ?? null, rol_id: rol?.id ?? null, rol: rol?.nombre ?? null }
   })
   const hm = (t: string | null) => (t ?? '').slice(0, 5)
+  // Horario de cada día cambiado por solicitud (el que quedó en horarios_base al aprobarla); el día que no viene por compensación, vacío
+  const cambios: { solicitud: string; usuario_id: string; fecha: string; tramos: { desde: string; hasta: string }[] }[] = []
+  for (const c of (cam.data ?? []) as unknown as Parameters<typeof destinoDe>[0][]) {
+    const d = destinoDe(c)
+    if (!d) continue
+    if (d.dia >= desde && d.dia <= hasta) cambios.push({ solicitud: c.id, usuario_id: c.usuario_id, fecha: d.dia, tramos: (hor.data ?? []).filter(h => h.usuario_id === c.usuario_id && String(h.fecha).slice(0, 10) === d.dia && h.inicio_base && h.fin_base).map(h => ({ desde: hm(h.inicio_base), hasta: hm(h.fin_base) })) })
+    if (d.libre && d.libre >= desde && d.libre <= hasta) cambios.push({ solicitud: c.id, usuario_id: c.usuario_id, fecha: d.libre, tramos: [] })
+  }
   return NextResponse.json({
     desde, hasta, tipos_ausencia: TIPOS_AUSENCIA, roles: roles.data ?? [], empleados,
     ausencias: (sol.data ?? []).map(s => ({ id: s.id, usuario_id: s.usuario_id, tipo: s.tipo, desde: String(s.fecha_inicio).slice(0, 10), hasta: String(s.fecha_fin ?? s.fecha_inicio).slice(0, 10), motivo: s.motivo, comentario: s.comentario_admin, aprobado_por: s.moderador })),
     horarios: (hor.data ?? []).filter(h => h.inicio_base && h.fin_base).map(h => ({ usuario_id: h.usuario_id, fecha: String(h.fecha).slice(0, 10), desde: hm(h.inicio_base), hasta: hm(h.fin_base), editado: !!h.editado })),
+    cambios,
     puestos: (pue.data ?? []).map(p => ({ id: p.id, usuario_id: p.usuario_id, recurso: p.tipo_recurso, equipo: p.equipo_nombre, fecha: String(p.fecha).slice(0, 10), desde: hm(p.hora_inicio), hasta: hm(p.hora_fin) })),
   })
 }
