@@ -194,14 +194,31 @@ function FormFields({
         </div>
       )
     }
+    // min por campo de fecha:
+    //  - fecha inicio / compensación: desde hoy (o la antelación mínima).
+    //  - fecha fin: nunca antes de la fecha inicio (como el checkout de un hotel),
+    //    y tampoco antes del mínimo permitido.
+    const dateMinField = !isDateField ? undefined
+      : k === 'fecha_fin' ? (form.fecha_inicio || dateMin || undefined)
+      : (k === 'fecha_inicio' || k === 'fecha_compensacion') && dateMin ? dateMin
+      : undefined
+    const onDateChange = (val: string) => {
+      // Si mueven la fecha inicio a después de la fecha fin ya elegida, se limpia la fin
+      // para que vuelvan a elegir un rango válido (no queda inicio > fin).
+      if (k === 'fecha_inicio' && form.fecha_fin && val && form.fecha_fin < val) {
+        setForm({ ...form, fecha_inicio: val, fecha_fin: '' })
+      } else {
+        setForm({ ...form, [k]: val })
+      }
+    }
     return (
       <div className="min-w-0">
         <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">{label}</label>
         <input type={type} value={form[k] as string}
-          onChange={e => setForm({ ...form, [k]: e.target.value })}
+          onChange={e => (isDateField ? onDateChange(e.target.value) : setForm({ ...form, [k]: e.target.value }))}
           placeholder={placeholder}
           style={{ fontSize: 16, WebkitAppearance: 'none' }}
-          min={isDateField && (k === 'fecha_inicio' || k === 'fecha_compensacion') && dateMin ? dateMin : undefined}
+          min={dateMinField}
           className="w-full min-w-0 h-11 px-3 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] placeholder:text-[var(--text-muted)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] lg:text-sm" />
       </div>
     )
@@ -829,6 +846,10 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
     if (!form.fecha_inicio) { setFormError('La fecha inicio es requerida'); setSaving(false); return }
     if (!isFeriado && !isHorario && !form.fecha_fin) { setFormError('La fecha fin es requerida'); setSaving(false); return }
     if (isFeriado && !form.fecha_fin) { setFormError('Las fechas son requeridas'); setSaving(false); return }
+    // La fecha fin nunca puede ser anterior a la fecha inicio.
+    if (form.fecha_fin && form.fecha_fin < form.fecha_inicio) {
+      setFormError('La fecha fin no puede ser anterior a la fecha inicio'); setSaving(false); return
+    }
 
     // ─── Validación de plazos (solo empleados en nueva solicitud) ───
     if (!isAdminOrHR && !editId && !isFeriado) {

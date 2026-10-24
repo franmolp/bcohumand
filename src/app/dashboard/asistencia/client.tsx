@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Button, Spinner, Toast, Modal } from '@/components/ui'
 import { IconRefresh, IconChevronRight, IconChevronLeft, IconUpload, IconCheck, IconEdit, IconFileText, IconPlus, IconTrash, IconX, IconClipboard, IconClock } from '@/components/ui/Icons'
-import { esCancelada } from '@/lib/citas'
 import { CHIP_INFO, calcPresentismo, DEFAULT_CONFIG, AsistenciaConfig, toMinutes } from '@/lib/asistencia'
 import { AsistenciaProcesada, SessionUser } from '@/types'
 import Hora24 from '@/components/Hora24'
@@ -2141,26 +2140,6 @@ function csvParse(text: string, sep = ','): string[][] {
   return text.replace(/\r\n/g, '\n').split('\n').filter(l => l.trim()).map(l => csvLine(l, sep))
 }
 
-const MON_EN: Record<string, string> = {
-  Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
-  Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12',
-}
-
-function freshaDate(s: string): string {
-  const m = s.match(/(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})/)
-  if (!m) return ''
-  return `${m[3]}-${MON_EN[m[2]] ?? '01'}-${m[1].padStart(2, '0')}`
-}
-
-function freshaTime(s: string): string {
-  const m = s.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i)
-  if (!m) return ''
-  let h = parseInt(m[1])
-  if (m[3].toLowerCase() === 'pm' && h !== 12) h += 12
-  if (m[3].toLowerCase() === 'am' && h === 12) h = 0
-  return `${String(h).padStart(2, '0')}:${m[2]}`
-}
-
 function hikDate(s: string): string {
   const parts = s.trim().split('/')
   if (parts.length !== 3) return ''
@@ -2174,30 +2153,6 @@ function hikTime(s: string): string {
   if (m[3].toUpperCase() === 'PM' && h !== 12) h += 12
   if (m[3].toUpperCase() === 'AM' && h === 12) h = 0
   return `${String(h).padStart(2, '0')}:${m[2]}`
-}
-
-function parseTurnosFresha(text: string): { nombre: string; fecha: string; inicio: string; fin: string; horas: number }[] {
-  const rows = csvParse(text)
-  if (rows.length < 2) return []
-  const hdr = rows[0].map(h => h.toLowerCase())
-  const iN = hdr.findIndex(h => h.includes('miembro'))
-  const iF = hdr.findIndex(h => h === 'fecha')
-  const iI = hdr.findIndex(h => h.includes('inicio'))
-  const iFin = hdr.findIndex(h => h.includes('fin'))
-  const iD = hdr.findIndex(h => h.includes('duraci'))
-  if (iN < 0 || iF < 0 || iI < 0 || iFin < 0) return []
-  const out = []
-  for (let i = 1; i < rows.length; i++) {
-    const r = rows[i]
-    const nombre = r[iN] ?? ''
-    const fecha = freshaDate(r[iF] ?? '')
-    const inicio = freshaTime(r[iI] ?? '')
-    const fin = freshaTime(r[iFin] ?? '')
-    const horas = iD >= 0 ? parseFloat(r[iD] ?? '0') || 0 : 0
-    if (!nombre || !fecha || !inicio || !fin) continue
-    out.push({ nombre, fecha, inicio, fin, horas })
-  }
-  return out
 }
 
 function parseHIKFichadas(text: string): { reloj: string; fecha: string; hora: string }[] {
@@ -2232,42 +2187,6 @@ function parseHIKFichadas(text: string): { reloj: string; fecha: string; hora: s
     out.push({ reloj, fecha, hora })
   }
   return out
-}
-
-function parseCitasFresha(text: string): { nombre: string; fecha: string; primer_turno: string; ultimo_turno: string; cant_citas: number }[] {
-  const rows = csvParse(text)
-  if (rows.length < 2) return []
-  const hdr = rows[0].map(h => h.toLowerCase().trim())
-  const iN = hdr.findIndex(h => h.includes('miembro'))
-  const iE = hdr.findIndex(h => h === 'estado')
-  const iF = hdr.findIndex(h => h.includes('programada'))
-  const iFr = hdr.findIndex(h => h.includes('franja'))
-  if (iN < 0 || iF < 0 || iFr < 0) return []
-
-  const map = new Map<string, { s: string; e: string }[]>()
-  for (let i = 1; i < rows.length; i++) {
-    const r = rows[i]
-    // Excluir canceladas / no-show (misma lógica que el servidor): no cuentan como turno.
-    if (iE >= 0 && esCancelada(r[iE] ?? '')) continue
-    const nombre = r[iN]?.trim() ?? ''
-    const fecha = freshaDate(r[iF] ?? '')
-    const franja = r[iFr]?.trim() ?? ''
-    if (!nombre || !fecha || !franja.includes('-')) continue
-    const [startRaw, endRaw] = franja.split('-')
-    const s = (startRaw ?? '').substring(0, 5)
-    const e = (endRaw ?? '').substring(0, 5)
-    if (!s || !e) continue
-    const key = `${nombre}|${fecha}`
-    if (!map.has(key)) map.set(key, [])
-    map.get(key)!.push({ s, e })
-  }
-
-  return Array.from(map.entries()).map(([key, tiempos]) => {
-    const [nombre, fecha] = key.split('|')
-    const starts = tiempos.map(t => t.s).sort()
-    const ends = tiempos.map(t => t.e).sort()
-    return { nombre, fecha, primer_turno: starts[0], ultimo_turno: ends[ends.length - 1], cant_citas: tiempos.length }
-  })
 }
 
 // ─── CSV: solicitudes históricas ──────────────────────────────────────────────
@@ -2383,20 +2302,34 @@ type ImportStep = 'idle' | 'working' | 'done' | 'error'
 interface ImportResult { ok: number; noEncontrados: string[]; total: number }
 
 function ImportarTab() {
-  const [turnosFile, setTurnosFile] = useState<File | null>(null)
-  const [turnosStep, setTurnosStep] = useState<ImportStep>('idle')
-  const [turnosResult, setTurnosResult] = useState<ImportResult | null>(null)
-  const [turnosErr, setTurnosErr] = useState('')
-
   const [hikFile, setHikFile] = useState<File | null>(null)
   const [hikStep, setHikStep] = useState<ImportStep>('idle')
   const [hikResult, setHikResult] = useState<ImportResult | null>(null)
   const [hikErr, setHikErr] = useState('')
 
-  const [citasFile, setCitasFile] = useState<File | null>(null)
-  const [citasStep, setCitasStep] = useState<ImportStep>('idle')
-  const [citasResult, setCitasResult] = useState<ImportResult | null>(null)
-  const [citasErr, setCitasErr] = useState('')
+  const [refrescando, setRefrescando] = useState(false)
+  const [refreshMsg, setRefreshMsg] = useState<{ texto: string; error: boolean } | null>(null)
+
+  // Re-sincroniza desde BCO Turnos: horarios base (turnos programados) y citas.
+  // Útil cuando lo que ven las empleadas no coincide con lo que se cargó en BCO.
+  async function refrescarBCO() {
+    setRefrescando(true); setRefreshMsg(null)
+    try {
+      const [hr, cr] = await Promise.all([
+        fetch('/api/importar/horarios-turnos', { method: 'POST' }).then(r => r.json()).catch(() => ({ error: 'sin conexión' })),
+        fetch('/api/importar/citas-turnos', { method: 'POST' }).then(r => r.json()).catch(() => ({ error: 'sin conexión' })),
+      ])
+      if (hr.error || cr.error) {
+        setRefreshMsg({ texto: `Horarios: ${hr.error ?? `${hr.ok ?? 0} ok`} · Citas: ${cr.error ?? `${cr.ok ?? 0} ok`}`, error: true })
+      } else {
+        setRefreshMsg({ texto: `Listo. Horarios actualizados (${hr.ok ?? 0}) y citas (${cr.ok ?? 0}). Si tocaste días pasados, regenerá el mes en Asistencia.`, error: false })
+      }
+    } catch {
+      setRefreshMsg({ texto: 'No se pudo refrescar desde BCO Turnos', error: true })
+    } finally {
+      setRefrescando(false)
+    }
+  }
 
   async function run(
     parse: () => Promise<unknown[]>,
@@ -2424,18 +2357,31 @@ function ImportarTab() {
 
   return (
     <div className="py-4 space-y-4">
-      <ImportSection
-        title="Turnos programados"
-        desc="Reporte de turnos del equipo (CSV de BCO Turnos). Puede cubrir varios meses. Se guarda en horarios base."
-        file={turnosFile}
-        onFile={f => { setTurnosFile(f); setTurnosStep('idle'); setTurnosResult(null); setTurnosErr('') }}
-        step={turnosStep} result={turnosResult} error={turnosErr}
-        onImport={() => run(
-          async () => parseTurnosFresha(await readFileText(turnosFile!)),
-          '/api/importar/turnos-fresha',
-          setTurnosStep, setTurnosResult, setTurnosErr,
+      <div className="bg-white rounded-2xl border border-[var(--border)] p-4 space-y-3">
+        <div>
+          <div className="text-sm font-semibold text-[var(--text)]">Refrescar desde BCO Turnos</div>
+          <div className="text-xs text-[var(--text-muted)] mt-0.5 leading-relaxed">
+            Vuelve a traer de BCO Turnos los horarios programados y las citas. Usalo cuando lo que
+            ven las empleadas no coincide con lo cargado en BCO. Tarda unos segundos.
+          </div>
+        </div>
+        <button
+          onClick={refrescarBCO}
+          disabled={refrescando}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-[var(--primary)] text-white font-medium disabled:opacity-60 hover:opacity-90 transition-opacity"
+        >
+          {refrescando ? <Spinner size={12} inline /> : <IconRefresh size={14} className="flex-shrink-0" />}
+          {refrescando ? 'Refrescando…' : 'Refrescar ahora'}
+        </button>
+        {refreshMsg && (
+          <p className={`text-xs ${refreshMsg.error ? 'text-red-600' : 'text-emerald-600'}`}>{refreshMsg.texto}</p>
         )}
-      />
+      </div>
+
+      <p className="text-xs text-[var(--text-muted)] leading-relaxed px-1">
+        Los turnos programados y las citas entran solos desde BCO Turnos (no se cargan a mano).
+        Acá solo se importan las fichadas del reloj biométrico.
+      </p>
       <ImportSection
         title="Fichadas HIKVISION"
         desc="Reporte del reloj biométrico. Encoding Latin-1, separador punto y coma, primeras 3 filas son basura. Se matchea por ID de reloj."
@@ -2448,19 +2394,6 @@ function ImportarTab() {
           setHikStep, setHikResult, setHikErr,
         )}
       />
-      <ImportSection
-        title="Citas"
-        desc="Reporte de citas (CSV de BCO Turnos). Determina el primer/último turno del día y la presencia efectiva de cada empleada. Las citas canceladas no cuentan como turno."
-        file={citasFile}
-        onFile={f => { setCitasFile(f); setCitasStep('idle'); setCitasResult(null); setCitasErr('') }}
-        step={citasStep} result={citasResult} error={citasErr}
-        onImport={() => run(
-          async () => parseCitasFresha(await readFileText(citasFile!)),
-          '/api/importar/citas-fresha',
-          setCitasStep, setCitasResult, setCitasErr,
-        )}
-      />
-
     </div>
   )
 }

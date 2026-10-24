@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { toMin, overlaps } from '@/lib/gaps'
+import { toMin, minToStr } from '@/lib/gaps'
 
 function addDays(date: string, n: number): string {
   const d = new Date(date + 'T12:00:00Z')
@@ -10,6 +10,34 @@ function addDays(date: string, n: number): string {
 }
 
 interface Turno { inicio: string; fin: string; origen: 'fresha' | 'aprobado'; equipo: string }
+// origen de salida: 'fresha' = turno base, 'aprobado' = puesto extra suelto,
+// 'doble' = bloque que combina base + un puesto extra (doble turno), ya fusionado.
+interface TurnoOut { inicio: string; fin: string; origen: 'fresha' | 'aprobado' | 'doble'; equipo: string }
+
+// Fusiona los turnos de un día en bloques continuos: si dos se pisan o se tocan, quedan
+// en un solo bloque (ej. base 13–20 + extra 09–14:30 => un bloque 09–20 "doble turno"),
+// así no se ven solapados. Los que no se tocan (ej. mañana + tarde con corte) quedan aparte.
+function fusionarTurnos(turnos: Turno[]): TurnoOut[] {
+  if (!turnos.length) return []
+  const ordenados = [...turnos].sort((a, b) => toMin(a.inicio) - toMin(b.inicio))
+  const bloques: { inicio: number; fin: number; base: boolean; extra: boolean; equipo: string }[] = []
+  for (const t of ordenados) {
+    const ini = toMin(t.inicio), fin = toMin(t.fin)
+    const ult = bloques[bloques.length - 1]
+    if (ult && ini <= ult.fin) {
+      ult.fin = Math.max(ult.fin, fin)
+      if (t.origen === 'fresha') ult.base = true; else ult.extra = true
+    } else {
+      bloques.push({ inicio: ini, fin, base: t.origen === 'fresha', extra: t.origen === 'aprobado', equipo: t.equipo })
+    }
+  }
+  return bloques.map(b => ({
+    inicio: minToStr(b.inicio),
+    fin: minToStr(b.fin),
+    origen: b.base && b.extra ? 'doble' : b.extra ? 'aprobado' : 'fresha',
+    equipo: b.equipo,
+  }))
+}
 
 // Mi horario personal (esta semana + la próxima): turnos reales de Fresha más
 // puestos extra ya aprobados que todavía no bajaron de Fresha — con el mismo
@@ -75,7 +103,11 @@ export async function GET() {
     const reales = porDia.get(s.fecha)?.filter(t => t.origen === 'fresha') ?? []
     const inicio = toMin(normalizeTime(s.hora_inicio))
     const fin = toMin(normalizeTime(s.hora_fin))
-    const yaFormalizado = reales.some(r => overlaps(inicio, fin, toMin(r.inicio), toMin(r.fin)))
+    // Se asume formalizado (ya bajó al horario base) SOLO si un turno real CONTIENE
+    // entero el puesto aprobado. Si apenas se pisan de forma parcial (ej. base 13–20 y
+    // puesto aprobado 09–14:30), el horario base NO cubre la mañana, así que el extra
+    // tiene que seguir mostrándose o la empleada no se entera de que trabaja ese bloque.
+    const yaFormalizado = reales.some(r => toMin(r.inicio) <= inicio && toMin(r.fin) >= fin)
     if (yaFormalizado) continue
     const lista = porDia.get(s.fecha)
     if (lista) lista.push({ inicio: normalizeTime(s.hora_inicio), fin: normalizeTime(s.hora_fin), origen: 'aprobado', equipo: s.equipo_nombre })
@@ -95,7 +127,7 @@ export async function GET() {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([fecha, turnos]) => ({
       fecha,
-      turnos: turnos.sort((a, b) => a.inicio.localeCompare(b.inicio)),
+      turnos: fusionarTurnos(turnos),
       ausencia: ausenciaPorDia.get(fecha) ?? null,
     }))
 

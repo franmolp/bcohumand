@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { toMin, overlaps } from '@/lib/gaps'
+import { toMin } from '@/lib/gaps'
 
 export const dynamic = 'force-dynamic'
 
@@ -141,9 +141,12 @@ export async function GET(req: NextRequest) {
   // Solicitudes de puesto aprobadas: se ocupa el equipo/lane del recurso solicitado
   // (no el equipo real de quien pidió el puesto), para que aparezca en la sección
   // correcta de Ocupación y deje de contarse como hueco libre en Disponibles.
-  // Es solo un overlay TEMPORAL: si ya bajó de Fresha un turno real de esa misma
-  // persona ese día que se pisa con el horario pedido, se asume que Fresha ya
-  // formalizó el cambio y se deja de mostrar el sintético para no duplicar la mesa.
+  // Es solo un overlay TEMPORAL: si un turno real de esa misma persona ese día ya
+  // CONTIENE entero el horario pedido, se asume que BCO Turnos ya formalizó el cambio
+  // y se deja de mostrar el sintético para no duplicar la mesa. OJO: tiene que
+  // contenerlo entero — si la base es 13–20 y el puesto aprobado 09–14:30, la base NO
+  // cubre la mañana, así que el puesto se sigue mostrando y ocupando esa mesa (si no,
+  // el admin no ve que la persona trabaja la mañana y esa mesa figura libre para otra).
   const turnosRealesPorUsuarioFecha = new Map<string, { inicio: number; fin: number }[]>()
   for (const t of turnosFresha) {
     const key = `${t.usuario_id}|${t.fecha}`
@@ -156,7 +159,7 @@ export async function GET(req: NextRequest) {
       const reales = turnosRealesPorUsuarioFecha.get(`${s.usuario_id}|${s.fecha}`) ?? []
       const inicio = toMin(normalizeTime(s.hora_inicio as string))
       const fin = toMin(normalizeTime(s.hora_fin as string))
-      return !reales.some(r => overlaps(inicio, fin, r.inicio, r.fin))
+      return !reales.some(r => r.inicio <= inicio && r.fin >= fin)
     })
     .map(s => {
       const user = userMap.get(s.usuario_id as string)
@@ -170,7 +173,33 @@ export async function GET(req: NextRequest) {
       }
     })
 
-  const turnos = [...turnosFresha, ...turnosSolicitudes]
+  // Fusionar, por persona / día / equipo, los turnos que se pisan o se tocan en un solo
+  // bloque. Una persona ocupa UNA sola mesa aunque tenga su horario base + un doble turno
+  // aprobado que se solapan (ej. base 13–20 + aprobado 09–14:30 => un bloque 09–20). Si no
+  // se fusionara, aparecería en dos carriles y el equipo figuraría en sobrecupo (9/8).
+  type T = { usuario_id: string; nombre: string; equipo: string; fecha: string; inicio: string; fin: string }
+  const porPersona = new Map<string, T[]>()
+  for (const t of [...turnosFresha, ...turnosSolicitudes] as T[]) {
+    const k = `${t.usuario_id}|${t.fecha}|${t.equipo}`
+    if (!porPersona.has(k)) porPersona.set(k, [])
+    porPersona.get(k)!.push(t)
+  }
+  const turnos: T[] = []
+  for (const grupo of porPersona.values()) {
+    const ord = [...grupo].sort((a, b) => toMin(a.inicio) - toMin(b.inicio))
+    let cur: T | null = null
+    let curFin = 0
+    for (const t of ord) {
+      const ini = toMin(t.inicio), fin = toMin(t.fin)
+      if (cur && ini <= curFin) {
+        if (fin > curFin) { curFin = fin; cur.fin = t.fin }
+      } else {
+        cur = { ...t }
+        curFin = fin
+        turnos.push(cur)
+      }
+    }
+  }
 
   // Build capacidades map: equipo_nombre → capacity
   const equipoNames = [...new Set(turnos.map(t => t.equipo).filter(Boolean))]

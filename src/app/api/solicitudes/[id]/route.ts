@@ -161,6 +161,13 @@ export async function PUT(
 
     updates.ediciones = edicionesArr  // jsonb acepta el array directamente
 
+    // La fecha fin nunca puede ser anterior a la fecha inicio (valores efectivos tras la edición).
+    const efInicio = ('fecha_inicio' in updates ? updates.fecha_inicio : old.fecha_inicio) as string | null
+    const efFin = ('fecha_fin' in updates ? updates.fecha_fin : old.fecha_fin) as string | null
+    if (efInicio && efFin && efFin < efInicio) {
+      return NextResponse.json({ error: 'La fecha fin no puede ser anterior a la fecha inicio' }, { status: 400 })
+    }
+
     const { data, error } = await supabase
       .from('solicitudes')
       .update(updates)
