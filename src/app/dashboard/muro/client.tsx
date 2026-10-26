@@ -10,8 +10,9 @@ import { createPortal } from 'react-dom'
 
 interface MuroPost {
   id: number
-  tipo: 'post' | 'encuesta' | 'pregunta'
+  tipo: 'post' | 'encuesta' | 'pregunta' | 'invitacion'
   contenido: string
+  imagen_url?: string | null
   created_at: string
   cerrado: boolean
   resultados_publicados: boolean
@@ -25,6 +26,12 @@ interface MuroPost {
   mi_respuesta?: string | null
   respuestas_count?: number | null
   respuestas?: { autor: string; contenido: string }[] | null
+  // Invitación (RSVP)
+  mi_rsvp?: { asiste: boolean; restriccion: string | null } | null
+  rsvp_asisten?: number
+  rsvp_no?: number
+  rsvp_sin_responder?: number
+  rsvp_lista?: { nombre: string; asiste: boolean; restriccion: string | null }[] | null
 }
 
 interface Comentario {
@@ -386,12 +393,21 @@ function PostComposer({
   onCreated: () => void
   setToast: (m: string) => void
 }) {
-  const [tipo, setTipo] = useState<'post' | 'encuesta' | 'pregunta'>('post')
+  const [tipo, setTipo] = useState<'post' | 'encuesta' | 'pregunta' | 'invitacion'>('post')
   const [texto, setTexto] = useState('')
   const [opciones, setOpciones] = useState(['', ''])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [mentionedIds, setMentionedIds] = useState<string[]>([])
+  const [imgFile, setImgFile] = useState<File | null>(null)
+  const [imgPreview, setImgPreview] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  function pickImg(f: File | null) {
+    setImgFile(f)
+    setImgPreview(prev => { if (prev) URL.revokeObjectURL(prev); return f ? URL.createObjectURL(f) : '' })
+    setError('')
+  }
 
   function handleTextoChange(v: string) {
     setTexto(v)
@@ -403,18 +419,30 @@ function PostComposer({
 
   async function submit() {
     setError('')
-    if (!texto.trim()) { setError('Escribí algo primero'); return }
-    if (tipo === 'encuesta' && opciones.filter(o => o.trim()).length < 2) { setError('Necesitás al menos 2 opciones'); return }
+    if (tipo === 'invitacion') {
+      if (!imgFile) { setError('Subí la imagen de la invitación'); return }
+    } else {
+      if (!texto.trim()) { setError('Escribí algo primero'); return }
+      if (tipo === 'encuesta' && opciones.filter(o => o.trim()).length < 2) { setError('Necesitás al menos 2 opciones'); return }
+    }
 
     setSaving(true)
+    let imagen_url: string | undefined
+    if (tipo === 'invitacion' && imgFile) {
+      const fd = new FormData(); fd.append('file', imgFile)
+      const up = await fetch('/api/muro/upload', { method: 'POST', body: fd })
+      if (!up.ok) { setSaving(false); const d = await up.json().catch(() => ({})); setError(d.error || 'No se pudo subir la imagen'); return }
+      imagen_url = (await up.json()).url
+    }
+
     const res = await fetch('/api/muro', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tipo, contenido: texto, opciones: tipo === 'encuesta' ? opciones : undefined, mentioned_ids: mentionedIds }),
+      body: JSON.stringify({ tipo, contenido: texto, opciones: tipo === 'encuesta' ? opciones : undefined, imagen_url, mentioned_ids: mentionedIds }),
     })
     setSaving(false)
     if (res.ok) {
-      setTexto(''); setOpciones(['', '']); setTipo('post'); setError(''); setMentionedIds([])
+      setTexto(''); setOpciones(['', '']); setTipo('post'); setError(''); setMentionedIds([]); pickImg(null)
       onCreated()
       setToast('Publicado')
     } else {
@@ -426,10 +454,10 @@ function PostComposer({
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
       {isAdmin && (
         <div className="flex bg-gray-100 rounded-xl p-0.5 mb-3 gap-0.5">
-          {(['post', 'encuesta', 'pregunta'] as const).map(t => (
+          {(['post', 'encuesta', 'pregunta', 'invitacion'] as const).map(t => (
             <button key={t} onClick={() => { setTipo(t); setError('') }}
-              className={`flex-1 py-1.5 text-[12px] font-medium rounded-[10px] transition-all cursor-pointer whitespace-nowrap ${tipo === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
-              {t === 'post' ? 'Publicar' : t === 'encuesta' ? 'Encuesta' : 'Pregunta abierta'}
+              className={`flex-1 py-1.5 text-[11.5px] font-medium rounded-[10px] transition-all cursor-pointer whitespace-nowrap ${tipo === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+              {t === 'post' ? 'Publicar' : t === 'encuesta' ? 'Encuesta' : t === 'pregunta' ? 'Pregunta' : 'Invitación'}
             </button>
           ))}
         </div>
@@ -438,12 +466,35 @@ function PostComposer({
       <div className="flex gap-3">
         <Avatar nombre={session.nombre} fotoUrl={myFoto} size={34} />
         <div className="flex-1 min-w-0">
+          {tipo === 'invitacion' && (
+            <div className="mb-2">
+              <input ref={fileRef} type="file" accept="image/*" className="hidden"
+                onChange={e => pickImg(e.target.files?.[0] ?? null)} />
+              {imgPreview ? (
+                <div className="relative rounded-xl overflow-hidden border border-gray-200">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={imgPreview} alt="Vista previa de la invitación" className="w-full max-h-72 object-contain bg-gray-50" />
+                  <button onClick={() => pickImg(null)}
+                    className="absolute top-2 right-2 bg-black/55 text-white rounded-full p-1.5 cursor-pointer hover:bg-black/70" title="Quitar imagen">
+                    <IconX size={14} />
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => fileRef.current?.click()}
+                  className="w-full border-2 border-dashed border-gray-200 rounded-xl py-7 flex flex-col items-center gap-1.5 text-gray-400 hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors cursor-pointer">
+                  <IconPlus size={20} />
+                  <span className="text-[12px] font-medium">Subir imagen de la invitación</span>
+                </button>
+              )}
+            </div>
+          )}
+
           <MentionTextarea
             value={texto}
             onChange={handleTextoChange}
             onMentionPicked={id => setMentionedIds(prev => [...prev.filter(x => x !== id), id])}
             users={muralUsers}
-            placeholder={tipo === 'post' ? '¿Qué querés compartir?' : tipo === 'encuesta' ? 'Pregunta de la encuesta...' : 'Pregunta abierta...'}
+            placeholder={tipo === 'post' ? '¿Qué querés compartir?' : tipo === 'encuesta' ? 'Pregunta de la encuesta...' : tipo === 'pregunta' ? 'Pregunta abierta...' : 'Detalles del evento (opcional): fecha, hora, lugar...'}
             rows={tipo === 'post' ? 2 : 3}
             className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-[14px] outline-none focus:border-[var(--primary)] resize-none"
           />
@@ -473,9 +524,9 @@ function PostComposer({
           {error && <p className="mt-2 text-[12px] text-red-500 flex items-center gap-1"><IconAlertCircle size={13} /> {error}</p>}
 
           <div className="flex justify-end mt-2">
-            <button onClick={submit} disabled={saving || !texto.trim()}
+            <button onClick={submit} disabled={saving || (tipo === 'invitacion' ? !imgFile : !texto.trim())}
               className="px-4 py-2 bg-[var(--primary)] text-white text-[13px] font-semibold rounded-xl disabled:opacity-40 hover:opacity-90 transition-opacity cursor-pointer">
-              {saving ? 'Publicando...' : 'Publicar'}
+              {saving ? 'Publicando...' : tipo === 'invitacion' ? 'Publicar invitación' : 'Publicar'}
             </button>
           </div>
         </div>
@@ -596,6 +647,8 @@ function PostCard({
     ? { label: 'Encuesta', bg: 'bg-violet-50', text: 'text-violet-600' }
     : post.tipo === 'pregunta'
     ? { label: 'Pregunta abierta', bg: 'bg-amber-50', text: 'text-amber-600' }
+    : post.tipo === 'invitacion'
+    ? { label: 'Invitación', bg: 'bg-pink-50', text: 'text-pink-600' }
     : null
 
   return (
@@ -614,13 +667,13 @@ function PostCard({
           </div>
           {/* Admin controls */}
           <div className="flex gap-1 items-center shrink-0">
-            {isAdmin && (post.tipo === 'encuesta' || post.tipo === 'pregunta') && (
+            {isAdmin && (post.tipo === 'encuesta' || post.tipo === 'pregunta' || post.tipo === 'invitacion') && (
               <>
                 <button onClick={toggleCerrado}
                   className={`text-[11px] px-2 py-1 rounded-lg font-medium cursor-pointer transition-colors whitespace-nowrap ${post.cerrado ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-500 hover:bg-gray-100'}`}>
                   {post.cerrado ? 'Reabrir' : 'Cerrar'}
                 </button>
-                {!post.resultados_publicados && (
+                {(post.tipo === 'encuesta' || post.tipo === 'pregunta') && !post.resultados_publicados && (
                   <button onClick={publicarResultados}
                     className="text-[11px] px-2 py-1 rounded-lg font-medium text-violet-600 hover:bg-violet-50 cursor-pointer transition-colors whitespace-nowrap">
                     Publicar resultados
@@ -641,29 +694,37 @@ function PostCard({
           </div>
         </div>
 
+        {/* Imagen (invitación) */}
+        {post.tipo === 'invitacion' && post.imagen_url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={post.imagen_url} alt="Invitación" className="w-full max-h-[70vh] object-contain bg-gray-50" />
+        )}
+
         {/* Content */}
-        <div className="px-4 pb-3">
-          {editing ? (
-            <div className="space-y-2">
-              <textarea
-                className="w-full border border-[var(--primary)] rounded-xl px-3 py-2 text-[14px] outline-none resize-none leading-relaxed"
-                style={{ fontSize: 16 }}
-                rows={4}
-                value={editText}
-                onChange={e => setEditText(e.target.value)}
-                autoFocus
-              />
-              <div className="flex gap-2 justify-end">
-                <button onClick={() => setEditing(false)} className="px-3 py-1.5 rounded-lg border border-gray-200 text-[13px] text-gray-600 cursor-pointer">Cancelar</button>
-                <button onClick={saveEdit} disabled={savingEdit || !editText.trim()} className="px-3 py-1.5 rounded-lg bg-[var(--primary)] text-white text-[13px] font-medium disabled:opacity-50 cursor-pointer">
-                  {savingEdit ? <Spinner size={14} inline /> : 'Guardar'}
-                </button>
+        {(editing || post.contenido?.trim()) && (
+          <div className={`px-4 pb-3 ${post.tipo === 'invitacion' ? 'pt-3' : ''}`}>
+            {editing ? (
+              <div className="space-y-2">
+                <textarea
+                  className="w-full border border-[var(--primary)] rounded-xl px-3 py-2 text-[14px] outline-none resize-none leading-relaxed"
+                  style={{ fontSize: 16 }}
+                  rows={4}
+                  value={editText}
+                  onChange={e => setEditText(e.target.value)}
+                  autoFocus
+                />
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => setEditing(false)} className="px-3 py-1.5 rounded-lg border border-gray-200 text-[13px] text-gray-600 cursor-pointer">Cancelar</button>
+                  <button onClick={saveEdit} disabled={savingEdit || !editText.trim()} className="px-3 py-1.5 rounded-lg bg-[var(--primary)] text-white text-[13px] font-medium disabled:opacity-50 cursor-pointer">
+                    {savingEdit ? <Spinner size={14} inline /> : 'Guardar'}
+                  </button>
+                </div>
               </div>
-            </div>
-          ) : (
-            <p className="text-[14px] text-[var(--text)] leading-relaxed whitespace-pre-wrap">{renderMentions(post.contenido, muralUsers)}</p>
-          )}
-        </div>
+            ) : (
+              <p className="text-[14px] text-[var(--text)] leading-relaxed whitespace-pre-wrap">{renderMentions(post.contenido, muralUsers)}</p>
+            )}
+          </div>
+        )}
 
         {/* Poll */}
         {post.tipo === 'encuesta' && post.opciones && (
@@ -673,6 +734,11 @@ function PostCard({
         {/* Open question */}
         {post.tipo === 'pregunta' && (
           <QuestionView post={post} session={session} isAdmin={isAdmin} updatePost={updatePost} />
+        )}
+
+        {/* Invitación (RSVP) */}
+        {post.tipo === 'invitacion' && (
+          <InvitacionView post={post} isAdmin={isAdmin} updatePost={updatePost} />
         )}
 
         {/* Footer */}
@@ -1062,6 +1128,130 @@ function QuestionView({
               <p className="text-[13px] text-[var(--text)]">{r.contenido}</p>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Invitación (RSVP) ──────────────────────────────────────────────────────────
+
+function InvitacionView({
+  post, isAdmin, updatePost,
+}: {
+  post: MuroPost
+  isAdmin: boolean
+  updatePost: (id: number, patch: Partial<MuroPost>) => void
+}) {
+  const mi = post.mi_rsvp ?? null
+  const [editando, setEditando] = useState(!mi)
+  const [restriccion, setRestriccion] = useState(mi?.restriccion ?? '')
+  const [enviando, setEnviando] = useState(false)
+  const [error, setError] = useState('')
+  const [verLista, setVerLista] = useState(false)
+
+  async function enviar(asiste: boolean) {
+    setEnviando(true); setError('')
+    const res = await fetch(`/api/muro/${post.id}/rsvp`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ asiste, restriccion: asiste ? restriccion : '' }),
+    })
+    setEnviando(false)
+    if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.error || 'No se pudo guardar'); return }
+    const prev = post.mi_rsvp
+    let asisten = post.rsvp_asisten ?? 0, no = post.rsvp_no ?? 0
+    if (prev) { if (prev.asiste) asisten--; else no-- }
+    if (asiste) asisten++; else no++
+    updatePost(post.id, {
+      mi_rsvp: { asiste, restriccion: asiste ? (restriccion.trim() || null) : null },
+      rsvp_asisten: asisten,
+      rsvp_no: no,
+      rsvp_sin_responder: prev ? post.rsvp_sin_responder : Math.max(0, (post.rsvp_sin_responder ?? 0) - 1),
+    })
+    setEditando(false)
+  }
+
+  const cerrada = post.cerrado
+
+  return (
+    <div className="px-4 pb-4 space-y-3 border-t border-gray-50 pt-3">
+      {/* Mi confirmación */}
+      {editando && !cerrada ? (
+        <div className="space-y-2.5">
+          <p className="text-[12px] font-semibold text-[var(--text)]">¿Vas a venir?</p>
+          <div>
+            <input value={restriccion} onChange={e => setRestriccion(e.target.value)} maxLength={500}
+              placeholder="Dieta o restricción especial (opcional): vegetariana, sin TACC, alergias…"
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-[13px] outline-none focus:border-[var(--primary)]" />
+          </div>
+          {error && <p className="text-[12px] text-red-500">{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={() => enviar(true)} disabled={enviando}
+              className="flex-1 py-2.5 rounded-xl bg-emerald-500 text-white text-[13px] font-semibold disabled:opacity-50 hover:opacity-90 cursor-pointer flex items-center justify-center gap-1.5">
+              <IconCheck size={15} /> Confirmar asistencia
+            </button>
+            <button onClick={() => enviar(false)} disabled={enviando}
+              className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-[13px] font-semibold disabled:opacity-50 hover:bg-gray-200 cursor-pointer">
+              No puedo asistir
+            </button>
+          </div>
+          {mi && (
+            <button onClick={() => setEditando(false)} className="text-[11px] text-gray-400 hover:text-gray-600 cursor-pointer">Cancelar</button>
+          )}
+        </div>
+      ) : mi ? (
+        <div className={`rounded-xl p-3 ${mi.asiste ? 'bg-emerald-50' : 'bg-gray-50'}`}>
+          <div className="flex items-center justify-between gap-2">
+            <p className={`text-[13px] font-semibold flex items-center gap-1.5 ${mi.asiste ? 'text-emerald-700' : 'text-gray-500'}`}>
+              {mi.asiste ? <><IconCheck size={15} /> Confirmaste tu asistencia</> : 'Avisaste que no podés venir'}
+            </p>
+            {!cerrada && (
+              <button onClick={() => { setRestriccion(mi.restriccion ?? ''); setEditando(true) }}
+                className="text-[11px] text-[var(--primary)] font-medium cursor-pointer hover:opacity-70 shrink-0">Cambiar</button>
+            )}
+          </div>
+          {mi.asiste && mi.restriccion && (
+            <p className="text-[12px] text-gray-500 mt-1">Tu restricción: <span className="text-[var(--text)]">{mi.restriccion}</span></p>
+          )}
+        </div>
+      ) : (
+        <p className="text-[12px] text-gray-400">Esta invitación está cerrada.</p>
+      )}
+
+      {/* Resumen de asistencia (todos ven los números) */}
+      <div className="flex items-center gap-3 flex-wrap text-[12px]">
+        <span className="font-semibold text-emerald-600">{post.rsvp_asisten ?? 0} van</span>
+        <span className="text-gray-300">·</span>
+        <span className="font-semibold text-gray-500">{post.rsvp_no ?? 0} no pueden</span>
+        {isAdmin && (post.rsvp_sin_responder ?? 0) > 0 && (
+          <><span className="text-gray-300">·</span><span className="text-gray-400">{post.rsvp_sin_responder} sin responder</span></>
+        )}
+      </div>
+
+      {/* Admin: lista con restricciones */}
+      {isAdmin && post.rsvp_lista && post.rsvp_lista.length > 0 && (
+        <div className="space-y-2">
+          <button onClick={() => setVerLista(v => !v)}
+            className="text-[11px] text-[var(--primary)] font-medium cursor-pointer hover:opacity-70">
+            {verLista ? 'Ocultar lista' : 'Ver lista y restricciones'}
+          </button>
+          {verLista && (
+            <div className="space-y-1.5">
+              {post.rsvp_lista.map((r, i) => (
+                <div key={i} className="flex items-start gap-2 bg-gray-50 rounded-xl px-3 py-2">
+                  <span className={`mt-0.5 shrink-0 ${r.asiste ? 'text-emerald-500' : 'text-gray-300'}`}>
+                    {r.asiste ? <IconCheck size={14} /> : <IconX size={14} />}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[13px] text-[var(--text)]">{r.nombre}</p>
+                    {r.asiste && r.restriccion && (
+                      <p className="text-[11px] text-amber-600 font-medium">🍽️ {r.restriccion}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

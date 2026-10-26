@@ -13,9 +13,11 @@ export async function GET(request: NextRequest) {
   const offset = parseInt(searchParams.get('offset') ?? '0')
   const limit = 5
 
+  // '*' (en vez de columnas explícitas) para no romper el muro si la columna
+  // imagen_url todavía no se creó (migración muro_invitacion.sql pendiente).
   const { data: posts, error } = await supabaseAdmin
     .from('muro_posts')
-    .select('id, tipo, contenido, created_at, cerrado, resultados_publicados, usuario_id')
+    .select('*')
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
 
@@ -25,8 +27,9 @@ export async function GET(request: NextRequest) {
   const postIds = posts.map(p => p.id)
   const encuestaIds = posts.filter(p => p.tipo === 'encuesta').map(p => p.id)
   const preguntaIds = posts.filter(p => p.tipo === 'pregunta').map(p => p.id)
+  const invitacionIds = posts.filter(p => p.tipo === 'invitacion').map(p => p.id)
 
-  const [likesRes, comentRes, opcionesRes, votosRes, respuestasRes] = await Promise.all([
+  const [likesRes, comentRes, opcionesRes, votosRes, respuestasRes, rsvpRes, activosRes] = await Promise.all([
     supabaseAdmin.from('muro_likes').select('post_id, usuario_id').in('post_id', postIds),
     supabaseAdmin.from('muro_comentarios').select('post_id').in('post_id', postIds),
     encuestaIds.length
@@ -38,13 +41,21 @@ export async function GET(request: NextRequest) {
     preguntaIds.length
       ? supabaseAdmin.from('muro_pregunta_respuestas').select('post_id, usuario_id, contenido').in('post_id', preguntaIds)
       : Promise.resolve({ data: [] }),
+    invitacionIds.length
+      ? supabaseAdmin.from('muro_rsvp').select('post_id, usuario_id, asiste, restriccion').in('post_id', invitacionIds)
+      : Promise.resolve({ data: [] }),
+    invitacionIds.length
+      ? supabaseAdmin.from('usuarios').select('*', { count: 'exact', head: true }).eq('estado_cuenta', 'activo')
+      : Promise.resolve({ count: 0 }),
   ])
+  const totalActivos = (activosRes as { count?: number | null }).count ?? 0
 
   // Build a unified user map covering authors, voters, responders and likers
   const allUserIds = [...new Set([
     ...posts.map(p => p.usuario_id),
     ...(votosRes.data ?? []).map((v: { usuario_id: string }) => v.usuario_id),
     ...(respuestasRes.data ?? []).map((r: { usuario_id: string }) => r.usuario_id),
+    ...(rsvpRes.data ?? []).map((r: { usuario_id: string }) => r.usuario_id),
     ...(likesRes.data ?? []).map((l: { usuario_id: string }) => l.usuario_id),
   ])]
 
@@ -61,6 +72,7 @@ export async function GET(request: NextRequest) {
       id: post.id,
       tipo: post.tipo,
       contenido: post.contenido,
+      imagen_url: post.imagen_url ?? null,
       created_at: post.created_at,
       cerrado: post.cerrado,
       resultados_publicados: post.resultados_publicados,
@@ -68,6 +80,27 @@ export async function GET(request: NextRequest) {
       likes_count: likes.length,
       yo_like: (likes as { usuario_id: string }[]).some(l => l.usuario_id === session.id),
       comentarios_count: comentCount,
+    }
+
+    if (post.tipo === 'invitacion') {
+      const rsvps = (rsvpRes.data ?? []).filter((r: { post_id: number }) => r.post_id === post.id) as { usuario_id: string; asiste: boolean; restriccion: string | null }[]
+      const mio = rsvps.find(r => r.usuario_id === session.id)
+      const asisten = rsvps.filter(r => r.asiste).length
+      const no = rsvps.filter(r => !r.asiste).length
+      return {
+        ...base,
+        mi_rsvp: mio ? { asiste: mio.asiste, restriccion: mio.restriccion ?? null } : null,
+        rsvp_asisten: asisten,
+        rsvp_no: no,
+        rsvp_sin_responder: Math.max(0, totalActivos - rsvps.length),
+        // El admin ve el detalle de quién viene y sus restricciones.
+        rsvp_lista: isAdmin
+          ? rsvps
+              .slice()
+              .sort((a, b) => Number(b.asiste) - Number(a.asiste))
+              .map(r => ({ nombre: autorMap[r.usuario_id] ?? 'Usuario', asiste: r.asiste, restriccion: r.restriccion ?? null }))
+          : null,
+      }
     }
 
     if (post.tipo === 'encuesta') {
@@ -115,17 +148,26 @@ export async function POST(request: NextRequest) {
   const isHR        = session.rol === 'HR'
   const isEncargada = session.rol === 'Encargada'
   const body = await request.json().catch(() => ({}))
-  const { tipo = 'post', contenido, opciones } = body
+  const { tipo = 'post', contenido, opciones, imagen_url } = body
 
-  if (!contenido?.trim()) return NextResponse.json({ error: 'El contenido es requerido' }, { status: 400 })
-  if ((tipo === 'encuesta' || tipo === 'pregunta') && !isAdmin)
-    return NextResponse.json({ error: 'Solo admins pueden crear encuestas y preguntas' }, { status: 403 })
+  // La invitación lleva imagen (el texto es opcional); el resto requiere texto.
+  if (tipo === 'invitacion') {
+    if (!imagen_url) return NextResponse.json({ error: 'Falta la imagen de la invitación' }, { status: 400 })
+  } else if (!contenido?.trim()) {
+    return NextResponse.json({ error: 'El contenido es requerido' }, { status: 400 })
+  }
+  if ((tipo === 'encuesta' || tipo === 'pregunta' || tipo === 'invitacion') && !isAdmin)
+    return NextResponse.json({ error: 'Solo admins pueden crear encuestas, preguntas e invitaciones' }, { status: 403 })
   if (tipo === 'encuesta' && (!Array.isArray(opciones) || opciones.filter((o: string) => o?.trim()).length < 2))
     return NextResponse.json({ error: 'Se necesitan al menos 2 opciones' }, { status: 400 })
 
+  // Solo se incluye imagen_url para invitaciones, así una publicación normal sigue
+  // funcionando aunque la columna imagen_url todavía no exista (migración pendiente).
+  const insertObj: Record<string, unknown> = { usuario_id: session.id, tipo, contenido: contenido?.trim() || '' }
+  if (tipo === 'invitacion') insertObj.imagen_url = imagen_url
   const { data: post, error } = await supabaseAdmin
     .from('muro_posts')
-    .insert({ usuario_id: session.id, tipo, contenido: contenido.trim() })
+    .insert(insertObj)
     .select('id')
     .single()
 
@@ -147,8 +189,9 @@ export async function POST(request: NextRequest) {
 
     const ids = (users ?? []).map((u: { id: string }) => u.id)
     if (ids.length) {
-      const preview = contenido.trim().length > 60 ? contenido.trim().slice(0, 60) + '…' : contenido.trim()
-      const tipoLabel = tipo === 'encuesta' ? 'una encuesta' : tipo === 'pregunta' ? 'una pregunta' : 'una publicación'
+      const txt = (contenido?.trim() || (tipo === 'invitacion' ? '¡Estás invitado/a!' : ''))
+      const preview = txt.length > 60 ? txt.slice(0, 60) + '…' : txt
+      const tipoLabel = tipo === 'encuesta' ? 'una encuesta' : tipo === 'pregunta' ? 'una pregunta' : tipo === 'invitacion' ? 'una invitación' : 'una publicación'
       await crearNotificaciones(ids, {
         titulo: `Nueva publicación en el Muro Social`,
         mensaje: `${session.nombre} publicó ${tipoLabel}: "${preview}"`,
@@ -162,7 +205,8 @@ export async function POST(request: NextRequest) {
     ? (body.mentioned_ids as string[]).filter((id: string) => id !== session.id)
     : []
   if (mentionedIds.length) {
-    const preview = contenido.trim().length > 80 ? contenido.trim().slice(0, 80) + '…' : contenido.trim()
+    const mTxt = contenido?.trim() || ''
+    const preview = mTxt.length > 80 ? mTxt.slice(0, 80) + '…' : mTxt
     await crearNotificaciones(mentionedIds, {
       titulo: `${session.nombre} te mencionó en el Muro Social`,
       mensaje: preview,
