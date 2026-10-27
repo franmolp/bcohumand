@@ -9,6 +9,7 @@ import { getPuestosDisponibles } from '@/lib/puestos'
 import { getConcursoResumen } from '@/lib/concurso-google'
 import { esEquipoLimpieza } from '@/lib/limpieza'
 import LimpiezaHomeCard from '@/components/LimpiezaHomeCard'
+import InvitacionFijada, { type InvFijada } from '@/components/InvitacionFijada'
 import { fmtFechaLarga } from '@/lib/fecha'
 
 const VACACIONES_DEFAULT = 14
@@ -423,8 +424,38 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   const puestosResult = await getPuestosDisponibles(session.id, session.equipo)
   const puestosDisponibles = !('error' in puestosResult) ? puestosResult.puestos : []
 
+  // Invitación fijada arriba del Inicio (solo empleadas): la más reciente que siga abierta.
+  // Incluye la respuesta de esta persona para colapsar el voto una vez confirmado.
+  let invFijada: InvFijada | null = null
+  const { data: invRow } = await supabaseAdmin
+    .from('muro_posts')
+    .select('*')
+    .eq('tipo', 'invitacion')
+    .eq('cerrado', false)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (invRow) {
+    const { data: rsvpRow } = await supabaseAdmin
+      .from('muro_rsvp')
+      .select('asiste, restriccion')
+      .eq('post_id', invRow.id)
+      .eq('usuario_id', session.id)
+      .maybeSingle()
+    invFijada = {
+      id: invRow.id,
+      imagen_url: invRow.imagen_url ?? null,
+      contenido: invRow.contenido ?? '',
+      rsvp_limite: invRow.rsvp_limite ?? null,
+      mi_rsvp: rsvpRow ? { asiste: rsvpRow.asiste, restriccion: rsvpRow.restriccion ?? null } : null,
+    }
+  }
+
   return (
     <div className="py-4 fade-in space-y-5">
+      {/* Invitación fijada */}
+      {invFijada && <InvitacionFijada invitacion={invFijada} />}
+
       {/* Greeting */}
       <div>
         <div className="text-[20px] lg:text-[22px] font-bold text-[var(--text)] leading-snug">
