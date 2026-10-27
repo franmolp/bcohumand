@@ -521,6 +521,18 @@ function PostComposer({
             </div>
           )}
 
+          {tipo === 'invitacion' && (
+            <div className="mt-2 rounded-xl bg-gray-50 border border-gray-100 p-3">
+              <p className="text-[11px] text-gray-500 mb-2">Se agrega solo. Así lo verán las empleadas para confirmar:</p>
+              <input disabled placeholder="Dieta o restricción especial (opcional)…"
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-[12px] bg-white text-gray-400 mb-2" />
+              <div className="flex gap-2">
+                <div className="flex-1 py-2 rounded-xl bg-emerald-100 text-emerald-600 text-[12px] font-semibold text-center">✓ Confirmar asistencia</div>
+                <div className="flex-1 py-2 rounded-xl bg-gray-100 text-gray-400 text-[12px] font-semibold text-center">No puedo asistir</div>
+              </div>
+            </div>
+          )}
+
           {error && <p className="mt-2 text-[12px] text-red-500 flex items-center gap-1"><IconAlertCircle size={13} /> {error}</p>}
 
           <div className="flex justify-end mt-2">

@@ -189,14 +189,24 @@ export async function POST(request: NextRequest) {
 
     const ids = (users ?? []).map((u: { id: string }) => u.id)
     if (ids.length) {
-      const txt = (contenido?.trim() || (tipo === 'invitacion' ? '¡Estás invitado/a!' : ''))
-      const preview = txt.length > 60 ? txt.slice(0, 60) + '…' : txt
-      const tipoLabel = tipo === 'encuesta' ? 'una encuesta' : tipo === 'pregunta' ? 'una pregunta' : tipo === 'invitacion' ? 'una invitación' : 'una publicación'
-      await crearNotificaciones(ids, {
-        titulo: `Nueva publicación en el Muro Social`,
-        mensaje: `${session.nombre} publicó ${tipoLabel}: "${preview}"`,
-        tipo: 'mural_post',
-      })
+      if (tipo === 'invitacion') {
+        await crearNotificaciones(ids, {
+          titulo: '🎉 Tenés una invitación nueva',
+          mensaje: `${session.nombre} publicó una invitación. Entrá al Muro para revisarla y confirmar tu asistencia.`,
+          tipo: 'mural_post',
+          url: '/dashboard/muro',
+        })
+      } else {
+        const txt = contenido?.trim() || ''
+        const preview = txt.length > 60 ? txt.slice(0, 60) + '…' : txt
+        const tipoLabel = tipo === 'encuesta' ? 'una encuesta' : tipo === 'pregunta' ? 'una pregunta' : 'una publicación'
+        await crearNotificaciones(ids, {
+          titulo: `Nueva publicación en el Muro Social`,
+          mensaje: `${session.nombre} publicó ${tipoLabel}: "${preview}"`,
+          tipo: 'mural_post',
+          url: '/dashboard/muro',
+        })
+      }
     }
   }
 
