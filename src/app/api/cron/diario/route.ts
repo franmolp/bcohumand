@@ -3,6 +3,7 @@ import { ejecutarCumpleanos } from '../cumpleanos/route'
 import { ejecutarAsistenciaIncompleta } from '../asistencia-incompleta/route'
 import { ejecutarCertificados } from '../certificados/route'
 import { ejecutarPedidosRecordatorio } from '../pedidos-recordatorio/route'
+import { ejecutarRecordatorioInvitaciones } from '../invitaciones-recordatorio/route'
 import { ejecutarGoogleReviewsRefresh } from '@/app/api/google-reviews/refresh/route'
 import { notificar as ejecutarMonotributoNotificar } from '@/app/api/monotributo/notificar/route'
 
@@ -37,6 +38,7 @@ export async function GET(request: NextRequest) {
   await correr('asistenciaIncompleta', ejecutarAsistenciaIncompleta)
   await correr('googleReviews', ejecutarGoogleReviewsRefresh)
   await correr('pedidosRecordatorio', ejecutarPedidosRecordatorio)
+  await correr('invitacionesRecordatorio', ejecutarRecordatorioInvitaciones)
   await correr('monotributo', async () => {
     const res = await ejecutarMonotributoNotificar(request, true)
     return res.json().catch(() => null)

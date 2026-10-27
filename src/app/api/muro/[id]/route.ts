@@ -22,6 +22,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if (body.contenido !== undefined) updates.contenido = body.contenido.trim()
   if (body.cerrado !== undefined) updates.cerrado = body.cerrado
   if (body.resultados_publicados !== undefined) updates.resultados_publicados = body.resultados_publicados
+  // Fecha límite de confirmación: 'YYYY-MM-DD' para setearla, null/'' para quitarla.
+  if (body.rsvp_limite !== undefined) {
+    updates.rsvp_limite = (typeof body.rsvp_limite === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.rsvp_limite)) ? body.rsvp_limite : null
+  }
 
   const { error } = await supabaseAdmin.from('muro_posts').update(updates).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

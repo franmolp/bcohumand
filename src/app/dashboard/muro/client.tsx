@@ -27,6 +27,7 @@ interface MuroPost {
   respuestas_count?: number | null
   respuestas?: { autor: string; contenido: string }[] | null
   // Invitación (RSVP)
+  rsvp_limite?: string | null
   mi_rsvp?: { asiste: boolean; restriccion: string | null } | null
   rsvp_asisten?: number
   rsvp_no?: number
@@ -64,6 +65,15 @@ function timeAgo(dateStr: string): string {
 
 function initials(n: string) {
   return n.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+}
+
+const MESES_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+function fmtFechaLarga(d: string): string {
+  const [, m, day] = d.slice(0, 10).split('-').map(Number)
+  return `${day} de ${MESES_ES[(m || 1) - 1]}`
+}
+function hoyAR(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
 }
 
 function Avatar({ nombre, fotoUrl, size = 36 }: { nombre: string; fotoUrl?: string | null; size?: number }) {
@@ -401,6 +411,7 @@ function PostComposer({
   const [mentionedIds, setMentionedIds] = useState<string[]>([])
   const [imgFile, setImgFile] = useState<File | null>(null)
   const [imgPreview, setImgPreview] = useState('')
+  const [limite, setLimite] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
   function pickImg(f: File | null) {
@@ -438,11 +449,11 @@ function PostComposer({
     const res = await fetch('/api/muro', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tipo, contenido: texto, opciones: tipo === 'encuesta' ? opciones : undefined, imagen_url, mentioned_ids: mentionedIds }),
+      body: JSON.stringify({ tipo, contenido: texto, opciones: tipo === 'encuesta' ? opciones : undefined, imagen_url, rsvp_limite: tipo === 'invitacion' ? (limite || undefined) : undefined, mentioned_ids: mentionedIds }),
     })
     setSaving(false)
     if (res.ok) {
-      setTexto(''); setOpciones(['', '']); setTipo('post'); setError(''); setMentionedIds([]); pickImg(null)
+      setTexto(''); setOpciones(['', '']); setTipo('post'); setError(''); setMentionedIds([]); pickImg(null); setLimite('')
       onCreated()
       setToast('Publicado')
     } else {
@@ -518,6 +529,14 @@ function PostComposer({
                   <IconPlus size={13} /> Agregar opción
                 </button>
               )}
+            </div>
+          )}
+
+          {tipo === 'invitacion' && (
+            <div className="mt-2">
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Fecha límite para confirmar (opcional)</label>
+              <input type="date" value={limite} min={hoyAR()} onChange={e => setLimite(e.target.value)} style={{ fontSize: 16 }}
+                className="w-full h-10 px-3 border border-gray-200 rounded-xl text-[13px] outline-none focus:border-[var(--primary)]" />
             </div>
           )}
 
@@ -1183,10 +1202,44 @@ function InvitacionView({
     setEditando(false)
   }
 
-  const cerrada = post.cerrado
+  const vencida = !!post.rsvp_limite && hoyAR() > post.rsvp_limite.slice(0, 10)
+  const cerrada = post.cerrado || vencida
+
+  const [editLimite, setEditLimite] = useState(false)
+  const [limiteVal, setLimiteVal] = useState(post.rsvp_limite?.slice(0, 10) ?? '')
+  const [savingLimite, setSavingLimite] = useState(false)
+  async function guardarLimite(val: string) {
+    setSavingLimite(true)
+    const res = await fetch(`/api/muro/${post.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rsvp_limite: val || null }) })
+    setSavingLimite(false)
+    if (res.ok) { updatePost(post.id, { rsvp_limite: val || null }); setEditLimite(false) }
+  }
 
   return (
     <div className="px-4 pb-4 space-y-3 border-t border-gray-50 pt-3">
+      {/* Fecha límite */}
+      {(post.rsvp_limite || isAdmin) && (
+        <div className="flex items-center gap-2 flex-wrap text-[12px]">
+          {editLimite ? (
+            <>
+              <input type="date" value={limiteVal} min={hoyAR()} onChange={e => setLimiteVal(e.target.value)} style={{ fontSize: 16 }}
+                className="h-9 px-2.5 border border-gray-200 rounded-lg text-[12px] outline-none focus:border-[var(--primary)]" />
+              <button onClick={() => guardarLimite(limiteVal)} disabled={savingLimite}
+                className="px-2.5 h-9 rounded-lg bg-[var(--primary)] text-white text-[12px] font-medium disabled:opacity-50 cursor-pointer">Guardar</button>
+              {post.rsvp_limite && <button onClick={() => guardarLimite('')} disabled={savingLimite} className="text-[11px] text-red-400 cursor-pointer">Quitar</button>}
+              <button onClick={() => setEditLimite(false)} className="text-[11px] text-gray-400 cursor-pointer">Cancelar</button>
+            </>
+          ) : post.rsvp_limite ? (
+            <span className={vencida ? 'text-gray-400 font-medium' : 'text-[var(--primary)] font-semibold'}>
+              {vencida ? `Confirmaciones cerradas el ${fmtFechaLarga(post.rsvp_limite)}` : `📅 Confirmá antes del ${fmtFechaLarga(post.rsvp_limite)}`}
+              {isAdmin && <button onClick={() => { setLimiteVal(post.rsvp_limite!.slice(0, 10)); setEditLimite(true) }} className="ml-2 text-[11px] text-gray-400 hover:text-[var(--primary)] cursor-pointer font-normal">editar</button>}
+            </span>
+          ) : isAdmin ? (
+            <button onClick={() => setEditLimite(true)} className="text-[11px] text-[var(--primary)] font-medium cursor-pointer hover:opacity-70">+ Agregar fecha límite para confirmar</button>
+          ) : null}
+        </div>
+      )}
+
       {/* Mi confirmación */}
       {editando && !cerrada ? (
         <div className="space-y-2.5">

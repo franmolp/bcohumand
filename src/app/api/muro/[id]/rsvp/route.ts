@@ -16,12 +16,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const { data: post } = await supabaseAdmin
     .from('muro_posts')
-    .select('tipo, cerrado')
+    .select('tipo, cerrado, rsvp_limite')
     .eq('id', id)
     .single()
   if (!post) return NextResponse.json({ error: 'No encontrada' }, { status: 404 })
   if (post.tipo !== 'invitacion') return NextResponse.json({ error: 'Esta publicación no es una invitación' }, { status: 400 })
   if (post.cerrado) return NextResponse.json({ error: 'La invitación está cerrada' }, { status: 403 })
+  if (post.rsvp_limite) {
+    const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+    if (hoy > String(post.rsvp_limite).slice(0, 10)) {
+      return NextResponse.json({ error: 'La fecha límite para confirmar ya pasó' }, { status: 403 })
+    }
+  }
 
   const { error } = await supabaseAdmin
     .from('muro_rsvp')

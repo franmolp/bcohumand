@@ -4,6 +4,10 @@
 -- Imagen de la tarjeta de invitación (URL pública del bucket 'muro').
 ALTER TABLE muro_posts ADD COLUMN IF NOT EXISTS imagen_url TEXT;
 
+-- Fecha límite para confirmar asistencia (opcional). Después de esa fecha no se
+-- aceptan más confirmaciones ni cambios. El recordatorio se manda 24hs antes.
+ALTER TABLE muro_posts ADD COLUMN IF NOT EXISTS rsvp_limite DATE;
+
 -- Respuestas de asistencia. Una por (post, usuario); se puede cambiar (upsert).
 CREATE TABLE IF NOT EXISTS muro_rsvp (
   id          BIGSERIAL PRIMARY KEY,
@@ -19,7 +23,9 @@ CREATE INDEX IF NOT EXISTS idx_muro_rsvp_post ON muro_rsvp(post_id);
 
 GRANT ALL ON TABLE muro_rsvp TO authenticated;
 GRANT ALL ON TABLE muro_rsvp TO service_role;
-GRANT USAGE, SELECT ON SEQUENCE muro_rsvp_id_seq TO authenticated;
+-- La secuencia necesita USAGE para el rol que inserta. El backend usa service_role
+-- (supabaseAdmin), así que el grant va a service_role además de authenticated.
+GRANT USAGE, SELECT ON SEQUENCE muro_rsvp_id_seq TO authenticated, service_role;
 
 -- Bucket público para las imágenes de invitaciones. La subida se hace con
 -- service_role (bypassa RLS); al ser público, las imágenes se leen por URL.

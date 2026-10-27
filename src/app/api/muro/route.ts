@@ -73,6 +73,7 @@ export async function GET(request: NextRequest) {
       tipo: post.tipo,
       contenido: post.contenido,
       imagen_url: post.imagen_url ?? null,
+      rsvp_limite: post.rsvp_limite ?? null,
       created_at: post.created_at,
       cerrado: post.cerrado,
       resultados_publicados: post.resultados_publicados,
@@ -164,7 +165,10 @@ export async function POST(request: NextRequest) {
   // Solo se incluye imagen_url para invitaciones, así una publicación normal sigue
   // funcionando aunque la columna imagen_url todavía no exista (migración pendiente).
   const insertObj: Record<string, unknown> = { usuario_id: session.id, tipo, contenido: contenido?.trim() || '' }
-  if (tipo === 'invitacion') insertObj.imagen_url = imagen_url
+  if (tipo === 'invitacion') {
+    insertObj.imagen_url = imagen_url
+    if (typeof body.rsvp_limite === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.rsvp_limite)) insertObj.rsvp_limite = body.rsvp_limite
+  }
   const { data: post, error } = await supabaseAdmin
     .from('muro_posts')
     .insert(insertObj)
