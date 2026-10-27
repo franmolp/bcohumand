@@ -8,6 +8,14 @@ ALTER TABLE muro_posts ADD COLUMN IF NOT EXISTS imagen_url TEXT;
 -- aceptan más confirmaciones ni cambios. El recordatorio se manda 24hs antes.
 ALTER TABLE muro_posts ADD COLUMN IF NOT EXISTS rsvp_limite DATE;
 
+-- Fijada en el Inicio de las empleadas. El admin la prende/apaga: mientras esté
+-- fijada, la invitación aparece arriba del home de las chicas; al desfijarla,
+-- deja de verse ahí (sigue existiendo en el Muro). Las invitaciones nuevas se
+-- crean fijadas por defecto.
+ALTER TABLE muro_posts ADD COLUMN IF NOT EXISTS fijada BOOLEAN NOT NULL DEFAULT false;
+-- Dejar fijadas las invitaciones abiertas que ya existían al correr la migración.
+UPDATE muro_posts SET fijada = true WHERE tipo = 'invitacion' AND cerrado = false;
+
 -- Respuestas de asistencia. Una por (post, usuario); se puede cambiar (upsert).
 CREATE TABLE IF NOT EXISTS muro_rsvp (
   id          BIGSERIAL PRIMARY KEY,

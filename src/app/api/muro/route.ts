@@ -74,6 +74,7 @@ export async function GET(request: NextRequest) {
       contenido: post.contenido,
       imagen_url: post.imagen_url ?? null,
       rsvp_limite: post.rsvp_limite ?? null,
+      fijada: post.fijada ?? false,
       created_at: post.created_at,
       cerrado: post.cerrado,
       resultados_publicados: post.resultados_publicados,
@@ -167,6 +168,7 @@ export async function POST(request: NextRequest) {
   const insertObj: Record<string, unknown> = { usuario_id: session.id, tipo, contenido: contenido?.trim() || '' }
   if (tipo === 'invitacion') {
     insertObj.imagen_url = imagen_url
+    insertObj.fijada = true // las invitaciones nacen fijadas en el Inicio; el admin puede desfijarlas
     if (typeof body.rsvp_limite === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.rsvp_limite)) insertObj.rsvp_limite = body.rsvp_limite
   }
   const { data: post, error } = await supabaseAdmin

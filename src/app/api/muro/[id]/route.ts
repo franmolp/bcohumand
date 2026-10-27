@@ -21,6 +21,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   const updates: Record<string, unknown> = {}
   if (body.contenido !== undefined) updates.contenido = body.contenido.trim()
   if (body.cerrado !== undefined) updates.cerrado = body.cerrado
+  if (body.fijada !== undefined) updates.fijada = !!body.fijada
   if (body.resultados_publicados !== undefined) updates.resultados_publicados = body.resultados_publicados
   // Fecha límite de confirmación: 'YYYY-MM-DD' para setearla, null/'' para quitarla.
   if (body.rsvp_limite !== undefined) {

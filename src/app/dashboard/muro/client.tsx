@@ -27,6 +27,7 @@ interface MuroPost {
   respuestas_count?: number | null
   respuestas?: { autor: string; contenido: string }[] | null
   // Invitación (RSVP)
+  fijada?: boolean
   rsvp_limite?: string | null
   mi_rsvp?: { asiste: boolean; restriccion: string | null } | null
   rsvp_asisten?: number
@@ -668,6 +669,12 @@ function PostCard({
     if (res.ok) { updatePost(post.id, { cerrado }); setToast(cerrado ? 'Cerrado' : 'Reabierto') }
   }
 
+  async function toggleFijada() {
+    const fijada = !post.fijada
+    const res = await fetch(`/api/muro/${post.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fijada }) })
+    if (res.ok) { updatePost(post.id, { fijada }); setToast(fijada ? 'Fijada en el Inicio' : 'Quitada del Inicio') }
+  }
+
   async function publicarResultados() {
     const res = await fetch(`/api/muro/${post.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resultados_publicados: true }) })
     if (res.ok) { updatePost(post.id, { resultados_publicados: true }); setToast('Resultados publicados') }
@@ -698,6 +705,12 @@ function PostCard({
           </div>
           {/* Admin controls */}
           <div className="flex gap-1 items-center shrink-0">
+            {isAdmin && post.tipo === 'invitacion' && (
+              <button onClick={toggleFijada}
+                className={`text-[11px] px-2 py-1 rounded-lg font-medium cursor-pointer transition-colors whitespace-nowrap ${post.fijada ? 'text-pink-600 hover:bg-pink-50' : 'text-gray-500 hover:bg-gray-100'}`}>
+                {post.fijada ? '📌 Quitar del Inicio' : 'Fijar en Inicio'}
+              </button>
+            )}
             {isAdmin && (post.tipo === 'encuesta' || post.tipo === 'pregunta' || post.tipo === 'invitacion') && (
               <>
                 <button onClick={toggleCerrado}

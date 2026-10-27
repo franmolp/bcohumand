@@ -8,6 +8,7 @@ export interface InvFijada {
   imagen_url: string | null
   contenido: string
   rsvp_limite: string | null
+  cerrado?: boolean
   mi_rsvp: { asiste: boolean; restriccion: string | null } | null
 }
 
@@ -31,7 +32,7 @@ export default function InvitacionFijada({ invitacion }: { invitacion: InvFijada
   const [error, setError] = useState('')
   const [ampliada, setAmpliada] = useState(false)
 
-  const vencida = !!invitacion.rsvp_limite && hoyAR() > invitacion.rsvp_limite.slice(0, 10)
+  const vencida = !!invitacion.cerrado || (!!invitacion.rsvp_limite && hoyAR() > invitacion.rsvp_limite.slice(0, 10))
 
   async function enviar(asiste: boolean) {
     setEnviando(true); setError('')

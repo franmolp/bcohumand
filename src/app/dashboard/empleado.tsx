@@ -431,7 +431,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
     .from('muro_posts')
     .select('*')
     .eq('tipo', 'invitacion')
-    .eq('cerrado', false)
+    .eq('fijada', true)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -447,6 +447,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
       imagen_url: invRow.imagen_url ?? null,
       contenido: invRow.contenido ?? '',
       rsvp_limite: invRow.rsvp_limite ?? null,
+      cerrado: !!invRow.cerrado,
       mi_rsvp: rsvpRow ? { asiste: rsvpRow.asiste, restriccion: rsvpRow.restriccion ?? null } : null,
     }
   }
