@@ -453,9 +453,6 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
 
   return (
     <div className="py-4 fade-in space-y-5">
-      {/* Invitación fijada */}
-      {invFijada && <InvitacionFijada invitacion={invFijada} />}
-
       {/* Greeting */}
       <div>
         <div className="text-[20px] lg:text-[22px] font-bold text-[var(--text)] leading-snug">
@@ -466,6 +463,9 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
           {fmtDateLabel(today)}
         </p>
       </div>
+
+      {/* Invitación fijada — después del saludo, junto a las primeras cards */}
+      {invFijada && <InvitacionFijada invitacion={invFijada} />}
 
       {/* Plan de limpieza — solo para el equipo Limpieza */}
       {esLimpieza && <LimpiezaHomeCard />}
