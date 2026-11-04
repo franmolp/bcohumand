@@ -45,10 +45,11 @@ export async function GET(request: NextRequest) {
       ? supabaseAdmin.from('muro_rsvp').select('post_id, usuario_id, asiste, restriccion').in('post_id', invitacionIds)
       : Promise.resolve({ data: [] }),
     invitacionIds.length
-      ? supabaseAdmin.from('usuarios').select('*', { count: 'exact', head: true }).eq('estado_cuenta', 'activo')
-      : Promise.resolve({ count: 0 }),
+      ? supabaseAdmin.from('usuarios').select('id, nombre').eq('estado_cuenta', 'activo')
+      : Promise.resolve({ data: [] }),
   ])
-  const totalActivos = (activosRes as { count?: number | null }).count ?? 0
+  const activosList = ((activosRes as { data?: { id: string; nombre: string }[] }).data ?? [])
+  const totalActivos = activosList.length
 
   // Build a unified user map covering authors, voters, responders and likers
   const allUserIds = [...new Set([
@@ -89,12 +90,17 @@ export async function GET(request: NextRequest) {
       const mio = rsvps.find(r => r.usuario_id === session.id)
       const asisten = rsvps.filter(r => r.asiste).length
       const no = rsvps.filter(r => !r.asiste).length
+      const respondieronIds = new Set(rsvps.map(r => r.usuario_id))
       return {
         ...base,
         mi_rsvp: mio ? { asiste: mio.asiste, restriccion: mio.restriccion ?? null } : null,
         rsvp_asisten: asisten,
         rsvp_no: no,
         rsvp_sin_responder: Math.max(0, totalActivos - rsvps.length),
+        // El admin ve quiénes todavía no respondieron (ni que van ni que no).
+        rsvp_faltan: isAdmin
+          ? activosList.filter(u => !respondieronIds.has(u.id)).map(u => u.nombre).sort((a, b) => a.localeCompare(b, 'es'))
+          : null,
         // El admin ve el detalle de quién viene y sus restricciones.
         rsvp_lista: isAdmin
           ? rsvps

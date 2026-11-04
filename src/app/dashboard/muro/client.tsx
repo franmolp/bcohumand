@@ -34,6 +34,7 @@ interface MuroPost {
   rsvp_no?: number
   rsvp_sin_responder?: number
   rsvp_lista?: { nombre: string; asiste: boolean; restriccion: string | null }[] | null
+  rsvp_faltan?: string[] | null
 }
 
 interface Comentario {
@@ -1193,6 +1194,7 @@ function InvitacionView({
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState('')
   const [verLista, setVerLista] = useState(false)
+  const [verFaltan, setVerFaltan] = useState(false)
 
   async function enviar(asiste: boolean) {
     setEnviando(true); setError('')
@@ -1327,6 +1329,23 @@ function InvitacionView({
                     )}
                   </div>
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Admin: quiénes todavía no respondieron */}
+      {isAdmin && post.rsvp_faltan && post.rsvp_faltan.length > 0 && (
+        <div className="space-y-2">
+          <button onClick={() => setVerFaltan(v => !v)}
+            className="text-[11px] text-[var(--primary)] font-medium cursor-pointer hover:opacity-70">
+            {verFaltan ? 'Ocultar quiénes faltan' : `Ver quiénes faltan responder (${post.rsvp_faltan.length})`}
+          </button>
+          {verFaltan && (
+            <div className="flex flex-wrap gap-1.5">
+              {post.rsvp_faltan.map((nombre, i) => (
+                <span key={i} className="text-[12px] text-gray-500 bg-gray-50 rounded-lg px-2.5 py-1">{nombre}</span>
               ))}
             </div>
           )}
