@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { supabase } from '@/lib/supabase'
+import { estadoPorSolicitud } from '@/lib/asistencia'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,14 +64,14 @@ export async function GET(req: NextRequest) {
 
   const { data: solicitudes } = await supabase
     .from('solicitudes')
-    .select('usuario_id, tipo, motivo, comentario_admin, fecha_inicio, fecha_fin')
+    .select('usuario_id, tipo, estado, motivo, comentario_admin, fecha_inicio, fecha_fin')
     .in('estado', ['approved', 'pending'])
     .lte('fecha_inicio', maxFecha)
     .or(`fecha_fin.gte.${minFecha},fecha_fin.is.null`)
     .limit(10000)
 
   // Construir mapa uid|fecha igual que regenerar para garantizar matching correcto
-  const solicitudMap = new Map<string, { tipo: string; motivo: string | null; comentario_admin: string | null }>()
+  const solicitudMap = new Map<string, { tipo: string; estado: string; motivo: string | null; comentario_admin: string | null }>()
   for (const sol of (solicitudes ?? [])) {
     const uid = sol.usuario_id
     if (!uid) continue
@@ -83,7 +84,7 @@ export async function GET(req: NextRequest) {
       if (dateStr >= minFecha && dateStr <= maxFecha) {
         const key = `${uid}|${dateStr}`
         if (!solicitudMap.has(key)) {
-          solicitudMap.set(key, { tipo: sol.tipo, motivo: sol.motivo ?? null, comentario_admin: sol.comentario_admin ?? null })
+          solicitudMap.set(key, { tipo: sol.tipo, estado: sol.estado, motivo: sol.motivo ?? null, comentario_admin: sol.comentario_admin ?? null })
         }
       }
       d.setDate(d.getDate() + 1)
@@ -92,8 +93,14 @@ export async function GET(req: NextRequest) {
 
   const enriched = records.map(r => {
     const sol = solicitudMap.get(`${r.usuario_id}|${r.fecha}`)
+    // Estado (badge/presentismo) recalculado en vivo desde la solicitud actual
+    // cuando esta lo define, para que una conversión posterior se refleje aunque
+    // la foto grabada esté desactualizada.
+    const porSolicitud = sol ? estadoPorSolicitud(sol.tipo, sol.estado as 'pending' | 'approved' | 'rejected') : null
     return {
       ...r,
+      estado: porSolicitud ? porSolicitud.estado : r.estado,
+      tiene_justificacion: porSolicitud ? porSolicitud.tiene_justificacion : r.tiene_justificacion,
       tipo_ausencia: sol?.tipo ?? null,
       motivo: sol?.motivo ?? null,
       comentario_admin: sol?.comentario_admin ?? null,

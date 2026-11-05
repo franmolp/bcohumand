@@ -82,6 +82,31 @@ export interface ComputeInput {
   esRecepcion?: boolean
 }
 
+// Estado dictado por una solicitud, cuando la solicitud manda por sobre las
+// fichadas (ausencias, vacaciones, feriado, pendiente). Devuelve null para los
+// tipos que NO definen el estado por sí solos (ej. "Cambio de horario/día"), en
+// cuyo caso se usa la lógica de fichadas.
+//
+// Se usa en dos lados para que nunca se desincronicen:
+//  1) computeChip, al regenerar y grabar la foto en asistencia_procesada.
+//  2) Las rutas de lectura (asistencia / mi-asistencia), que recalculan el
+//     estado en vivo desde la solicitud actual. Así, si una ausencia se
+//     convierte (p. ej. Salud → Injustificada por falta de certificado), el
+//     badge y el presentismo reflejan el cambio aunque la foto sea vieja.
+export function estadoPorSolicitud(
+  solicitudTipo: string | null,
+  solicitudEstado: 'pending' | 'approved' | 'rejected' | null,
+): { estado: string; tiene_justificacion: boolean } | null {
+  if (solicitudEstado === 'pending') return { estado: 'Solicitud pendiente', tiene_justificacion: true }
+  if (solicitudEstado === 'approved' && solicitudTipo) {
+    if (solicitudTipo === 'Vacaciones') return { estado: 'Vacaciones', tiene_justificacion: true }
+    if (solicitudTipo === 'Feriado/Local cerrado') return { estado: 'Feriado/Local cerrado', tiene_justificacion: true }
+    if (solicitudTipo === 'Ausencia por Salud' || solicitudTipo === 'Solicitud de Días') return { estado: 'Ausencia justificada', tiene_justificacion: true }
+    if (solicitudTipo === 'Ausencia Injustificada') return { estado: 'Ausencia injustificada', tiene_justificacion: false }
+  }
+  return null
+}
+
 export function computeChip(input: ComputeInput): ComputeResult {
   const { horario, fichadas, primerTurno, cantCitas, solicitudTipo, solicitudEstado, teamType, config, esRecepcion } = input
 
@@ -90,15 +115,9 @@ export function computeChip(input: ComputeInput): ComputeResult {
     horas_fichadas: null, minutos_tarde: 0, minutos_antes: 0, tiene_justificacion: false,
   }
 
-  if (solicitudEstado === 'pending') {
-    return { ...empty, estado: 'Solicitud pendiente', tiene_justificacion: true }
-  }
-
-  if (solicitudEstado === 'approved' && solicitudTipo) {
-    if (solicitudTipo === 'Vacaciones') return { ...empty, estado: 'Vacaciones', tiene_justificacion: true }
-    if (solicitudTipo === 'Feriado/Local cerrado') return { ...empty, estado: 'Feriado/Local cerrado', tiene_justificacion: true }
-    if (solicitudTipo === 'Ausencia por Salud' || solicitudTipo === 'Solicitud de Días') return { ...empty, estado: 'Ausencia justificada', tiene_justificacion: true }
-    if (solicitudTipo === 'Ausencia Injustificada') return { ...empty, estado: 'Ausencia injustificada' }
+  const porSolicitud = estadoPorSolicitud(solicitudTipo ?? null, solicitudEstado ?? null)
+  if (porSolicitud) {
+    return { ...empty, estado: porSolicitud.estado, tiene_justificacion: porSolicitud.tiene_justificacion }
   }
 
   // Fichadas antes de las 6am pertenecen al día anterior

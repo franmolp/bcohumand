@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { supabase } from '@/lib/supabase'
+import { estadoPorSolicitud } from '@/lib/asistencia'
 
 export async function GET(request: NextRequest) {
   const session = await getSession()
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
       .order('fecha', { ascending: true }),
     supabase
       .from('solicitudes')
-      .select('fecha_inicio, fecha_fin, tipo, motivo, comentario_admin')
+      .select('fecha_inicio, fecha_fin, tipo, estado, motivo, comentario_admin')
       .eq('usuario_id', session.id)
       .in('estado', ['approved', 'pending'])
       .lte('fecha_inicio', fechaFin)
@@ -38,7 +39,7 @@ export async function GET(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // Construir mapa fecha → solicitud igual que regenerar para garantizar matching correcto
-  const solicitudMap = new Map<string, { tipo: string; motivo: string | null; comentario_admin: string | null }>()
+  const solicitudMap = new Map<string, { tipo: string; estado: string; motivo: string | null; comentario_admin: string | null }>()
   for (const sol of (solic ?? [])) {
     const inicio = sol.fecha_inicio.substring(0, 10)
     const fin = (sol.fecha_fin ?? sol.fecha_inicio).substring(0, 10)
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
     while (d <= endD) {
       const dateStr = d.toISOString().split('T')[0]
       if (!solicitudMap.has(dateStr)) {
-        solicitudMap.set(dateStr, { tipo: sol.tipo, motivo: sol.motivo ?? null, comentario_admin: sol.comentario_admin ?? null })
+        solicitudMap.set(dateStr, { tipo: sol.tipo, estado: sol.estado, motivo: sol.motivo ?? null, comentario_admin: sol.comentario_admin ?? null })
       }
       d.setDate(d.getDate() + 1)
     }
@@ -55,8 +56,14 @@ export async function GET(request: NextRequest) {
 
   const records = (data ?? []).map(r => {
     const sol = solicitudMap.get(r.fecha)
+    // El estado (badge/presentismo) se recalcula en vivo desde la solicitud actual
+    // cuando esta lo define, así una conversión posterior (p. ej. Salud →
+    // Injustificada) se refleja aunque la foto grabada sea vieja.
+    const porSolicitud = sol ? estadoPorSolicitud(sol.tipo, sol.estado as 'pending' | 'approved' | 'rejected') : null
     return {
       ...r,
+      estado: porSolicitud ? porSolicitud.estado : r.estado,
+      tiene_justificacion: porSolicitud ? porSolicitud.tiene_justificacion : r.tiene_justificacion,
       tipo_ausencia: sol?.tipo ?? null,
       motivo: sol?.motivo ?? null,
       comentario_admin: sol?.comentario_admin ?? null,
