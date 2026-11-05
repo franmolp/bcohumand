@@ -825,9 +825,10 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
                         <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${chip.bg} ${chip.text}`}>{rec.estado}</span>
                         {isManual && <span title="Editado manualmente" className="w-2 h-2 rounded-full bg-violet-400 flex-shrink-0" />}
                       </div>
-                      {(rec.tipo_ausencia || rec.motivo || rec.comentario_admin) && (
-                        <div className="text-[11px] text-gray-400 mt-0.5 truncate">{[rec.tipo_ausencia, rec.motivo, rec.comentario_admin].filter(Boolean).join(' | ')}</div>
-                      )}
+                      {(rec.tipo_ausencia || rec.motivo || rec.comentario_admin) && (() => {
+                        const txt = [rec.tipo_ausencia, rec.motivo, rec.comentario_admin].filter(Boolean).join(' | ')
+                        return <div title={txt} className="text-[11px] text-gray-400 mt-0.5 truncate max-w-[260px]">{txt}</div>
+                      })()}
                     </td>
                     <td className="px-3 py-3.5 text-right">
                       {isAdmin && (
@@ -905,9 +906,10 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
                   {(base.ini || base.fin) && (
                     <div className="text-[10px] text-gray-400 mt-0.5">Base: {fmtTime(base.ini)}–{fmtTime(base.fin)}</div>
                   )}
-                  {!chip.present && (rec.tipo_ausencia || rec.motivo || rec.comentario_admin) && (
-                    <div className="text-[10px] text-gray-400 mt-0.5 truncate">{[rec.tipo_ausencia, rec.motivo, rec.comentario_admin].filter(Boolean).join(' | ')}</div>
-                  )}
+                  {!chip.present && (rec.tipo_ausencia || rec.motivo || rec.comentario_admin) && (() => {
+                    const txt = [rec.tipo_ausencia, rec.motivo, rec.comentario_admin].filter(Boolean).join(' | ')
+                    return <div title={txt} className="text-[10px] text-gray-400 mt-0.5 truncate">{txt}</div>
+                  })()}
                 </div>
                 {isAdmin && (
                   <button onClick={() => openEdit(rec)} className="flex-shrink-0 p-1.5 rounded-lg text-gray-300 hover:text-[var(--primary)] hover:bg-[var(--primary)]/5 transition-colors">
@@ -1353,9 +1355,10 @@ function TodosTab({ todosDate, setTodosDate, todosData, maxDate, canEdit, onReco
                         </button>
                       )}
                     </div>
-                    {(rec?.tipo_ausencia || rec?.motivo || rec?.comentario_admin) && (
-                      <div className="text-[10px] text-gray-400 mb-0.5 truncate">{[rec?.tipo_ausencia, rec?.motivo, rec?.comentario_admin].filter(Boolean).join(' | ')}</div>
-                    )}
+                    {(rec?.tipo_ausencia || rec?.motivo || rec?.comentario_admin) && (() => {
+                      const txt = [rec?.tipo_ausencia, rec?.motivo, rec?.comentario_admin].filter(Boolean).join(' | ')
+                      return <div title={txt} className="text-[10px] text-gray-400 mb-0.5 truncate">{txt}</div>
+                    })()}
                     {/* Fila base */}
                     {base && (
                       <p className="text-[11px] mb-1.5 text-gray-400">

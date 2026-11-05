@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
     // Estado (badge/presentismo) recalculado en vivo desde la solicitud actual
     // cuando esta lo define, para que una conversión posterior se refleje aunque
     // la foto grabada esté desactualizada.
-    const porSolicitud = sol ? estadoPorSolicitud(sol.tipo, sol.estado as 'pending' | 'approved' | 'rejected') : null
+    const porSolicitud = sol ? estadoPorSolicitud(sol.tipo, sol.estado as 'pending' | 'approved' | 'rejected', !!r.fichada_entrada) : null
     return {
       ...r,
       estado: porSolicitud ? porSolicitud.estado : r.estado,

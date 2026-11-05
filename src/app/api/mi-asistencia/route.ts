@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     // El estado (badge/presentismo) se recalcula en vivo desde la solicitud actual
     // cuando esta lo define, así una conversión posterior (p. ej. Salud →
     // Injustificada) se refleja aunque la foto grabada sea vieja.
-    const porSolicitud = sol ? estadoPorSolicitud(sol.tipo, sol.estado as 'pending' | 'approved' | 'rejected') : null
+    const porSolicitud = sol ? estadoPorSolicitud(sol.tipo, sol.estado as 'pending' | 'approved' | 'rejected', !!r.fichada_entrada) : null
     return {
       ...r,
       estado: porSolicitud ? porSolicitud.estado : r.estado,

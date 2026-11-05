@@ -84,8 +84,8 @@ export interface ComputeInput {
 
 // Estado dictado por una solicitud, cuando la solicitud manda por sobre las
 // fichadas (ausencias, vacaciones, feriado, pendiente). Devuelve null para los
-// tipos que NO definen el estado por sí solos (ej. "Cambio de horario/día"), en
-// cuyo caso se usa la lógica de fichadas.
+// casos que NO definen el estado por sí solos, en cuyo caso se usa la lógica de
+// fichadas.
 //
 // Se usa en dos lados para que nunca se desincronicen:
 //  1) computeChip, al regenerar y grabar la foto en asistencia_procesada.
@@ -93,9 +93,16 @@ export interface ComputeInput {
 //     estado en vivo desde la solicitud actual. Así, si una ausencia se
 //     convierte (p. ej. Salud → Injustificada por falta de certificado), el
 //     badge y el presentismo reflejan el cambio aunque la foto sea vieja.
+//
+// `tieneFichada` sólo afecta al "Cambio de horario/día": si ese día no fichó,
+// el día queda justificado (tuvo permiso aprobado) en vez de "Sin turnos" —
+// porque al cambiar el día en BCO Turnos la persona queda sin horario base ese
+// día y la única señal de que le correspondía trabajar es la propia solicitud.
+// Si fichó, se devuelve null y se evalúa normal (cambió el horario pero trabajó).
 export function estadoPorSolicitud(
   solicitudTipo: string | null,
   solicitudEstado: 'pending' | 'approved' | 'rejected' | null,
+  tieneFichada = false,
 ): { estado: string; tiene_justificacion: boolean } | null {
   if (solicitudEstado === 'pending') return { estado: 'Solicitud pendiente', tiene_justificacion: true }
   if (solicitudEstado === 'approved' && solicitudTipo) {
@@ -103,6 +110,7 @@ export function estadoPorSolicitud(
     if (solicitudTipo === 'Feriado/Local cerrado') return { estado: 'Feriado/Local cerrado', tiene_justificacion: true }
     if (solicitudTipo === 'Ausencia por Salud' || solicitudTipo === 'Solicitud de Días') return { estado: 'Ausencia justificada', tiene_justificacion: true }
     if (solicitudTipo === 'Ausencia Injustificada') return { estado: 'Ausencia injustificada', tiene_justificacion: false }
+    if (solicitudTipo === 'Cambio de horario/día' && !tieneFichada) return { estado: 'Ausencia justificada', tiene_justificacion: true }
   }
   return null
 }
@@ -115,13 +123,13 @@ export function computeChip(input: ComputeInput): ComputeResult {
     horas_fichadas: null, minutos_tarde: 0, minutos_antes: 0, tiene_justificacion: false,
   }
 
-  const porSolicitud = estadoPorSolicitud(solicitudTipo ?? null, solicitudEstado ?? null)
+  // Fichadas antes de las 6am pertenecen al día anterior
+  const validFichadas = fichadas.filter(f => toMinutes(f.substring(0, 5)) >= 360)
+
+  const porSolicitud = estadoPorSolicitud(solicitudTipo ?? null, solicitudEstado ?? null, validFichadas.length > 0)
   if (porSolicitud) {
     return { ...empty, estado: porSolicitud.estado, tiene_justificacion: porSolicitud.tiene_justificacion }
   }
-
-  // Fichadas antes de las 6am pertenecen al día anterior
-  const validFichadas = fichadas.filter(f => toMinutes(f.substring(0, 5)) >= 360)
 
   // Deduplicar por HH:MM (doble toque)
   const deduped = Array.from(new Set(validFichadas.map(f => f.substring(0, 5)))).sort()
