@@ -572,13 +572,17 @@ function HomeTab({ mes, setMes, isAdmin, canSelectEmp, empList, homeEmpId, setHo
   const horasJustif = (r: AsistenciaProcesada) =>
     getHorasProg(r) ?? (r.dia_semana ? (dowAvg.get(r.dia_semana) ?? globalAvg) : globalAvg)
 
-  // Horas totales: fichadas reales (presentes) + horas estimadas (justificados)
-  const horasFichadasReales = parseFloat(homeRecords.reduce((sum, r) => {
+  // Horas totales: fichadas reales (presentes) + horas estimadas (justificados).
+  // Se redondea CADA día a minutos antes de sumar, igual que el PDF de liquidación
+  // (totalMin += Math.round(h*60)) y que las filas de la tabla. Si se sumaran los
+  // decimales y se redondeara al final, el total podía diferir 1-2 min del
+  // exportado por redondeo acumulado.
+  const horasFichadasReales = homeRecords.reduce((min, r) => {
     const chip = CHIP_INFO[r.estado ?? '']
-    if (chip?.present) return sum + (r.horas_fichadas ?? 0)
-    if (chip?.justificado) return sum + horasJustif(r)
-    return sum
-  }, 0).toFixed(2))
+    if (chip?.present) return min + Math.round((r.horas_fichadas ?? 0) * 60)
+    if (chip?.justificado) return min + Math.round(horasJustif(r) * 60)
+    return min
+  }, 0) / 60
 
   // ── Liquidación ──────────────────────────────────────────────────────────────
   const [valorHora, setValorHora] = useState('')
