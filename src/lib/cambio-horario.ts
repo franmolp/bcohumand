@@ -6,6 +6,7 @@
 //   (si ese día ya trabajaba de 15 a 20 y pide de 9 a 20, se le suma de 9 a 15).
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { defaultCapacity, findGapsForDay, isMasajistaODepiladora, isPeluqueria, isRecepcion, overlaps, restarAprobados, toMin, minToStr } from '@/lib/gaps'
+import { getAusenciasOcupacion } from '@/lib/ausencias'
 
 type Sol = { id: string; usuario_id: string; tipo: string; estado?: string; subtipo_horario: string | null; fecha_inicio: string; fecha_compensacion: string | null; horario_nuevo: string | null; horario_previo?: Record<string, Fila[]> | null }
 type Fila = { inicio_base: string; fin_base: string; horas_base: number | null }
@@ -47,11 +48,13 @@ export async function evaluarCambio(s: Sol): Promise<{ posible: boolean; mensaje
   if (cerrado.data?.length) return { posible: false, mensaje: `${fmt(d.dia)[0].toUpperCase()}${fmt(d.dia).slice(1)} el local está cerrado.` }
   const capacidad = (cfg.data?.valor as { capacidades?: Record<string, number> } | null)?.capacidades?.[equipo] ?? defaultCapacity(equipo)
   const ids = [...new Set([...(miembros.data ?? []).map(m => m.id), s.usuario_id])]
-  const [hor, pue] = await Promise.all([
+  const [hor, pue, ausencias] = await Promise.all([
     supabaseAdmin.from('horarios_base').select('usuario_id, inicio_base, fin_base').eq('fecha', d.dia).in('usuario_id', ids),
     supabaseAdmin.from('solicitudes_puesto').select('usuario_id, hora_inicio, hora_fin, lane').eq('fecha', d.dia).eq('estado', 'approved').in('usuario_id', ids),
+    // Quien está ausente aprobado ese día no ocupa lugar: su mesa cuenta como libre.
+    getAusenciasOcupacion(d.dia, d.dia),
   ])
-  const turnos = (hor.data ?? []).filter(h => h.inicio_base && h.fin_base).map(h => ({ usuario_id: h.usuario_id as string, inicio: hm(h.inicio_base), fin: hm(h.fin_base) }))
+  const turnos = (hor.data ?? []).filter(h => h.inicio_base && h.fin_base && !ausencias.has(`${h.usuario_id}|${d.dia}`)).map(h => ({ usuario_id: h.usuario_id as string, inicio: hm(h.inicio_base), fin: hm(h.fin_base) }))
   const propios = turnos.filter(t => t.usuario_id === s.usuario_id).map(t => ({ inicio: toMin(t.inicio), fin: toMin(t.fin) }))
   // Mismo día: su turno de ese día se reemplaza, así que no ocupa lugar; compensación: lo conserva
   const delEquipo = s.subtipo_horario === 'compensacion' ? turnos : turnos.filter(t => t.usuario_id !== s.usuario_id)

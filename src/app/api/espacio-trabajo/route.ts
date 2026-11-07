@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { toMin } from '@/lib/gaps'
+import { getAusenciasOcupacion } from '@/lib/ausencias'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Load config and schedules in parallel
-  const [configRes, horariosRes, solicitudesRes, feriadosRes] = await Promise.all([
+  const [configRes, horariosRes, solicitudesRes, feriadosRes, ausencias] = await Promise.all([
     supabase.from('configuracion').select('clave, valor').in('clave', ['espacio_trabajo', 'ultima_importacion_turnos', 'ultima_importacion_fichadas']),
     supabaseAdmin
       .from('horarios_base')
@@ -59,6 +60,9 @@ export async function GET(req: NextRequest) {
       .in('estado', ['approved', 'pending'])
       .lte('fecha_inicio', fechaFin)
       .or(`fecha_fin.gte.${fechaInicio},fecha_fin.is.null`),
+    // Ausencias aprobadas (vacaciones, salud, días, injustificada): esa persona no
+    // ocupa su puesto ese día, así que su turno de horarios_base no debe contarse.
+    getAusenciasOcupacion(fechaInicio, fechaFin),
   ])
 
   // Mapa fecha (YYYY-MM-DD) → motivo del feriado, solo para las fechas del rango pedido.
@@ -201,12 +205,17 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Quitar de la ocupación a quien tiene una ausencia aprobada ese día (pidió el día,
+  // vacaciones, etc.): su mesa/box queda libre para otra. BCO Turnos puede seguir
+  // mandándola agendada, así que Humand la descuenta acá con su propia aprobación.
+  const turnosLibres = turnos.filter(t => !ausencias.has(`${t.usuario_id}|${t.fecha}`))
+
   // Build capacidades map: equipo_nombre → capacity
-  const equipoNames = [...new Set(turnos.map(t => t.equipo).filter(Boolean))]
+  const equipoNames = [...new Set(turnosLibres.map(t => t.equipo).filter(Boolean))]
   const capacidades: Record<string, number> = {}
   for (const name of equipoNames) {
     capacidades[name] = capacidadesOverride[name] ?? defaultCapacity(name)
   }
 
-  return NextResponse.json({ turnos, ultimaImportacion, ultimaFichadas, capacidades, diasCerrados })
+  return NextResponse.json({ turnos: turnosLibres, ultimaImportacion, ultimaFichadas, capacidades, diasCerrados })
 }

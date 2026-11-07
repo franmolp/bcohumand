@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { tipoRecurso, defaultCapacity, findGapsForDay, toMin, minToStr, overlaps, restarAprobados, decomponerGap, minGapParaEquipo, MIN_GAP_CONTIGUO, contiguidadConTurno, turnosDeTipo, type TipoContiguidad } from '@/lib/gaps'
+import { getAusenciasOcupacion } from '@/lib/ausencias'
 
 function addDays(date: string, n: number): string {
   const d = new Date(date + 'T12:00:00Z')
@@ -125,22 +126,29 @@ export async function getPuestosDisponibles(
   const miembroIds = (miembrosRes.data ?? []).map(u => u.id as string)
   if (miembroIds.length === 0) return { tipo_recurso: tipo, puestos: [], hoy: today }
 
-  const { data: horarios } = await supabaseAdmin
-    .from('horarios_base')
-    .select('usuario_id, fecha, inicio_base, fin_base')
-    .in('usuario_id', miembroIds)
-    .gte('fecha', today)
-    .lte('fecha', hasta)
-    .limit(5000)
+  const [{ data: horarios }, ausencias] = await Promise.all([
+    supabaseAdmin
+      .from('horarios_base')
+      .select('usuario_id, fecha, inicio_base, fin_base')
+      .in('usuario_id', miembroIds)
+      .gte('fecha', today)
+      .lte('fecha', hasta)
+      .limit(5000),
+    // Quien tiene una ausencia aprobada ese día (pidió el día, vacaciones, etc.)
+    // no ocupa su mesa/box: su turno se descarta así el lugar queda libre para otra.
+    getAusenciasOcupacion(today, hasta),
+  ])
 
   const normalizeTime = (t: string) => (t ? t.slice(0, 5) : t)
   type Turno = { usuario_id: string; fecha: string; inicio: string; fin: string }
-  const turnos: Turno[] = (horarios ?? []).map(h => ({
-    usuario_id: h.usuario_id as string,
-    fecha: h.fecha as string,
-    inicio: normalizeTime(h.inicio_base as string),
-    fin: normalizeTime(h.fin_base as string),
-  }))
+  const turnos: Turno[] = (horarios ?? [])
+    .filter(h => !ausencias.has(`${h.usuario_id}|${String(h.fecha).slice(0, 10)}`))
+    .map(h => ({
+      usuario_id: h.usuario_id as string,
+      fecha: h.fecha as string,
+      inicio: normalizeTime(h.inicio_base as string),
+      fin: normalizeTime(h.fin_base as string),
+    }))
 
   const turnosPorFecha = new Map<string, Turno[]>()
   for (const t of turnos) {
