@@ -17,6 +17,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { fecha_inicio, fecha_fin, motivo, comentario_admin } = body
+    // Por defecto NO se notifica a las empleadas (el día ya queda bloqueado); solo
+    // se manda la notificación si el admin tilda "Avisar al equipo".
+    const avisar = body.avisar === true
 
     if (!fecha_inicio || !fecha_fin) {
       return NextResponse.json({ error: 'Fechas requeridas' }, { status: 400 })
@@ -55,10 +58,10 @@ export async function POST(request: NextRequest) {
     const { error } = await supabase.from('solicitudes').insert(inserts)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // Notificar a todos los empleados (excepto el admin que lo creó)
+    // Notificar a todos los empleados (excepto el admin que lo creó) — solo si se pidió
     try {
       const ids = empleados.map(e => e.id).filter(id => id !== session.id)
-      if (ids.length) {
+      if (avisar && ids.length) {
         const [fi, ff] = [fecha_inicio, fecha_fin].map(f => {
           const [y, m, d] = f.split('-').map(Number)
           return `${d}/${m}/${y}`

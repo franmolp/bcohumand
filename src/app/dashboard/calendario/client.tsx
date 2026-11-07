@@ -143,6 +143,7 @@ const BLANK_EVENT = {
   fecha_fin:            '',
   motivo:               '',
   comentario_admin_lc:  '',
+  avisar_empleados_lc:  false,
 }
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
@@ -627,10 +628,22 @@ function CreateEventModal({
                 onChange={e => set('comentario_admin_lc', e.target.value)}
               />
             </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="w-4 h-4 accent-[var(--primary)] cursor-pointer"
+                checked={form.avisar_empleados_lc}
+                onChange={e => set('avisar_empleados_lc', e.target.checked)}
+              />
+              <span className="text-[13px] text-gray-600">Avisar al equipo con una notificación</span>
+            </label>
             <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-xl">
               <span className="text-blue-500 text-[13px] shrink-0 mt-0.5">ℹ</span>
               <p className="text-[12px] text-blue-700">
-                Se creará una solicitud aprobada para <strong>todos los empleados activos</strong> y se les notificará.
+                Se bloqueará el día para <strong>todos los empleados activos</strong>.
+                {form.avisar_empleados_lc
+                  ? ' Se les enviará una notificación.'
+                  : ' No se les enviará notificación (bloqueo silencioso).'}
               </p>
             </div>
           </>
@@ -997,6 +1010,7 @@ export default function CalendarioClient({ user }: { user: SessionUser }) {
           fecha_fin:        payload.fecha_fin || payload.fecha_inicio,
           motivo:           payload.motivo           || null,
           comentario_admin: payload.comentario_admin_lc || null,
+          avisar:           payload.avisar_empleados_lc,
         }),
       })
       const d = await r.json().catch(() => ({}))
