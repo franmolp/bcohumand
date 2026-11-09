@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { tipoRecurso, defaultCapacity, findGapsForDay, restarAprobados, decomponerGap, toMin, minGapParaEquipo } from '@/lib/gaps'
 import { getEquiposHabilitadosPuestos } from '@/lib/puestos'
+import { getAusenciasOcupacion } from '@/lib/ausencias'
 import { crearNotificaciones, getUserIdsByEquipo } from '@/lib/notificaciones'
 
 function addDays(date: string, n: number): string {
@@ -24,9 +25,11 @@ async function enviarAvisoSemanal() {
   const lunes = addDays(today, diasHastaLunes)
   const sabado = addDays(lunes, 5)
 
-  const [{ data: equipos }, habilitados] = await Promise.all([
+  const [{ data: equipos }, habilitados, ausencias] = await Promise.all([
     supabaseAdmin.from('equipos').select('id, nombre'),
     getEquiposHabilitadosPuestos(),
+    // Ausencias aprobadas de la semana: su turno no cuenta como ocupación.
+    getAusenciasOcupacion(lunes, sabado),
   ])
   const elegibles = (equipos ?? []).filter(e => habilitados.includes(e.id))
 
@@ -54,6 +57,7 @@ async function enviarAvisoSemanal() {
     const turnosPorFecha = new Map<string, { usuario_id: string; inicio: string; fin: string }[]>()
     for (const h of (horariosRes.data ?? [])) {
       const f = h.fecha as string
+      if (ausencias.has(`${h.usuario_id}|${f}`)) continue // ausente ese día: no ocupa
       if (!turnosPorFecha.has(f)) turnosPorFecha.set(f, [])
       turnosPorFecha.get(f)!.push({ usuario_id: h.usuario_id as string, inicio: normalizeTime(h.inicio_base as string), fin: normalizeTime(h.fin_base as string) })
     }

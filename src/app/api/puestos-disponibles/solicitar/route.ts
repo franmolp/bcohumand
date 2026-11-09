@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { defaultCapacity, findGapsForDay, restarAprobados, toMin, minToStr, overlaps, conArticulo, minGapParaEquipo, MIN_GAP_CONTIGUO, esContiguoAturno } from '@/lib/gaps'
 import { fmtFechaLarga } from '@/lib/fecha'
 import { resolverAccesoPuestos } from '@/lib/puestos'
+import { getAusenciasOcupacion } from '@/lib/ausencias'
 import { crearNotificaciones, getAdminAndEncargadaIds } from '@/lib/notificaciones'
 
 export async function POST(req: NextRequest) {
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
 
   const { data: me } = await supabaseAdmin.from('usuarios').select('nombre').eq('id', session.id).single()
 
-  const [configRes, miembrosRes, horariosRes, solicitudesRes] = await Promise.all([
+  const [configRes, miembrosRes, horariosRes, solicitudesRes, ausencias] = await Promise.all([
     supabaseAdmin.from('configuracion').select('valor').eq('clave', 'espacio_trabajo').single(),
     supabaseAdmin.from('usuarios').select('id').eq('equipo_id', equipoId).eq('estado_cuenta', 'activo'),
     supabaseAdmin.from('horarios_base').select('usuario_id, inicio_base, fin_base').eq('fecha', fecha),
@@ -49,6 +50,10 @@ export async function POST(req: NextRequest) {
       .eq('equipo_id', equipoId)
       .eq('fecha', fecha)
       .in('estado', ['pending', 'approved']),
+    // Quien tiene una ausencia aprobada ese día no ocupa su mesa/box: su turno NO
+    // cuenta, igual que en la vista de disponibles. Sin esto, el servidor rechazaba
+    // un puesto que la empleada SÍ veía libre (lo liberaba la ausencia).
+    getAusenciasOcupacion(fecha, fecha),
   ])
 
   const capacidadesOverride = (configRes.data?.valor as { capacidades?: Record<string, number> } | null)?.capacidades ?? {}
@@ -58,6 +63,7 @@ export async function POST(req: NextRequest) {
   const normalizeTime = (t: string) => (t ? t.slice(0, 5) : t)
   const shiftsDia = (horariosRes.data ?? [])
     .filter(h => miembroIds.has(h.usuario_id as string))
+    .filter(h => !ausencias.has(`${h.usuario_id}|${fecha}`))
     .map(h => ({ usuario_id: h.usuario_id as string, inicio: normalizeTime(h.inicio_base as string), fin: normalizeTime(h.fin_base as string) }))
 
   const misTurnosDia = shiftsDia.filter(t => t.usuario_id === session.id)
