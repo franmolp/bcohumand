@@ -5,22 +5,15 @@ export const dynamic = 'force-dynamic'
 
 export type { GoogleReview } from '@/types/google-reviews'
 
-type SerpReview = {
-  user?: { name?: string; thumbnail?: string }
-  rating?: number
-  date?: string
-  snippet?: string
-}
-
 export async function GET() {
-  // Camino feliz: leer de Supabase, cero llamadas a SerpAPI
+  // Se leen de Supabase (las actualiza a diario el cron con las reseñas de BCO Turnos)
   const { data: rows } = await supabaseAdmin
     .from('google_reviews')
     .select('author, avatar, rating, text, date')
 
   if (rows && rows.length > 0) {
     const shuffled = [...rows].sort(() => Math.random() - 0.5)
-    // Calificación y total de Google (los guarda la actualización diaria, una consulta por semana): BCO Turnos los toma de acá
+    // Calificación y total de Google (los guarda la actualización diaria, salen de BCO Turnos)
     const { data: conf } = await supabaseAdmin.from('configuracion').select('clave, valor').in('clave', ['google_lugar', 'google_reviews_estado'])
     const l = conf?.find(c => c.clave === 'google_lugar')?.valor as { rating?: number | null; total?: number } | undefined
     // Última actualización diaria (fecha y error si falló), para revisar por qué no se actualizan
@@ -28,46 +21,6 @@ export async function GET() {
     return NextResponse.json({ reviews: shuffled, rating: l?.rating ?? null, total: l?.total ?? 0, actualizado: e ? { en: e.en, ok: e.ok, error: e.error ?? null } : null })
   }
 
-  // Fallback cuando la tabla está vacía (primer deploy): llama a SerpAPI y puebla la tabla
-  const key = process.env.SERPAPI_KEY
-  if (!key) return NextResponse.json({ reviews: [] })
-
-  try {
-    let dataId = process.env.GOOGLE_PLACE_DATA_ID ?? null
-    if (!dataId) {
-      const url = `https://serpapi.com/search.json?engine=google_maps&q=Beauty+Co+Centro+de+Belleza+y+Peluqueria+La+Plata&ll=@-34.9195,-57.9545,13z&api_key=${key}`
-      const r = await fetch(url)
-      if (r.ok) {
-        const d = await r.json()
-        dataId = d.local_results?.[0]?.data_id ?? null
-      }
-    }
-    if (!dataId) return NextResponse.json({ reviews: [] })
-
-    const url = `https://serpapi.com/search.json?engine=google_maps_reviews&data_id=${dataId}&hl=es&sort_by=newestFirst&api_key=${key}`
-    const res = await fetch(url)
-    if (!res.ok) return NextResponse.json({ reviews: [] })
-
-    const data = await res.json()
-    const raw: SerpReview[] = data.reviews ?? data.reviews_results?.reviews ?? []
-    const reviews = raw
-      .filter(r => (r.rating ?? 0) >= 4 && r.snippet?.trim())
-      .map(r => ({
-        author: r.user?.name ?? 'Cliente',
-        avatar: r.user?.thumbnail ?? null,
-        rating: r.rating ?? 5,
-        text: r.snippet ?? '',
-        date: r.date ?? '',
-      }))
-
-    if (reviews.length > 0) {
-      await supabaseAdmin.from('google_reviews').delete().gt('id', 0)
-      await supabaseAdmin.from('google_reviews').insert(reviews)
-    }
-
-    const shuffled = [...reviews].sort(() => Math.random() - 0.5)
-    return NextResponse.json({ reviews: shuffled })
-  } catch {
-    return NextResponse.json({ reviews: [] })
-  }
+  // Tabla vacía: todavía no corrió la actualización diaria (las reseñas vienen de BCO Turnos)
+  return NextResponse.json({ reviews: [] })
 }

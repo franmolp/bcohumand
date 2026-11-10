@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getConcursoConfig, armarEmpleadas, detectarEmpleadas, normalizar, esDelMesContest } from '@/lib/concurso-google'
 
-type SerpReview = {
+type ResenaG = {
   review_id?: string
   link?: string
   user?: { name?: string; thumbnail?: string }
@@ -16,7 +16,7 @@ type SerpReview = {
 // Texto a escanear/mostrar: comentario libre + campos estructurados (Servicios,
 // Estilista, etc.). Muchas reseñas no tienen comentario pero completan estos
 // campos, y ahí a veces figura el nombre de la empleada ("Estilista: Claudia").
-function textoDeReview(r: SerpReview): string {
+function textoDeReview(r: ResenaG): string {
   const partes: string[] = []
   if (r.snippet?.trim()) partes.push(r.snippet.trim())
   if (r.details && typeof r.details === 'object') {
@@ -27,45 +27,29 @@ function textoDeReview(r: SerpReview): string {
   return partes.join(' · ')
 }
 
-// Datos del local en Google (id, calificación promedio y total de reseñas): se guardan y se piden a SerpAPI
-// como mucho una vez por semana (BCO Turnos también los toma de acá, así no gasta créditos aparte)
+// Las reseñas salen de BCO Turnos (API oficial de Google, Clientes → Reseñas), ya no de SerpAPI.
+// GET {BCO_TURNOS_URL}/api/integraciones/humand/resenas con INTEGRACION_SECRET. También trae la calificación y el total del local.
 export type LugarGoogle = { data_id: string | null; rating: number | null; total: number; en: string }
-async function fetchDataId(key: string): Promise<string | null> {
-  const { data } = await supabaseAdmin.from('configuracion').select('valor').eq('clave', 'google_lugar').maybeSingle()
-  const lugar = data?.valor as LugarGoogle | undefined
-  const envId = process.env.GOOGLE_PLACE_DATA_ID ?? null
-  if (lugar?.en && Date.now() - Date.parse(lugar.en) < 7 * 86_400_000 && (envId || lugar.data_id)) return envId || lugar.data_id
-  const url = `https://serpapi.com/search.json?engine=google_maps&q=Beauty+Co+Centro+de+Belleza+y+Peluqueria+La+Plata&ll=@-34.9195,-57.9545,13z&hl=es&api_key=${key}`
-  const res = await fetch(url)
-  if (!res.ok) return envId || lugar?.data_id || null
-  const d = await res.json()
-  const l = d.place_results ?? d.local_results?.[0]
-  const nuevo: LugarGoogle = { data_id: envId || (l?.data_id as string) || lugar?.data_id || null, rating: l?.rating ?? lugar?.rating ?? null, total: l?.reviews ?? lugar?.total ?? 0, en: new Date().toISOString() }
-  await supabaseAdmin.from('configuracion').upsert({ clave: 'google_lugar', valor: nuevo }, { onConflict: 'clave' })
-  return nuevo.data_id
+type DeTurnos = { rating: number | null; total: number; resenas: { id: string; autor: string; foto: string | null; estrellas: number; texto: string; fecha_iso: string | null }[] }
+async function traerDeTurnos(desde: string | null): Promise<DeTurnos> {
+  const secreto = process.env.INTEGRACION_SECRET
+  if (!secreto) throw new Error('Falta INTEGRACION_SECRET')
+  const base = (process.env.BCO_TURNOS_URL || 'https://bco-turnos.vercel.app').replace(/\/$/, '')
+  const res = await fetch(`${base}/api/integraciones/humand/resenas${desde ? `?desde=${desde}` : ''}`, { headers: { Authorization: `Bearer ${secreto}` }, cache: 'no-store' })
+  const d = await res.json().catch(() => ({})) as DeTurnos & { error?: string }
+  if (!res.ok) throw new Error(`BCO Turnos ${res.status}: ${d.error ?? 'sin detalle'}`)
+  return d
 }
-
-// Trae una página de reseñas (opcionalmente con token de paginación) y el token
-// de la siguiente página (null si es la última).
-async function fetchPagina(dataId: string, key: string, token: string | null): Promise<{ reviews: SerpReview[]; next: string | null }> {
-  let url = `https://serpapi.com/search.json?engine=google_maps_reviews&data_id=${dataId}&hl=es&sort_by=newestFirst&api_key=${key}`
-  if (token) url += `&next_page_token=${encodeURIComponent(token)}`
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`SerpAPI ${res.status}: ${((await res.json().catch(() => ({}))) as { error?: string }).error ?? 'sin detalle'}`)
-  const data = await res.json()
-  const reviews: SerpReview[] = data.reviews ?? data.reviews_results?.reviews ?? []
-  const next = (data.serpapi_pagination?.next_page_token as string) ?? null
-  return { reviews, next }
-}
+const aResena = (r: DeTurnos['resenas'][number]): ResenaG => ({ review_id: r.id, user: { name: r.autor, thumbnail: r.foto ?? undefined }, rating: r.estrellas, iso_date: r.fecha_iso ?? undefined, date: '', snippet: r.texto })
 
 // Clave estable por reseña: cada persona deja como mucho una reseña por lugar, así
-// que si Google/SerpAPI no da un id, el nombre del autor sirve como clave (y no
+// que si Google no da un id, el nombre del autor sirve como clave (y no
 // incluye el texto, que puede cambiar si la clienta edita → así tomamos la original).
-function reviewKey(r: SerpReview): string {
+function reviewKey(r: ResenaG): string {
   return r.review_id || r.link || `autor:${normalizar(r.user?.name ?? '')}`
 }
 
-function mapReview(r: SerpReview) {
+function mapReview(r: ResenaG) {
   return {
     author: r.user?.name ?? 'Cliente',
     avatar: r.user?.thumbnail ?? null,
@@ -80,10 +64,7 @@ function mapReview(r: SerpReview) {
 // el carrusel y sigue paginando hasta alcanzar reseñas ya guardadas (o tope de
 // seguridad), para no gastar créditos de más.
 async function acumularMenciones(
-  primeraPagina: SerpReview[],
-  primerToken: string | null,
-  dataId: string,
-  key: string,
+  primeraPagina: ResenaG[],
   mes: string,
   aliases: Record<string, string[]>,
 ) {
@@ -92,15 +73,16 @@ async function acumularMenciones(
   const empleadas = armarEmpleadas(usuarios ?? [], aliases)
 
   const { data: existentes } = await supabaseAdmin
-    .from('google_menciones').select('review_key, texto, revisado').eq('mes', mes)
+    .from('google_menciones').select('review_key, author, texto, revisado').eq('mes', mes)
   const conocidas = new Set((existentes ?? []).map(r => r.review_key as string))
+  // Las guardadas antes venían de SerpAPI con otro id: la misma persona (una reseña por local) se reconoce por el nombre
+  const porAutor = new Map((existentes ?? []).map(r => [normalizar((r.author as string) ?? ''), r.review_key as string]))
   // Texto guardado de cada reseña: si la clienta la edita en Google, se actualiza acá
   const guardadas = new Map((existentes ?? []).map(r => [r.review_key as string, { texto: (r.texto as string) ?? '', revisado: !!r.revisado }]))
 
   const hoyISO = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
 
-  let pagina = primeraPagina
-  let token = primerToken
+  const pagina = primeraPagina
   let vueltas = 0
   let leidas = 0 // diagnóstico: reseñas escaneadas en total
   let total = 0
@@ -136,7 +118,7 @@ async function acumularMenciones(
       } else {
         continue // sin iso y fecha relativa fuera del mes → saltarla
       }
-      const rk = reviewKey(r)
+      const rk0 = reviewKey(r), rk = conocidas.has(rk0) ? rk0 : porAutor.get(normalizar(r.user?.name ?? '')) ?? rk0
       if (conocidas.has(rk)) {
         yaConocidas++
         if (iso) backfill.push({ rk, iso })
@@ -177,14 +159,9 @@ async function acumularMenciones(
       await supabaseAdmin.from('google_menciones').update({ fecha_iso: b.iso }).eq('review_key', b.rk).is('fecha_iso', null)
     }
     vueltas++
-    // Se frena cuando una página entera ya no tiene reseñas del mes (newest-first, así que
-    // más abajo solo hay más viejas), sin token, o al tope de seguridad.
-    // Ahorro de créditos de SerpAPI: si la página no trajo ninguna nueva y sí del mes ya guardadas, lo que sigue
-    // (más viejo) ya se leyó en días anteriores: no se pide la próxima página
-    if (!hayDelMesEnPagina || !token || vueltas >= 10 || (nuevas.length === 0 && yaConocidas > 0)) break
-    const sig = await fetchPagina(dataId, key, token)
-    pagina = sig.reviews
-    token = sig.next
+    // Desde BCO Turnos llegan todas juntas: una sola vuelta
+    void yaConocidas; void hayDelMesEnPagina
+    break
   }
 
   return { insertadas: total, error, camposSinComentario, leidas, paginas: vueltas }
@@ -205,17 +182,17 @@ export async function ejecutarGoogleReviewsRefresh() {
 }
 
 async function refrescar() {
-  const key = process.env.SERPAPI_KEY
-  if (!key) throw new Error('no_key')
+  const cfg0 = await getConcursoConfig().catch(() => null)
+  // Para el concurso alcanza desde el mes anterior al del concurso; el carrusel usa las más nuevas
+  const desde = cfg0?.activo && cfg0.mes ? `${cfg0.mes}-01` : null
+  const t = await traerDeTurnos(desde)
+  const pagina1 = t.resenas.map(aResena)
+  await supabaseAdmin.from('configuracion').upsert({ clave: 'google_lugar', valor: { data_id: null, rating: t.rating, total: t.total, en: new Date().toISOString() } satisfies LugarGoogle }, { onConflict: 'clave' })
 
-  const dataId = await fetchDataId(key)
-  if (!dataId) throw new Error('no_place')
-
-  const { reviews: pagina1, next } = await fetchPagina(dataId, key, null)
-
-  // Snapshot del carrusel (las ~10 más nuevas 4-5★ con texto) — igual que antes
+  // Snapshot del carrusel (las 10 más nuevas 4-5★ con texto)
   const reviews = pagina1
     .filter(r => (r.rating ?? 0) >= 4 && r.snippet?.trim())
+    .slice(0, 10)
     .map(mapReview)
 
   if (reviews.length > 0) {
@@ -234,7 +211,7 @@ async function refrescar() {
   try {
     const cfg = await getConcursoConfig()
     if (cfg.activo && cfg.mes) {
-      const r = await acumularMenciones(pagina1, next, dataId, key, cfg.mes, cfg.aliases)
+      const r = await acumularMenciones(pagina1, cfg.mes, cfg.aliases)
       mencionesNuevas = r.insertadas
       mencionesError = r.error
       camposSinComentario = r.camposSinComentario
