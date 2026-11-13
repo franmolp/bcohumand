@@ -425,7 +425,8 @@ function BingoHost({ st, girando, onSacar, onDeshacer, onReiniciar }: { st: Host
         </div>
       </div>
       <div className="flex-1 flex flex-col justify-center min-w-0">
-        <div className="grid grid-cols-10 gap-1.5">
+        {/* Ancho limitado por el alto de la pantalla, así entran la grilla y los premios en cualquier proyector */}
+        <div className="grid grid-cols-10 gap-1.5 mx-auto w-full" style={{ maxWidth: 'calc((100vh - 260px) * 10 / 9)' }}>
           {Array.from({ length: 90 }, (_, i) => i + 1).map(n => (
             <div key={n} className={`aspect-square rounded-xl flex items-center justify-center text-[2.3vh] font-bold transition-all duration-500 ${n === ultimo ? 'bg-[#ff4fa3] text-white scale-110 shadow-lg celda-ultima' : salidos.has(n) ? 'bg-white text-[#2a1650]' : 'bg-white/[0.06] text-white/30'}`}>{n}</div>
           ))}
@@ -525,7 +526,9 @@ function TriviaHost({ st, preguntas, q, ahora, online, ranking, onLanzar, onCerr
       </div>
 
       <div className="flex-1 flex items-center justify-center gap-8 min-h-0 py-5">
-        <Media q={q} transcurrido={transcurrido} revelada={revelada} />
+        {revelada && (q.tipo === 'texto' || q.tipo === 'votacion')
+          ? <BarrasResultado q={q} conteo={conteo} />
+          : <Media q={q} transcurrido={transcurrido} revelada={revelada} />}
         {!revelada && (
           <div className="text-center shrink-0">
             <p className="text-[9vh] font-black leading-none">{nResp}</p>
@@ -557,6 +560,23 @@ function TriviaHost({ st, preguntas, q, ahora, online, ranking, onLanzar, onCerr
           ? <button onClick={onSiguiente} className="px-10 py-4 rounded-full bg-[#ff4fa3] hover:bg-[#ff3594] text-2xl font-black cursor-pointer">{t.idx + 1 < preguntas.length ? 'Siguiente pregunta' : 'Ver podio'}</button>
           : <button onClick={onRanking} className="px-10 py-4 rounded-full bg-[#ff4fa3] hover:bg-[#ff3594] text-2xl font-black cursor-pointer">Ver ranking</button>)}
       </div>
+    </div>
+  )
+}
+
+// Gráfico de barras de cuántos eligieron cada opción (al revelar)
+function BarrasResultado({ q, conteo }: { q: Pregunta; conteo: number[] }) {
+  const max = Math.max(1, ...conteo)
+  return (
+    <div className="flex items-end gap-[3vw] h-[34vh]">
+      {q.opciones.map((o, i) => o.trim() ? (
+        <div key={i} className="flex flex-col items-center justify-end h-full w-[9vw]">
+          <span className="text-[4.2vh] font-black mb-1 chip-pop" style={{ animationDelay: `${0.5 + i * 0.12}s` }}>{conteo[i]}</span>
+          <div className="w-full rounded-t-2xl podio-sube flex items-start justify-center pt-2 text-[3vh]"
+            style={{ height: `${(conteo[i] / max) * 26 + 1.5}vh`, background: COLORES[i], animationDelay: `${i * 0.12}s` }}>{FORMAS[i]}</div>
+          <span className="h-[4vh] text-[3.4vh] mt-1">{q.tipo !== 'votacion' && i === q.correcta ? '✔' : ''}</span>
+        </div>
+      ) : null)}
     </div>
   )
 }
