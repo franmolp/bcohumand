@@ -21,10 +21,13 @@ interface HostState {
     respuestas: Record<string, Record<string, { op: number; ms: number }>>
     puntos: Record<string, number>
     previos: Record<string, number>
+    cierre: number // si se tocó "Últimos 5 segundos": hora en que cierra (0 = al terminar el tiempo)
   }
 }
 const bingoInicial = (): HostState['bingo'] => ({ salidos: [], fase: 'linea', ganadores: { linea: [], bingo: [] }, cantos: [] })
-const triviaInicial = (): HostState['trivia'] => ({ idx: 0, fase: 'espera', inicio: 0, respuestas: {}, puntos: {}, previos: {} })
+const triviaInicial = (): HostState['trivia'] => ({ idx: 0, fase: 'espera', inicio: 0, respuestas: {}, puntos: {}, previos: {}, cierre: 0 })
+// Hora en que cierra la pregunta: al terminar su tiempo, o antes si se tocó "Últimos 5 segundos"
+const limiteDe = (t: HostState['trivia'], q: Pregunta) => Math.min(t.inicio + q.duracion * 1000, t.cierre || Infinity)
 const estadoInicial = (): HostState => ({ modo: 'lobby', jugadores: {}, bingo: bingoInicial(), trivia: triviaInicial() })
 
 type Vista = Modo | 'editor'
@@ -46,6 +49,8 @@ export default function HostClient() {
   const [banner, setBanner] = useState<{ tipo: 'linea' | 'bingo'; nombres: string[] } | null>(null)
   const [menu, setMenu] = useState(false)
   const salidaRef = useRef<RealtimeChannel | null>(null)
+  const sonidoRef = useRef<AudioContext | null>(null)
+  const segRef = useRef(0)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const envioRef = useRef<{ timer: number | null; ultimo: number }>({ timer: null, ultimo: 0 })
   const sb = useMemo(() => sbFiesta(), [])
@@ -89,7 +94,7 @@ export default function HostClient() {
         n: s.trivia.idx + 1,
         total: pregs.length,
         pregunta: mostrarPregunta ? { id: q.id, tipo: q.tipo, texto: q.texto, opciones: q.opciones, duracion: q.duracion } : null,
-        restanteMs: abierta && q ? Math.max(0, q.duracion * 1000 - (Date.now() - s.trivia.inicio)) : 0,
+        restanteMs: abierta && q ? Math.max(0, limiteDe(s.trivia, q) - Date.now()) : 0,
         correcta: q && !abierta && q.tipo !== 'votacion' ? q.correcta : null,
         respondieron: Object.keys(resp),
         ranking: rankingDe(s, q),
@@ -201,7 +206,14 @@ export default function HostClient() {
       if (!preg || s.trivia.fase !== 'pregunta') return
       const resp = Object.keys(s.trivia.respuestas[preg.id] ?? {}).length
       const online = Object.values(s.jugadores).filter(j => n - j.visto < ONLINE_MS).length
-      if (n - s.trivia.inicio >= preg.duracion * 1000 || (online > 0 && resp >= online)) cerrarPregunta()
+      const limite = limiteDe(s.trivia, preg)
+      // Tic-tac cada segundo (en música, solo los últimos 5 para no tapar el tema); más fuerte al final
+      const seg = Math.ceil((limite - n) / 1000)
+      if (seg > 0 && seg !== segRef.current) {
+        segRef.current = seg
+        if (preg.tipo !== 'musica' || seg <= 5) pitido(seg % 2 ? 1050 : 780, 0.05, seg <= 5 ? 0.35 : 0.12)
+      }
+      if (n >= limite || (online > 0 && resp >= online)) cerrarPregunta()
     }, 150)
     return () => window.clearInterval(t)
   }, [st.trivia.fase]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -249,7 +261,18 @@ export default function HostClient() {
   })
 
   // ── Trivia ──
+  // Sonidos generados por el navegador (sin archivos). El AudioContext se crea al tocar "Lanzar".
+  function pitido(freq: number, dur: number, vol: number, tipo: OscillatorType = 'square') {
+    const ctx = sonidoRef.current
+    if (!ctx) return
+    const o = ctx.createOscillator(), g = ctx.createGain(), t0 = ctx.currentTime
+    o.type = tipo; o.frequency.value = freq
+    g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + dur)
+    o.connect(g).connect(ctx.destination); o.start(t0); o.stop(t0 + dur + 0.02)
+  }
   function lanzarPregunta() {
+    try { sonidoRef.current ??= new AudioContext(); sonidoRef.current.resume() } catch { /* sin sonido */ }
+    segRef.current = 0
     const preg = preguntas[stRef.current.trivia.idx]
     if (!preg) return
     mutate(x => {
@@ -258,6 +281,7 @@ export default function HostClient() {
       x.trivia.inicio = Date.now()
       x.trivia.respuestas[preg.id] = {}
       x.trivia.previos = { ...x.trivia.puntos }
+      x.trivia.cierre = 0
     })
     setAhora(Date.now())
     const a = audioRef.current
@@ -268,7 +292,8 @@ export default function HostClient() {
   }
   function cerrarPregunta() {
     const preg = cfgRef.current?.preguntas[stRef.current.trivia.idx]
-    if (!preg) return
+    if (!preg || stRef.current.trivia.fase !== 'pregunta') return
+    pitido(196, 0.6, 0.3, 'sawtooth') // bocina de fin de tiempo
     mutate(x => {
       if (x.trivia.fase !== 'pregunta') return
       x.trivia.fase = 'revelada'
@@ -277,6 +302,12 @@ export default function HostClient() {
         if (r.op === preg.correcta) x.trivia.puntos[pid] = (x.trivia.puntos[pid] ?? 0) + puntosPor(r.ms, preg.duracion * 1000)
       }
     })
+  }
+  // Les deja 5 segundos más para responder y la pregunta se cierra sola
+  function ultimos5() {
+    const preg = cfgRef.current?.preguntas[stRef.current.trivia.idx]
+    if (!preg) return
+    mutate(x => { if (x.trivia.fase === 'pregunta' && limiteDe(x.trivia, preg) - Date.now() > 5000) x.trivia.cierre = Date.now() + 5000 })
   }
   function verRanking() { mutate(x => { x.trivia.fase = 'ranking' }) }
   function siguiente() {
@@ -338,7 +369,7 @@ export default function HostClient() {
       {vista === 'bingo' && <BingoHost st={st} girando={girando} onSacar={sacarBolilla} onDeshacer={deshacerBolilla} onReiniciar={reiniciarBingo} />}
       {vista === 'trivia' && (
         <TriviaHost st={st} preguntas={preguntas} q={q} ahora={ahora} online={online} ranking={ranking}
-          onLanzar={lanzarPregunta} onCerrar={cerrarPregunta} onRanking={verRanking} onSiguiente={siguiente} onIr={irAPregunta} onReiniciar={reiniciarTrivia} />
+          onLanzar={lanzarPregunta} onCerrar={cerrarPregunta} onUltimos5={ultimos5} onRanking={verRanking} onSiguiente={siguiente} onIr={irAPregunta} onReiniciar={reiniciarTrivia} />
       )}
       {vista === 'editor' && <Editor preguntas={preguntas} onGuardar={async p => { await guardarCfg({ preguntas: p }) }} />}
 
@@ -436,7 +467,7 @@ function BingoHost({ st, girando, onSacar, onDeshacer, onReiniciar }: { st: Host
           <PremioBox titulo="Bingo" ganadores={b.ganadores.bingo} />
         </div>
         {b.cantos.filter(c => !c.valido).slice(-1).map(c => (
-          <p key={c.ts} className="mt-3 text-center text-lg opacity-80 chip-pop">{c.nombre} cantó {c.tipo === 'linea' ? 'línea' : 'bingo'}… ¡pero todavía no! 😅</p>
+          <p key={c.ts} className="mt-3 text-center text-lg opacity-80 chip-pop">{c.nombre} cantó {c.tipo === 'linea' ? 'línea' : 'bingo'}… ¡pero llegó tarde! 😅</p>
         ))}
       </div>
     </div>
@@ -466,9 +497,9 @@ function BannerGanador({ tipo, nombres, onCerrar }: { tipo: 'linea' | 'bingo'; n
 }
 
 // ─── Trivia ─────────────────────────────────────────────────────────────────────
-function TriviaHost({ st, preguntas, q, ahora, online, ranking, onLanzar, onCerrar, onRanking, onSiguiente, onIr, onReiniciar }: {
+function TriviaHost({ st, preguntas, q, ahora, online, ranking, onLanzar, onCerrar, onUltimos5, onRanking, onSiguiente, onIr, onReiniciar }: {
   st: HostState; preguntas: Pregunta[]; q: Pregunta | undefined; ahora: number; online: number; ranking: FilaRanking[]
-  onLanzar: () => void; onCerrar: () => void; onRanking: () => void; onSiguiente: () => void; onIr: (i: number) => void; onReiniciar: () => void
+  onLanzar: () => void; onCerrar: () => void; onUltimos5: () => void; onRanking: () => void; onSiguiente: () => void; onIr: (i: number) => void; onReiniciar: () => void
 }) {
   const t = st.trivia
   if (!preguntas.length) return <div className="min-h-screen flex items-center justify-center text-2xl opacity-70">Cargá las preguntas en la pestaña “Preguntas”.</div>
@@ -477,7 +508,8 @@ function TriviaHost({ st, preguntas, q, ahora, online, ranking, onLanzar, onCerr
   const resp = t.respuestas[q.id] ?? {}
   const nResp = Object.keys(resp).length
   const transcurrido = t.fase === 'pregunta' ? ahora - t.inicio : q.duracion * 1000
-  const restante = Math.max(0, Math.ceil((q.duracion * 1000 - transcurrido) / 1000))
+  const restanteMs = t.fase === 'pregunta' ? Math.max(0, limiteDe(t, q) - ahora) : 0
+  const restante = Math.ceil(restanteMs / 1000)
   const conteo = q.opciones.map((_, i) => Object.values(resp).filter(r => r.op === i).length)
   const opciones = q.opciones.map((o, i) => ({ o, i })).filter(x => x.o.trim())
   const revelada = t.fase === 'revelada' || t.fase === 'ranking'
@@ -519,7 +551,7 @@ function TriviaHost({ st, preguntas, q, ahora, online, ranking, onLanzar, onCerr
           <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
             <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.15)" strokeWidth="9" />
             <circle cx="50" cy="50" r="44" fill="none" stroke={restante <= 5 ? '#ff4fa3' : '#fff'} strokeWidth="9" strokeLinecap="round"
-              strokeDasharray={276.5} strokeDashoffset={276.5 * Math.min(1, transcurrido / (q.duracion * 1000))} style={{ transition: 'stroke-dashoffset .15s linear' }} />
+              strokeDasharray={276.5} strokeDashoffset={276.5 * (t.fase === 'pregunta' ? 1 - restanteMs / (q.duracion * 1000) : 1)} style={{ transition: 'stroke-dashoffset .15s linear' }} />
           </svg>
           <span className={`absolute inset-0 flex items-center justify-center text-3xl font-black ${restante <= 5 && !revelada ? 'latido' : ''}`}>{revelada ? '✓' : restante}</span>
         </div>
@@ -555,7 +587,10 @@ function TriviaHost({ st, preguntas, q, ahora, online, ranking, onLanzar, onCerr
       </div>
 
       <div className="mt-4 flex justify-center gap-3">
-        {t.fase === 'pregunta' && <button onClick={onCerrar} className="px-6 py-2.5 rounded-full bg-white/15 hover:bg-white/25 font-semibold cursor-pointer">Cerrar ya</button>}
+        {t.fase === 'pregunta' && <>
+          {restanteMs > 5500 && <button onClick={onUltimos5} className="px-6 py-2.5 rounded-full bg-white/20 hover:bg-white/30 font-bold cursor-pointer">Últimos 5 segundos</button>}
+          <button onClick={onCerrar} className="px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-sm font-semibold cursor-pointer opacity-70">Cerrar ya</button>
+        </>}
         {t.fase === 'revelada' && (q.tipo === 'votacion'
           ? <button onClick={onSiguiente} className="px-10 py-4 rounded-full bg-[#ff4fa3] hover:bg-[#ff3594] text-2xl font-black cursor-pointer">{t.idx + 1 < preguntas.length ? 'Siguiente pregunta' : 'Ver podio'}</button>
           : <button onClick={onRanking} className="px-10 py-4 rounded-full bg-[#ff4fa3] hover:bg-[#ff3594] text-2xl font-black cursor-pointer">Ver ranking</button>)}

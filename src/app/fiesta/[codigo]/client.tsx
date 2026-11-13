@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
-import { sbFiesta, canalEntrada, canalSalida, generarCarton, semillaCarton, COLORES, FORMAS, type EstadoPublico, type MsgJugador } from '@/lib/fiesta'
+import { sbFiesta, canalEntrada, canalSalida, generarCarton, semillaCarton, validarCanto, COLORES, FORMAS, type EstadoPublico, type MsgJugador } from '@/lib/fiesta'
 
 const nuevoId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36))
 
@@ -109,7 +109,6 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
   }
   function cantar(tipo: 'linea' | 'bingo') {
     if (!yo) return
-    if (!confirm(`¿Cantás ${tipo === 'linea' ? 'LÍNEA' : 'BINGO'}?`)) return
     setCantando({ tipo, ts: Date.now() })
     navigator.vibrate?.([40, 40, 40])
     enviar({ t: 'canto', id: yo.id, tipo })
@@ -153,6 +152,11 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
     const ultimos = b.salidos.slice(-5).reverse()
     const miCanto = cantando ? [...b.cantos].reverse().find(c => c.id === yo.id && c.tipo === cantando.tipo && c.ts >= cantando.ts - 60000) : undefined
     const gane = (['linea', 'bingo'] as const).filter(t => b.ganadores[t].some(g => g.id === yo.id))
+    // Los botones para cantar solo aparecen si de verdad tiene línea/bingo con las bolillas que salieron.
+    // La línea también se puede cantar si otra la ganó con esta misma bolilla (empate).
+    const empateLinea = b.ganadores.linea[0]?.bola === b.salidos.length
+    const puedeLinea = (b.fase === 'linea' || (b.fase === 'bingo' && empateLinea)) && validarCanto(carton, b.salidos, 'linea')
+    const puedeBingo = b.fase !== 'terminado' && validarCanto(carton, b.salidos, 'bingo')
     return (
       <div className="min-h-[100dvh] text-white px-3 pt-4 pb-12" style={FONDO}>
         <style>{CSS}</style>
@@ -176,14 +180,18 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
         <p className="text-center text-xs opacity-60 mt-2">Tocá los números para marcarlos</p>
         {gane.length > 0 ? (
           <div className="mt-5 text-center banner-entra"><p className="text-4xl font-black titulo-brillo">¡Ganaste {gane.map(t => t === 'linea' ? 'la LÍNEA' : 'el BINGO').join(' y ')}!</p><p className="opacity-80 mt-1">Acercate a buscar tu premio 🎁</p></div>
-        ) : (
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <button onClick={() => cantar('linea')} disabled={b.fase !== 'linea'} className="py-5 rounded-2xl bg-[#1368ce] text-2xl font-black disabled:opacity-25 active:scale-95 transition">¡LÍNEA!</button>
-            <button onClick={() => cantar('bingo')} disabled={b.fase === 'terminado'} className="py-5 rounded-2xl bg-[#ff4fa3] text-2xl font-black disabled:opacity-25 active:scale-95 transition">¡BINGO!</button>
+        ) : (puedeBingo || puedeLinea) ? (
+          <div className="mt-5 space-y-3">
+            {puedeBingo
+              ? <button onClick={() => cantar('bingo')} disabled={cantando?.tipo === 'bingo'} className="w-full py-6 rounded-2xl bg-[#ff4fa3] text-3xl font-black active:scale-95 transition boton-cantar">¡CANTAR BINGO!</button>
+              : <button onClick={() => cantar('linea')} disabled={cantando?.tipo === 'linea'} className="w-full py-6 rounded-2xl bg-[#1368ce] text-3xl font-black active:scale-95 transition boton-cantar">¡CANTAR LÍNEA!</button>}
+            <p className="text-center text-sm opacity-80">¡Rápido, antes que otra!</p>
           </div>
+        ) : b.fase !== 'terminado' && (
+          <p className="mt-5 text-center text-sm opacity-70">{b.fase === 'linea' ? 'Cuando completes una fila entera vas a poder cantar LÍNEA' : 'Cuando completes todo el cartón vas a poder cantar BINGO'}</p>
         )}
-        {cantando && !gane.length && (
-          <p className="mt-3 text-center font-semibold chip-pop">{!miCanto ? 'Revisando tu cartón…' : miCanto.valido ? '¡Correcto!' : 'Todavía no 😅 Revisá tu cartón'}</p>
+        {cantando && !gane.length && (puedeBingo || puedeLinea || miCanto) && (
+          <p className="mt-3 text-center font-semibold chip-pop">{!miCanto ? 'Cantando…' : miCanto.valido ? '¡Correcto!' : 'Uy, otra cantó primero 😅'}</p>
         )}
         {(b.ganadores.linea.length > 0 || b.ganadores.bingo.length > 0) && (
           <div className="mt-4 text-center text-sm opacity-80 space-y-0.5">
@@ -293,5 +301,7 @@ const CSS = `
 .latido-suave { animation: latidoSuave 1.6s ease-in-out infinite }
 .banner-entra { animation: entra .7s cubic-bezier(.2,.9,.3,1.3) both }
 .marcado { animation: marca .3s ease-out }
+@keyframes llama { 0%,100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255,255,255,.5) } 50% { transform: scale(1.04); box-shadow: 0 0 0 14px rgba(255,255,255,0) } }
+.boton-cantar { animation: llama 1s ease-in-out infinite }
 .bola-celu { background: radial-gradient(circle at 35% 30%, #fff 0%, #ffe4f1 45%, #ff9ccc 100%) }
 `
