@@ -23,7 +23,11 @@ export interface Pregunta {
   cancion?: { nombre: string; artista: string; artwork?: string }
   duracion: number // segundos
 }
-export interface FiestaConfig { codigo: string; activa: boolean; preguntas: Pregunta[] }
+// Se pueden armar varias trivias (cada una con su nombre y sus preguntas) y elegir cuál jugar
+export interface Trivia { id: string; nombre: string; preguntas: Pregunta[] }
+export interface FiestaConfig { codigo: string; activa: boolean; trivias: Trivia[] }
+// La trivia elegida para jugar (o la primera, si no hay ninguna elegida o se borró)
+export const triviaDe = (c: FiestaConfig | null | undefined, id: string | undefined) => c?.trivias.find(t => t.id === id) ?? c?.trivias[0]
 
 export const TIPOS: { tipo: TipoPregunta; label: string; desc: string; duracion: number }[] = [
   { tipo: 'texto', label: 'Pregunta', desc: 'Pregunta con 4 opciones', duracion: 20 },
@@ -117,6 +121,7 @@ export interface EstadoPublico {
   bingo: { ronda: number; salidos: number[]; fase: 'linea' | 'bingo' | 'terminado'; ganadores: { linea: Ganador[]; bingo: Ganador[] }; cantos: Canto[] }
   trivia: {
     fase: FaseTrivia
+    nombre: string // nombre de la trivia que se está jugando
     lanz: number // identifica cada vez que se lanza una pregunta (para no arrastrar respuestas viejas)
     n: number
     total: number

@@ -299,7 +299,7 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
     <Pantalla>
       <style>{CSS}</style>
       <p className="text-6xl mb-4 latido-suave">🧠</p>
-      <h1 className="text-3xl font-black">¡Trivia!</h1>
+      <h1 className="text-3xl font-black">{t.nombre || '¡Trivia!'}</h1>
       <p className="mt-2 opacity-80">{t.total ? `Preparate para la pregunta ${t.n} de ${t.total}` : 'Ya arrancamos'}</p>
       {posTxt}
       {pie}

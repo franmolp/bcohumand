@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import {
-  sbFiesta, canalEntrada, canalSalida, generarCarton, semillaCarton, validarCanto, puntosPor, mezclar,
+  sbFiesta, canalEntrada, canalSalida, generarCarton, semillaCarton, validarCanto, puntosPor, mezclar, triviaDe,
   TIPOS, tipoLabel, COLORES, FORMAS,
-  type FiestaConfig, type Pregunta, type TipoPregunta, type Modo, type FaseTrivia, type EstadoPublico, type MsgJugador, type FilaRanking, type Ganador,
+  type FiestaConfig, type Pregunta, type TipoPregunta, type Modo, type FaseTrivia, type EstadoPublico, type MsgJugador, type FilaRanking, type Ganador, type Trivia,
 } from '@/lib/fiesta'
 
 // ─── Estado de la laptop (se guarda en el navegador por si se recarga la página) ───
@@ -16,6 +16,7 @@ interface HostState {
   jugadores: Record<string, { nombre: string; visto: number }>
   bingo: EstadoPublico['bingo']
   trivia: {
+    triviaId: string // qué trivia se está jugando (cada una con sus preguntas, puntos y podio)
     idx: number
     fase: FaseTrivia
     inicio: number
@@ -26,7 +27,9 @@ interface HostState {
   }
 }
 const bingoInicial = (ronda = 0): HostState['bingo'] => ({ ronda, salidos: [], fase: 'linea', ganadores: { linea: [], bingo: [] }, cantos: [] })
-const triviaInicial = (): HostState['trivia'] => ({ idx: 0, fase: 'espera', inicio: 0, respuestas: {}, puntos: {}, previos: {}, cierre: 0 })
+const triviaInicial = (triviaId = ''): HostState['trivia'] => ({ triviaId, idx: 0, fase: 'espera', inicio: 0, respuestas: {}, puntos: {}, previos: {}, cierre: 0 })
+// Preguntas de la trivia que se está jugando
+const pregsDe = (c: FiestaConfig | null, s: HostState) => triviaDe(c, s.trivia.triviaId)?.preguntas ?? []
 // Hora en que cierra la pregunta: al terminar su tiempo, o antes si se tocó "Últimos 5 segundos"
 const limiteDe = (t: HostState['trivia'], q: Pregunta) => Math.min(t.inicio + q.duracion * 1000, t.cierre || Infinity)
 const nuevaPartida = () => Math.random().toString(36).slice(2, 10)
@@ -57,7 +60,8 @@ export default function HostClient() {
   const envioRef = useRef<{ timer: number | null; ultimo: number }>({ timer: null, ultimo: 0 })
   const sb = useMemo(() => sbFiesta(), [])
 
-  const preguntas = cfg?.preguntas ?? []
+  const triviaActual = triviaDe(cfg, st.trivia.triviaId)
+  const preguntas = triviaActual?.preguntas ?? []
   const codigo = cfg?.codigo ?? ''
   const urlJugar = typeof window !== 'undefined' && codigo ? `${window.location.origin}/fiesta/${codigo}` : ''
 
@@ -89,7 +93,7 @@ export default function HostClient() {
 
   // ── Estado público + envío (con freno: máx. ~1,5 por segundo, más uno cada 3 s) ──
   const publico = useCallback((s: HostState): EstadoPublico => {
-    const pregs = cfgRef.current?.preguntas ?? []
+    const pregs = pregsDe(cfgRef.current, s)
     const q = pregs[s.trivia.idx]
     const abierta = s.trivia.fase === 'pregunta'
     const resp = q ? s.trivia.respuestas[q.id] ?? {} : {}
@@ -100,6 +104,7 @@ export default function HostClient() {
       bingo: { ...s.bingo, cantos: s.bingo.cantos.slice(-8) },
       trivia: {
         fase: s.trivia.fase,
+        nombre: triviaDe(cfgRef.current, s.trivia.triviaId)?.nombre ?? '',
         lanz: s.trivia.inicio,
         n: s.trivia.idx + 1,
         total: pregs.length,
@@ -153,7 +158,7 @@ export default function HostClient() {
     if (!s.jugadores[m.id]) return
     s.jugadores[m.id].visto = Date.now()
     if (m.t === 'resp') {
-      const q = cfgRef.current?.preguntas[s.trivia.idx]
+      const q = pregsDe(cfgRef.current, s)[s.trivia.idx]
       if (!q || q.id !== m.qid || s.trivia.fase !== 'pregunta') { programarEnvio(); return }
       if (s.trivia.respuestas[q.id]?.[m.id]) { programarEnvio(); return } // ya estaba: solo reconfirmar
       const ms = Date.now() - s.trivia.inicio
@@ -213,7 +218,7 @@ export default function HostClient() {
       const n = Date.now()
       setAhora(n)
       const s = stRef.current
-      const preg = cfgRef.current?.preguntas[s.trivia.idx]
+      const preg = pregsDe(cfgRef.current, s)[s.trivia.idx]
       if (!preg || s.trivia.fase !== 'pregunta') return
       const resp = Object.keys(s.trivia.respuestas[preg.id] ?? {}).length
       const online = Object.values(s.jugadores).filter(j => n - j.visto < ONLINE_MS).length
@@ -302,7 +307,7 @@ export default function HostClient() {
     }
   }
   function cerrarPregunta() {
-    const preg = cfgRef.current?.preguntas[stRef.current.trivia.idx]
+    const preg = pregsDe(cfgRef.current, stRef.current)[stRef.current.trivia.idx]
     if (!preg || stRef.current.trivia.fase !== 'pregunta') return
     pitido(196, 0.6, 0.3, 'sawtooth') // bocina de fin de tiempo
     mutate(x => {
@@ -316,7 +321,7 @@ export default function HostClient() {
   }
   // Les deja 5 segundos más para responder y la pregunta se cierra sola
   function ultimos5() {
-    const preg = cfgRef.current?.preguntas[stRef.current.trivia.idx]
+    const preg = pregsDe(cfgRef.current, stRef.current)[stRef.current.trivia.idx]
     if (!preg) return
     mutate(x => { if (x.trivia.fase === 'pregunta' && limiteDe(x.trivia, preg) - Date.now() > 5000) x.trivia.cierre = Date.now() + 5000 })
   }
@@ -329,10 +334,19 @@ export default function HostClient() {
     })
   }
   function irAPregunta(i: number) { audioRef.current?.pause(); mutate(x => { x.trivia.idx = i; x.trivia.fase = 'espera' }) }
+  // Cambiar de trivia: arranca de cero (puntos, ranking y podio propios)
+  function elegirTrivia(id: string) {
+    const t = stRef.current.trivia
+    if (id === triviaDe(cfgRef.current, t.triviaId)?.id) return
+    const enCurso = t.fase !== 'final' && (t.idx > 0 || t.fase !== 'espera' || Object.keys(t.puntos).length > 0)
+    if (enCurso && !confirm('¿Pasar a otra trivia? La actual se corta y la nueva arranca con los puntos en cero.')) return
+    audioRef.current?.pause()
+    mutate(x => { x.trivia = triviaInicial(id) })
+  }
   function reiniciarTrivia() {
     if (!confirm('¿Reiniciar la trivia? Se borran todos los puntos.')) return
     audioRef.current?.pause()
-    mutate(x => { x.trivia = triviaInicial() })
+    mutate(x => { x.trivia = triviaInicial(x.trivia.triviaId) })
   }
 
   if (error) return <Fondo><div className="h-screen flex items-center justify-center text-xl">{error}</div></Fondo>
@@ -379,10 +393,10 @@ export default function HostClient() {
       {vista === 'lobby' && <Lobby url={urlJugar} jugadores={st.jugadores} ahora={ahora} />}
       {vista === 'bingo' && <BingoHost st={st} girando={girando} onSacar={sacarBolilla} onDeshacer={deshacerBolilla} onReiniciar={reiniciarBingo} />}
       {vista === 'trivia' && (
-        <TriviaHost st={st} preguntas={preguntas} q={q} ahora={ahora} online={online} ranking={ranking}
+        <TriviaHost st={st} trivias={cfg.trivias} triviaActual={triviaActual} onElegir={elegirTrivia} preguntas={preguntas} q={q} ahora={ahora} online={online} ranking={ranking}
           onLanzar={lanzarPregunta} onCerrar={cerrarPregunta} onUltimos5={ultimos5} onRanking={verRanking} onSiguiente={siguiente} onIr={irAPregunta} onReiniciar={reiniciarTrivia} />
       )}
-      {vista === 'editor' && <Editor preguntas={preguntas} onGuardar={async p => { await guardarCfg({ preguntas: p }) }} />}
+      {vista === 'editor' && <Editor trivias={cfg.trivias} onGuardar={async t => { await guardarCfg({ trivias: t }) }} />}
 
       {banner && <BannerGanador {...banner} onCerrar={() => setBanner(null)} />}
     </Fondo>
@@ -508,13 +522,31 @@ function BannerGanador({ tipo, nombres, onCerrar }: { tipo: 'linea' | 'bingo'; n
 }
 
 // ─── Trivia ─────────────────────────────────────────────────────────────────────
-function TriviaHost({ st, preguntas, q, ahora, online, ranking, onLanzar, onCerrar, onUltimos5, onRanking, onSiguiente, onIr, onReiniciar }: {
-  st: HostState; preguntas: Pregunta[]; q: Pregunta | undefined; ahora: number; online: number; ranking: FilaRanking[]
+function TriviaHost({ st, trivias, triviaActual, onElegir, preguntas, q, ahora, online, ranking, onLanzar, onCerrar, onUltimos5, onRanking, onSiguiente, onIr, onReiniciar }: {
+  st: HostState; trivias: Trivia[]; triviaActual: Trivia | undefined; onElegir: (id: string) => void
+  preguntas: Pregunta[]; q: Pregunta | undefined; ahora: number; online: number; ranking: FilaRanking[]
   onLanzar: () => void; onCerrar: () => void; onUltimos5: () => void; onRanking: () => void; onSiguiente: () => void; onIr: (i: number) => void; onReiniciar: () => void
 }) {
   const t = st.trivia
-  if (!preguntas.length) return <div className="min-h-screen flex items-center justify-center text-2xl opacity-70">Cargá las preguntas en la pestaña “Preguntas”.</div>
-  if (t.fase === 'final') return <Podio ranking={ranking} onReiniciar={onReiniciar} />
+  // Para elegir qué trivia jugar (solo si hay más de una)
+  const selector = trivias.length > 1 && (
+    <div className="flex flex-wrap justify-center gap-2">
+      {trivias.map(tr => (
+        <button key={tr.id} onClick={() => onElegir(tr.id)}
+          className={`px-4 py-2 rounded-full text-base font-bold cursor-pointer transition ${tr.id === triviaActual?.id ? 'bg-white text-[#2a1650]' : 'bg-white/10 hover:bg-white/20'}`}>
+          {tr.nombre} <span className="opacity-60 font-semibold">· {tr.preguntas.length}</span>
+        </button>
+      ))}
+    </div>
+  )
+  if (!trivias.length) return <div className="min-h-screen flex items-center justify-center text-2xl opacity-70">Creá una trivia y sus preguntas en la pestaña “Preguntas”.</div>
+  if (!preguntas.length) return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-6 text-center px-10">
+      <p className="text-2xl opacity-70">“{triviaActual?.nombre}” todavía no tiene preguntas. Cargalas en la pestaña “Preguntas”.</p>
+      {selector}
+    </div>
+  )
+  if (t.fase === 'final') return <Podio ranking={ranking} nombre={triviaActual?.nombre ?? ''} otras={trivias.filter(x => x.id !== triviaActual?.id)} onElegir={onElegir} onReiniciar={onReiniciar} />
   if (!q) return null
   const resp = t.respuestas[q.id] ?? {}
   const nResp = Object.keys(resp).length
@@ -527,7 +559,9 @@ function TriviaHost({ st, preguntas, q, ahora, online, ranking, onLanzar, onCerr
 
   if (t.fase === 'espera') return (
     <div className="min-h-screen flex flex-col items-center justify-center px-10 text-center">
-      <p className="text-2xl opacity-70 font-semibold">Pregunta {t.idx + 1} de {preguntas.length}</p>
+      {t.idx === 0 && selector && <div className="mb-10"><p className="text-sm opacity-60 mb-2 uppercase tracking-wider font-bold">¿Qué trivia jugamos?</p>{selector}</div>}
+      <p className="text-3xl font-black opacity-90">{triviaActual?.nombre}</p>
+      <p className="text-2xl opacity-70 font-semibold mt-1">Pregunta {t.idx + 1} de {preguntas.length}</p>
       <p className="mt-3 text-[7vh] font-black leading-tight titulo-brillo">{tipoLabel(q.tipo)}</p>
       {q.tipo === 'musica' && <p className="text-2xl mt-2 opacity-80">🎵 Subí el volumen</p>}
       {q.tipo === 'votacion' && <p className="text-2xl mt-2 opacity-80">No hay respuesta correcta: ¡votá lo que pensás!</p>}
@@ -538,6 +572,12 @@ function TriviaHost({ st, preguntas, q, ahora, online, ranking, onLanzar, onCerr
           {preguntas.map((p, i) => <option key={p.id} value={i}>{i + 1}. {p.texto.slice(0, 50)}</option>)}
         </select>
         <button onClick={onReiniciar} className="underline cursor-pointer">Reiniciar trivia</button>
+        {t.idx > 0 && trivias.length > 1 && (
+          <select value="" onChange={e => { if (e.target.value) onElegir(e.target.value) }} className="bg-black/30 rounded-lg px-2 py-1">
+            <option value="">Cambiar de trivia…</option>
+            {trivias.filter(x => x.id !== triviaActual?.id).map(x => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+          </select>
+        )}
       </div>
     </div>
   )
@@ -545,7 +585,7 @@ function TriviaHost({ st, preguntas, q, ahora, online, ranking, onLanzar, onCerr
   if (t.fase === 'ranking') return (
     <div className="min-h-screen flex flex-col items-center px-10 pt-20 pb-8">
       <p className="text-[5vh] font-black titulo-brillo">Ranking</p>
-      <p className="opacity-60 -mt-1">después de la pregunta {t.idx + 1} de {preguntas.length}</p>
+      <p className="opacity-60 -mt-1">{triviaActual?.nombre} · después de la pregunta {t.idx + 1} de {preguntas.length}</p>
       <div className="w-full max-w-4xl mt-6"><RankingAnimado key={q.id} filas={ranking} /></div>
       <button onClick={onSiguiente} className="mt-auto px-10 py-4 rounded-full bg-[#ff4fa3] hover:bg-[#ff3594] text-2xl font-black cursor-pointer active:scale-95 transition">
         {t.idx + 1 < preguntas.length ? 'Siguiente pregunta' : 'Ver podio'}
@@ -708,13 +748,14 @@ function RankingAnimado({ filas }: { filas: FilaRanking[] }) {
   )
 }
 
-function Podio({ ranking, onReiniciar }: { ranking: FilaRanking[]; onReiniciar: () => void }) {
+function Podio({ ranking, nombre, otras, onElegir, onReiniciar }: { ranking: FilaRanking[]; nombre: string; otras: Trivia[]; onElegir: (id: string) => void; onReiniciar: () => void }) {
   const [a, b, c] = ranking
-  const lugares = [{ f: b, n: 2, h: '42vh', d: '0.9s' }, { f: a, n: 1, h: '56vh', d: '1.8s' }, { f: c, n: 3, h: '30vh', d: '0s' }]
+  const lugares = [{ f: b, n: 2, h: '34vh', d: '0.9s' }, { f: a, n: 1, h: '46vh', d: '1.8s' }, { f: c, n: 3, h: '24vh', d: '0s' }]
   return (
     <div className="min-h-screen flex flex-col items-center pt-16">
       <Confeti n={120} />
-      <p className="text-[6vh] font-black titulo-brillo">¡Felicitaciones!</p>
+      <p className="text-[6vh] font-black titulo-brillo leading-tight">¡Felicitaciones!</p>
+      <p className="text-xl opacity-70 -mt-1">{nombre}</p>
       <div className="flex-1 flex items-end gap-6 pb-0 w-full max-w-5xl justify-center">
         {lugares.map(({ f, n, h, d }) => f && (
           <div key={n} className="flex-1 flex flex-col items-center">
@@ -725,7 +766,10 @@ function Podio({ ranking, onReiniciar }: { ranking: FilaRanking[]; onReiniciar: 
           </div>
         ))}
       </div>
-      <button onClick={onReiniciar} className="fixed bottom-3 right-4 text-xs opacity-30 hover:opacity-80 underline cursor-pointer">Reiniciar trivia</button>
+      <div className="fixed bottom-3 right-4 flex items-center gap-2 text-xs opacity-40 hover:opacity-100 transition-opacity">
+        {otras.map(o => <button key={o.id} onClick={() => onElegir(o.id)} className="px-3 py-1.5 rounded-full bg-white/15 hover:bg-white/25 font-semibold cursor-pointer">Jugar “{o.nombre}”</button>)}
+        <button onClick={onReiniciar} className="underline cursor-pointer">Reiniciar trivia</button>
+      </div>
     </div>
   )
 }
@@ -736,12 +780,29 @@ const nuevaPregunta = (tipo: TipoPregunta = 'texto'): Pregunta => ({
   duracion: TIPOS.find(t => t.tipo === tipo)!.duracion,
 })
 
-function Editor({ preguntas, onGuardar }: { preguntas: Pregunta[]; onGuardar: (p: Pregunta[]) => Promise<void> }) {
+function Editor({ trivias, onGuardar }: { trivias: Trivia[]; onGuardar: (t: Trivia[]) => Promise<void> }) {
+  const [selId, setSelId] = useState(trivias[0]?.id ?? '')
   const [editando, setEditando] = useState<Pregunta | null>(null)
   const [guardando, setGuardando] = useState(false)
-  async function guardar(lista: Pregunta[]) {
+  const sel = trivias.find(t => t.id === selId) ?? trivias[0]
+  const preguntas = sel?.preguntas ?? []
+  async function guardarTodo(lista: Trivia[]) {
     setGuardando(true)
     try { await onGuardar(lista) } catch (e) { alert((e as Error).message) } finally { setGuardando(false) }
+  }
+  const guardar = (pregs: Pregunta[]) => sel && guardarTodo(trivias.map(t => t.id === sel.id ? { ...t, preguntas: pregs } : t))
+  function nuevaTrivia() {
+    const t: Trivia = { id: Math.random().toString(36).slice(2, 10), nombre: `Trivia ${trivias.length + 1}`, preguntas: [] }
+    guardarTodo([...trivias, t]); setSelId(t.id)
+  }
+  function renombrar(nombre: string) {
+    if (!sel || !nombre.trim() || nombre.trim() === sel.nombre) return
+    guardarTodo(trivias.map(t => t.id === sel.id ? { ...t, nombre: nombre.trim() } : t))
+  }
+  function borrarTrivia() {
+    if (!sel || !confirm(`¿Borrar la trivia “${sel.nombre}” con sus ${sel.preguntas.length} preguntas?`)) return
+    const resto = trivias.filter(t => t.id !== sel.id)
+    guardarTodo(resto); setSelId(resto[0]?.id ?? '')
   }
   function mover(i: number, d: number) {
     const l = [...preguntas]; const j = i + d
@@ -752,25 +813,42 @@ function Editor({ preguntas, onGuardar }: { preguntas: Pregunta[]; onGuardar: (p
   return (
     <div className="min-h-screen pt-20 pb-10 px-6 overflow-y-auto" style={{ maxHeight: '100vh' }}>
       <div className="max-w-3xl mx-auto bg-white text-gray-800 rounded-3xl p-6 shadow-2xl">
-        <div className="flex items-center gap-3 mb-4">
-          <h2 className="text-2xl font-black flex-1">Preguntas de la trivia</h2>
+        <div className="flex items-center gap-3 mb-3">
+          <h2 className="text-2xl font-black flex-1">Trivias</h2>
           {guardando && <span className="text-sm text-gray-400">Guardando…</span>}
-          <button onClick={() => setEditando(nuevaPregunta())} className="px-4 py-2 rounded-xl bg-[#6d28d9] text-white font-semibold cursor-pointer">+ Nueva</button>
         </div>
-        {!preguntas.length && <p className="text-gray-500 py-8 text-center">Todavía no hay preguntas.</p>}
-        <div className="space-y-2">
-          {preguntas.map((p, i) => (
-            <div key={p.id} className="flex items-center gap-3 border border-gray-200 rounded-2xl px-4 py-3">
-              <span className="text-gray-400 font-bold w-6">{i + 1}</span>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 shrink-0">{tipoLabel(p.tipo)}</span>
-              <span className="flex-1 min-w-0 truncate">{p.texto || <i className="text-gray-400">(sin texto)</i>}</span>
-              <button onClick={() => mover(i, -1)} className="px-2 text-gray-400 hover:text-gray-700 cursor-pointer">↑</button>
-              <button onClick={() => mover(i, 1)} className="px-2 text-gray-400 hover:text-gray-700 cursor-pointer">↓</button>
-              <button onClick={() => setEditando(p)} className="px-2 text-violet-600 font-semibold cursor-pointer">Editar</button>
-              <button onClick={() => { if (confirm('¿Borrar esta pregunta?')) guardar(preguntas.filter(x => x.id !== p.id)) }} className="px-2 text-red-500 cursor-pointer">Borrar</button>
-            </div>
+        {/* Una pestaña por trivia */}
+        <div className="flex flex-wrap gap-2 mb-5">
+          {trivias.map(t => (
+            <button key={t.id} onClick={() => setSelId(t.id)}
+              className={`px-3.5 py-1.5 rounded-full text-sm font-semibold cursor-pointer border ${t.id === sel?.id ? 'bg-violet-600 text-white border-violet-600' : 'border-gray-200 hover:bg-gray-50'}`}>
+              {t.nombre} <span className="opacity-60">· {t.preguntas.length}</span>
+            </button>
           ))}
+          <button onClick={nuevaTrivia} className="px-3.5 py-1.5 rounded-full text-sm font-semibold cursor-pointer border border-dashed border-violet-400 text-violet-600 hover:bg-violet-50">+ Nueva trivia</button>
         </div>
+        {!sel ? <p className="text-gray-500 py-8 text-center">Creá tu primera trivia con “+ Nueva trivia”.</p> : <>
+          <div className="flex items-center gap-2 mb-4">
+            <input key={sel.id} defaultValue={sel.nombre} onBlur={e => renombrar(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+              className="flex-1 text-lg font-bold border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-violet-500" title="Nombre de la trivia" />
+            <button onClick={() => setEditando(nuevaPregunta())} className="px-4 py-2 rounded-xl bg-[#6d28d9] text-white font-semibold cursor-pointer whitespace-nowrap">+ Pregunta</button>
+            <button onClick={borrarTrivia} className="px-3 py-2 rounded-xl text-red-500 hover:bg-red-50 text-sm font-semibold cursor-pointer whitespace-nowrap">Borrar trivia</button>
+          </div>
+          {!preguntas.length && <p className="text-gray-500 py-8 text-center">Esta trivia todavía no tiene preguntas.</p>}
+          <div className="space-y-2">
+            {preguntas.map((p, i) => (
+              <div key={p.id} className="flex items-center gap-3 border border-gray-200 rounded-2xl px-4 py-3">
+                <span className="text-gray-400 font-bold w-6">{i + 1}</span>
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 shrink-0">{tipoLabel(p.tipo)}</span>
+                <span className="flex-1 min-w-0 truncate">{p.texto || <i className="text-gray-400">(sin texto)</i>}</span>
+                <button onClick={() => mover(i, -1)} className="px-2 text-gray-400 hover:text-gray-700 cursor-pointer">↑</button>
+                <button onClick={() => mover(i, 1)} className="px-2 text-gray-400 hover:text-gray-700 cursor-pointer">↓</button>
+                <button onClick={() => setEditando(p)} className="px-2 text-violet-600 font-semibold cursor-pointer">Editar</button>
+                <button onClick={() => { if (confirm('¿Borrar esta pregunta?')) guardar(preguntas.filter(x => x.id !== p.id)) }} className="px-2 text-red-500 cursor-pointer">Borrar</button>
+              </div>
+            ))}
+          </div>
+        </>}
       </div>
       {editando && (
         <FormPregunta inicial={editando} onCancelar={() => setEditando(null)}
