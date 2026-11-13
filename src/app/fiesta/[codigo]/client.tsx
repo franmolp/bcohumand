@@ -15,9 +15,10 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
   const [limite, setLimite] = useState(0) // hora local en que cierra la pregunta
   const [ahora, setAhora] = useState(() => Date.now())
   const [conectado, setConectado] = useState(false)
-  const [miResp, setMiResp] = useState<{ qid: string; op: number } | null>(null)
-  const [marcas, setMarcas] = useState<number[]>([])
-  const [cantando, setCantando] = useState<{ tipo: 'linea' | 'bingo'; ts: number } | null>(null)
+  const [miResp, setMiResp] = useState<{ qid: string; lanz: number; op: number } | null>(null)
+  // Marcas y cantos van atados a la partida + ronda del bingo (tag), así un bingo nuevo arranca limpio
+  const [marcas, setMarcas] = useState<{ tag: string; nums: number[] }>({ tag: '', nums: [] })
+  const [cantando, setCantando] = useState<{ tipo: 'linea' | 'bingo'; ts: number; tag: string } | null>(null)
   const sb = useMemo(() => sbFiesta(), [])
   const entradaRef = useRef<RealtimeChannel | null>(null)
   const socketRef = useRef(false)
@@ -25,16 +26,17 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
   useEffect(() => {
     try {
       const g = localStorage.getItem(KEY); if (g) setYo(JSON.parse(g))
-      const m = localStorage.getItem(`${KEY}-marcas`); if (m) setMarcas(JSON.parse(m))
+      const m = localStorage.getItem(`${KEY}-marcas`); if (m) { const v = JSON.parse(m); if (v?.tag) setMarcas(v) }
       const r = localStorage.getItem(`${KEY}-resp`); if (r) setMiResp(JSON.parse(r))
     } catch { /* nada guardado */ }
     setCargado(true)
   }, [KEY])
 
   // Envío a la laptop: por REST (sin unirse al canal); si falla, uniéndose al canal
-  async function enviar(m: MsgJugador) {
+  async function enviar(msg: MsgJugador) {
     const ch = entradaRef.current
     if (!ch) return
+    const m: MsgJugador = { ...msg, p: localStorage.getItem(`${KEY}-partida`) ?? undefined }
     if (!socketRef.current) {
       try { await ch.httpSend('j', m); return } catch { socketRef.current = true }
     }
@@ -52,6 +54,14 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
     const salida = sb.channel(canalSalida(codigo), { config: { broadcast: { self: false } } })
     salida.on('broadcast', { event: 'estado' }, ({ payload }) => {
       const e = payload as EstadoPublico
+      const guardada = localStorage.getItem(`${KEY}-partida`)
+      if (e.partida && guardada && guardada !== e.partida) {
+        // En la laptop se tocó "Reiniciar todo": se borra todo lo de este celular y vuelve a pedir el nombre
+        for (const k of [KEY, `${KEY}-marcas`, `${KEY}-resp`, `${KEY}-partida`]) localStorage.removeItem(k)
+        setYo(null); setNombre(''); setEstado(null); setMiResp(null); setMarcas({ tag: '', nums: [] }); setCantando(null)
+        return
+      }
+      if (e.partida && guardada !== e.partida) localStorage.setItem(`${KEY}-partida`, e.partida)
       setEstado(e)
       if (e.trivia.fase === 'pregunta') setLimite(Date.now() + e.trivia.restanteMs)
     })
@@ -66,7 +76,7 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
       if (entradaRef.current) sb.removeChannel(entradaRef.current)
       entradaRef.current = null
     }
-  }, [yo, codigo, sb])
+  }, [yo, codigo, sb, KEY])
 
   // Reloj local para la cuenta regresiva
   const enPregunta = estado?.modo === 'trivia' && estado.trivia.fase === 'pregunta'
@@ -78,12 +88,13 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
 
   // Reintenta la respuesta hasta que la laptop la confirme
   const preg = estado?.trivia.pregunta
+  const lanz = estado?.trivia.lanz ?? 0
   const confirmada = !!yo && !!estado?.trivia.respondieron.includes(yo.id)
   useEffect(() => {
-    if (!yo || !enPregunta || !preg || !miResp || miResp.qid !== preg.id || confirmada) return
+    if (!yo || !enPregunta || !preg || !miResp || miResp.qid !== preg.id || miResp.lanz !== lanz || confirmada) return
     const t = window.setInterval(() => enviarRef.current({ t: 'resp', id: yo.id, qid: miResp.qid, op: miResp.op }), 1500)
     return () => window.clearInterval(t)
-  }, [yo, enPregunta, preg, miResp, confirmada])
+  }, [yo, enPregunta, preg, miResp, lanz, confirmada])
 
   function entrar() {
     const n = nombre.trim().slice(0, 24)
@@ -94,22 +105,23 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
   }
   function responder(op: number) {
     if (!yo || !preg) return
-    const r = { qid: preg.id, op }
+    const r = { qid: preg.id, lanz, op }
     setMiResp(r)
     try { localStorage.setItem(`${KEY}-resp`, JSON.stringify(r)) } catch { /* nada */ }
     navigator.vibrate?.(30)
     enviar({ t: 'resp', id: yo.id, qid: preg.id, op })
   }
-  function marcar(n: number) {
+  function marcar(n: number, tag: string) {
     setMarcas(m => {
-      const x = m.includes(n) ? m.filter(v => v !== n) : [...m, n]
+      const base = m.tag === tag ? m.nums : []
+      const x = { tag, nums: base.includes(n) ? base.filter(v => v !== n) : [...base, n] }
       try { localStorage.setItem(`${KEY}-marcas`, JSON.stringify(x)) } catch { /* nada */ }
       return x
     })
   }
-  function cantar(tipo: 'linea' | 'bingo') {
+  function cantar(tipo: 'linea' | 'bingo', tag: string) {
     if (!yo) return
-    setCantando({ tipo, ts: Date.now() })
+    setCantando({ tipo, ts: Date.now(), tag })
     navigator.vibrate?.([40, 40, 40])
     enviar({ t: 'canto', id: yo.id, tipo })
   }
@@ -121,9 +133,9 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
       <style>{CSS}</style>
       <p className="text-lg opacity-80">Beauty Co. cumple</p>
       <h1 className="text-6xl font-black titulo-brillo">9 años</h1>
-      <p className="mt-8 mb-3 font-semibold">¿Cómo te llamás?</p>
+      <p className="mt-8 mb-3 text-lg font-bold text-white">¿Cómo te llamás?</p>
       <input value={nombre} onChange={e => setNombre(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') entrar() }} maxLength={24} autoFocus
-        placeholder="Tu nombre" className="w-full max-w-xs text-center text-xl px-4 py-3.5 rounded-2xl text-gray-900 outline-none" />
+        placeholder="Tu nombre" style={{ colorScheme: 'light' }} className="w-full max-w-xs text-center text-xl px-4 py-3.5 rounded-2xl bg-white text-gray-900 placeholder:text-gray-400 caret-[#ff4fa3] outline-none shadow-lg" />
       <button onClick={entrar} disabled={!nombre.trim()} className="mt-4 w-full max-w-xs py-4 rounded-2xl bg-[#ff4fa3] text-xl font-black disabled:opacity-40 active:scale-95 transition">Entrar</button>
     </Pantalla>
   )
@@ -147,15 +159,19 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
   )
 
   if (estado.modo === 'bingo') {
-    const carton = generarCarton(semillaCarton(codigo, yo.id))
     const b = estado.bingo
+    const ronda = b.ronda ?? 0
+    const tag = `${estado.partida}:${ronda}`
+    const carton = generarCarton(semillaCarton(codigo, estado.partida, ronda, yo.id))
+    const misMarcas = marcas.tag === tag ? marcas.nums : []
+    const canto = cantando?.tag === tag ? cantando : null
     const ultimos = b.salidos.slice(-5).reverse()
-    const miCanto = cantando ? [...b.cantos].reverse().find(c => c.id === yo.id && c.tipo === cantando.tipo && c.ts >= cantando.ts - 60000) : undefined
+    const miCanto = canto ? [...b.cantos].reverse().find(c => c.id === yo.id && c.tipo === canto.tipo && c.ts >= canto.ts - 60000) : undefined
     const gane = (['linea', 'bingo'] as const).filter(t => b.ganadores[t].some(g => g.id === yo.id))
     // Los botones para cantar solo aparecen si de verdad tiene línea/bingo con las bolillas que salieron.
     // La línea también se puede cantar si otra la ganó con esta misma bolilla (empate).
     const empateLinea = b.ganadores.linea[0]?.bola === b.salidos.length
-    const puedeLinea = (b.fase === 'linea' || (b.fase === 'bingo' && empateLinea)) && validarCanto(carton, b.salidos, 'linea')
+    const puedeLinea = !gane.includes('linea') && (b.fase === 'linea' || (b.fase === 'bingo' && empateLinea)) && validarCanto(carton, b.salidos, 'linea')
     const puedeBingo = b.fase !== 'terminado' && validarCanto(carton, b.salidos, 'bingo')
     return (
       <div className="min-h-[100dvh] text-white px-3 pt-4 pb-12" style={FONDO}>
@@ -172,25 +188,31 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
             <div key={f} className="grid grid-cols-9 gap-1 mb-1 last:mb-0">
               {fila.map((n, c) => n == null
                 ? <div key={c} className="aspect-[3/4] rounded-md bg-[#efe7fb]" />
-                : <button key={c} onClick={() => marcar(n)}
-                  className={`aspect-[3/4] rounded-md flex items-center justify-center text-[clamp(14px,4.6vw,22px)] font-black transition active:scale-90 ${marcas.includes(n) ? 'bg-[#ff4fa3] text-white marcado' : 'bg-white text-[#2a1650] border border-gray-200'}`}>{n}</button>)}
+                : <button key={c} onClick={() => marcar(n, tag)}
+                  className={`aspect-[3/4] rounded-md flex items-center justify-center text-[clamp(14px,4.6vw,22px)] font-black transition active:scale-90 ${misMarcas.includes(n) ? 'bg-[#ff4fa3] text-white marcado' : 'bg-white text-[#2a1650] border border-gray-200'}`}>{n}</button>)}
             </div>
           ))}
         </div>
         <p className="text-center text-xs opacity-60 mt-2">Tocá los números para marcarlos</p>
-        {gane.length > 0 ? (
-          <div className="mt-5 text-center banner-entra"><p className="text-4xl font-black titulo-brillo">¡Ganaste {gane.map(t => t === 'linea' ? 'la LÍNEA' : 'el BINGO').join(' y ')}!</p><p className="opacity-80 mt-1">Acercate a buscar tu premio 🎁</p></div>
-        ) : (puedeBingo || puedeLinea) ? (
-          <div className="mt-5 space-y-3">
-            {puedeBingo
-              ? <button onClick={() => cantar('bingo')} disabled={cantando?.tipo === 'bingo'} className="w-full py-6 rounded-2xl bg-[#ff4fa3] text-3xl font-black active:scale-95 transition boton-cantar">¡CANTAR BINGO!</button>
-              : <button onClick={() => cantar('linea')} disabled={cantando?.tipo === 'linea'} className="w-full py-6 rounded-2xl bg-[#1368ce] text-3xl font-black active:scale-95 transition boton-cantar">¡CANTAR LÍNEA!</button>}
-            <p className="text-center text-sm opacity-80">¡Rápido, antes que alguien más!</p>
-          </div>
-        ) : b.fase !== 'terminado' && (
-          <p className="mt-5 text-center text-sm opacity-70">{b.fase === 'linea' ? 'Cuando completes una fila entera vas a poder cantar LÍNEA' : 'Cuando completes todo el cartón vas a poder cantar BINGO'}</p>
-        )}
-        {cantando && !gane.length && (puedeBingo || puedeLinea || miCanto) && (
+        {gane.includes('bingo') ? (
+          <div className="mt-5 text-center banner-entra"><p className="text-4xl font-black titulo-brillo">¡Ganaste el BINGO!</p><p className="opacity-80 mt-1">Acercate a buscar tu premio 🎁</p></div>
+        ) : <>
+          {/* Quien gana la línea sigue jugando por el bingo con el mismo cartón */}
+          {gane.includes('linea') && (
+            <div className="mt-4 text-center banner-entra"><p className="text-3xl font-black"><span className="titulo-brillo">¡Ganaste la LÍNEA!</span> 🎁</p><p className="opacity-80 text-sm mt-1">Seguís jugando: todavía podés ganar el BINGO</p></div>
+          )}
+          {(puedeBingo || puedeLinea) ? (
+            <div className="mt-5 space-y-3">
+              {puedeBingo
+                ? <button onClick={() => cantar('bingo', tag)} disabled={canto?.tipo === 'bingo'} className="w-full py-6 rounded-2xl bg-[#ff4fa3] text-3xl font-black active:scale-95 transition boton-cantar">¡CANTAR BINGO!</button>
+                : <button onClick={() => cantar('linea', tag)} disabled={canto?.tipo === 'linea'} className="w-full py-6 rounded-2xl bg-[#1368ce] text-3xl font-black active:scale-95 transition boton-cantar">¡CANTAR LÍNEA!</button>}
+              <p className="text-center text-sm opacity-80">¡Rápido, antes que alguien más!</p>
+            </div>
+          ) : b.fase !== 'terminado' && (
+            <p className="mt-5 text-center text-sm opacity-70">{b.fase === 'linea' ? 'Cuando completes una fila entera vas a poder cantar LÍNEA' : 'Cuando completes todo el cartón vas a poder cantar BINGO'}</p>
+          )}
+        </>}
+        {canto && !gane.includes(canto.tipo) && (puedeBingo || puedeLinea || miCanto) && (
           <p className="mt-3 text-center font-semibold chip-pop">{!miCanto ? 'Cantando…' : miCanto.valido ? '¡Correcto!' : 'Uy, alguien cantó primero 😅'}</p>
         )}
         {(b.ganadores.linea.length > 0 || b.ganadores.bingo.length > 0) && (
@@ -222,7 +244,7 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
   )
 
   if (t.fase === 'pregunta' && preg) {
-    const yaRespondi = miResp?.qid === preg.id
+    const yaRespondi = miResp?.qid === preg.id && miResp.lanz === t.lanz
     const restante = Math.max(0, limite - ahora)
     if (yaRespondi) return (
       <Pantalla>

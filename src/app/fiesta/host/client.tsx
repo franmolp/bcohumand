@@ -12,6 +12,7 @@ import {
 // ─── Estado de la laptop (se guarda en el navegador por si se recarga la página) ───
 interface HostState {
   modo: Modo
+  partida: string
   jugadores: Record<string, { nombre: string; visto: number }>
   bingo: EstadoPublico['bingo']
   trivia: {
@@ -24,11 +25,12 @@ interface HostState {
     cierre: number // si se tocó "Últimos 5 segundos": hora en que cierra (0 = al terminar el tiempo)
   }
 }
-const bingoInicial = (): HostState['bingo'] => ({ salidos: [], fase: 'linea', ganadores: { linea: [], bingo: [] }, cantos: [] })
+const bingoInicial = (ronda = 0): HostState['bingo'] => ({ ronda, salidos: [], fase: 'linea', ganadores: { linea: [], bingo: [] }, cantos: [] })
 const triviaInicial = (): HostState['trivia'] => ({ idx: 0, fase: 'espera', inicio: 0, respuestas: {}, puntos: {}, previos: {}, cierre: 0 })
 // Hora en que cierra la pregunta: al terminar su tiempo, o antes si se tocó "Últimos 5 segundos"
 const limiteDe = (t: HostState['trivia'], q: Pregunta) => Math.min(t.inicio + q.duracion * 1000, t.cierre || Infinity)
-const estadoInicial = (): HostState => ({ modo: 'lobby', jugadores: {}, bingo: bingoInicial(), trivia: triviaInicial() })
+const nuevaPartida = () => Math.random().toString(36).slice(2, 10)
+const estadoInicial = (): HostState => ({ modo: 'lobby', partida: nuevaPartida(), jugadores: {}, bingo: bingoInicial(), trivia: triviaInicial() })
 
 type Vista = Modo | 'editor'
 const ONLINE_MS = 30000
@@ -66,7 +68,13 @@ export default function HostClient() {
       setCfg(d); cfgRef.current = d
       try {
         const g = localStorage.getItem(`fiesta-host-${d.codigo}`)
-        if (g) { const s = { ...estadoInicial(), ...JSON.parse(g) } as HostState; stRef.current = s; setSt(s); setVista(s.modo) }
+        if (g) {
+          const guardado = JSON.parse(g)
+          const s = { ...estadoInicial(), ...guardado } as HostState
+          s.bingo.ronda ??= 0
+          stRef.current = s; setSt(s); setVista(s.modo)
+          if (!guardado.partida) localStorage.setItem(`fiesta-host-${d.codigo}`, JSON.stringify(s)) // fijar la partida
+        }
       } catch { /* estado nuevo */ }
     }).catch(() => setError('No se pudo cargar la configuración'))
   }, [])
@@ -88,9 +96,11 @@ export default function HostClient() {
     const mostrarPregunta = q && ['pregunta', 'revelada', 'ranking'].includes(s.trivia.fase)
     return {
       modo: s.modo,
+      partida: s.partida,
       bingo: { ...s.bingo, cantos: s.bingo.cantos.slice(-8) },
       trivia: {
         fase: s.trivia.fase,
+        lanz: s.trivia.inicio,
         n: s.trivia.idx + 1,
         total: pregs.length,
         pregunta: mostrarPregunta ? { id: q.id, tipo: q.tipo, texto: q.texto, opciones: q.opciones, duracion: q.duracion } : null,
@@ -129,6 +139,7 @@ export default function HostClient() {
   const recibir = useRef<(m: MsgJugador) => void>(() => {})
   recibir.current = (m: MsgJugador) => {
     const s = stRef.current
+    if (m.p && m.p !== s.partida) return // de antes de "Reiniciar todo"
     if (m.t === 'hola') {
       const nombre = String(m.nombre || '').trim().slice(0, 24) || 'Sin nombre'
       const prev = s.jugadores[m.id]
@@ -157,7 +168,7 @@ export default function HostClient() {
     const s = stRef.current
     const j = s.jugadores[id]
     if (!j || s.bingo.ganadores[tipo].some(g => g.id === id)) return
-    const valido = validarCanto(generarCarton(semillaCarton(codigoRef.current, id)), s.bingo.salidos, tipo)
+    const valido = validarCanto(generarCarton(semillaCarton(codigoRef.current, s.partida, s.bingo.ronda ?? 0, id)), s.bingo.salidos, tipo)
     const bola = s.bingo.salidos.length
     const b = s.bingo
     const primera = b.ganadores[tipo][0]
@@ -248,8 +259,8 @@ export default function HostClient() {
     mutate(x => { x.bingo.salidos.pop() })
   }
   function reiniciarBingo() {
-    if (!confirm('¿Empezar un bingo nuevo? Se borran las bolillas y los ganadores.')) return
-    mutate(x => { x.bingo = bingoInicial() })
+    if (!confirm('¿Empezar un bingo nuevo? Se borran las bolillas y los ganadores, y cada participante recibe un cartón nuevo.')) return
+    mutate(x => { x.bingo = bingoInicial((x.bingo.ronda ?? 0) + 1) }) // ronda nueva = cartones nuevos
     setBanner(null)
   }
   // Barra espaciadora = sacar bolilla
@@ -354,7 +365,7 @@ export default function HostClient() {
                 className={`w-full py-2 rounded-xl font-semibold cursor-pointer ${cfg.activa ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>
                 {cfg.activa ? 'Apagar la fiesta (cierra el link)' : 'Encender la fiesta'}
               </button>
-              <button onClick={() => { if (confirm('¿Borrar participantes, bingo y trivia de esta pantalla?')) { mutate(x => { Object.assign(x, estadoInicial()) }); setBanner(null); setVista('lobby') } }}
+              <button onClick={() => { if (confirm('¿Reiniciar TODO? Se borran participantes, bingo y trivia, y en los celulares se borra todo y vuelven a poner su nombre. Las preguntas cargadas no se borran.')) { audioRef.current?.pause(); mutate(x => { Object.assign(x, estadoInicial()) }); setBanner(null); setVista('lobby') } }}
                 className="w-full py-2 rounded-xl bg-gray-100 font-semibold cursor-pointer">Reiniciar todo</button>
               <button onClick={async () => { if (confirm('¿Generar un link nuevo? El anterior deja de funcionar y hay que volver a escanear.')) { try { await guardarCfg({ nuevoCodigo: true }) } catch (e) { alert((e as Error).message) } } }}
                 className="w-full py-2 rounded-xl bg-gray-100 font-semibold cursor-pointer">Generar link nuevo</button>

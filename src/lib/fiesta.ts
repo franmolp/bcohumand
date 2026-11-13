@@ -94,7 +94,8 @@ export function generarCarton(semilla: string): Carton {
   }
   throw new Error('No se pudo generar el cartón')
 }
-export const semillaCarton = (codigo: string, jugadorId: string) => `${codigo}:${jugadorId}`
+// Cambia con cada "Reiniciar todo" (partida) y cada "Bingo nuevo" (ronda): así cada bingo trae cartones nuevos
+export const semillaCarton = (codigo: string, partida: string, ronda: number, jugadorId: string) => `${codigo}:${partida}:${ronda}:${jugadorId}`
 
 export function validarCanto(carton: Carton, salidos: Iterable<number>, tipo: 'linea' | 'bingo') {
   const s = new Set(salidos)
@@ -112,9 +113,11 @@ export interface FilaRanking { id: string; nombre: string; pts: number; delta: n
 // Lo que la laptop le manda a todos (sin respuestas correctas mientras la pregunta está abierta)
 export interface EstadoPublico {
   modo: Modo
-  bingo: { salidos: number[]; fase: 'linea' | 'bingo' | 'terminado'; ganadores: { linea: Ganador[]; bingo: Ganador[] }; cantos: Canto[] }
+  partida: string // cambia con "Reiniciar todo": los celulares borran todo lo suyo y vuelven a pedir el nombre
+  bingo: { ronda: number; salidos: number[]; fase: 'linea' | 'bingo' | 'terminado'; ganadores: { linea: Ganador[]; bingo: Ganador[] }; cantos: Canto[] }
   trivia: {
     fase: FaseTrivia
+    lanz: number // identifica cada vez que se lanza una pregunta (para no arrastrar respuestas viejas)
     n: number
     total: number
     pregunta: { id: string; tipo: TipoPregunta; texto: string; opciones: string[]; duracion: number } | null
@@ -124,8 +127,10 @@ export interface EstadoPublico {
     ranking: FilaRanking[]
   }
 }
-// Mensajes de los celulares
-export type MsgJugador =
+// Mensajes de los celulares. `p` = partida que conoce el celular: la laptop descarta los de una
+// partida vieja (un mensaje que salió justo antes de "Reiniciar todo" no vuelve a anotar a nadie).
+export type MsgJugador = (
   | { t: 'hola'; id: string; nombre: string }
   | { t: 'resp'; id: string; qid: string; op: number }
   | { t: 'canto'; id: string; tipo: 'linea' | 'bingo' }
+) & { p?: string }
