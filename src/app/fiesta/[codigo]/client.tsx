@@ -185,13 +185,13 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
             {puedeBingo
               ? <button onClick={() => cantar('bingo')} disabled={cantando?.tipo === 'bingo'} className="w-full py-6 rounded-2xl bg-[#ff4fa3] text-3xl font-black active:scale-95 transition boton-cantar">¡CANTAR BINGO!</button>
               : <button onClick={() => cantar('linea')} disabled={cantando?.tipo === 'linea'} className="w-full py-6 rounded-2xl bg-[#1368ce] text-3xl font-black active:scale-95 transition boton-cantar">¡CANTAR LÍNEA!</button>}
-            <p className="text-center text-sm opacity-80">¡Rápido, antes que otra!</p>
+            <p className="text-center text-sm opacity-80">¡Rápido, antes que alguien más!</p>
           </div>
         ) : b.fase !== 'terminado' && (
           <p className="mt-5 text-center text-sm opacity-70">{b.fase === 'linea' ? 'Cuando completes una fila entera vas a poder cantar LÍNEA' : 'Cuando completes todo el cartón vas a poder cantar BINGO'}</p>
         )}
         {cantando && !gane.length && (puedeBingo || puedeLinea || miCanto) && (
-          <p className="mt-3 text-center font-semibold chip-pop">{!miCanto ? 'Cantando…' : miCanto.valido ? '¡Correcto!' : 'Uy, otra cantó primero 😅'}</p>
+          <p className="mt-3 text-center font-semibold chip-pop">{!miCanto ? 'Cantando…' : miCanto.valido ? '¡Correcto!' : 'Uy, alguien cantó primero 😅'}</p>
         )}
         {(b.ganadores.linea.length > 0 || b.ganadores.bingo.length > 0) && (
           <div className="mt-4 text-center text-sm opacity-80 space-y-0.5">

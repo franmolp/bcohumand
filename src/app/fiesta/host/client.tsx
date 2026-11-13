@@ -343,7 +343,7 @@ export default function HostClient() {
           ))}
         </div>
         <span className="ml-2 text-sm flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${conexion === 'ok' ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />{conexion === 'ok' ? 'En vivo' : 'Conectando…'}</span>
-        <span className="text-sm opacity-80">· {Object.keys(st.jugadores).length} jugadores</span>
+        <span className="text-sm opacity-80">· {Object.keys(st.jugadores).length} participantes</span>
         <div className="ml-auto flex gap-2 relative">
           <button onClick={() => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()} className="px-3 py-1.5 rounded-full bg-black/30 text-sm cursor-pointer hover:bg-black/50">Pantalla completa</button>
           <button onClick={() => setMenu(v => !v)} className="px-3 py-1.5 rounded-full bg-black/30 text-sm cursor-pointer hover:bg-black/50">Ajustes</button>
@@ -354,7 +354,7 @@ export default function HostClient() {
                 className={`w-full py-2 rounded-xl font-semibold cursor-pointer ${cfg.activa ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>
                 {cfg.activa ? 'Apagar la fiesta (cierra el link)' : 'Encender la fiesta'}
               </button>
-              <button onClick={() => { if (confirm('Borrar jugadores, bingo y trivia de esta pantalla?')) { mutate(x => { Object.assign(x, estadoInicial()) }); setBanner(null); setVista('lobby') } }}
+              <button onClick={() => { if (confirm('¿Borrar participantes, bingo y trivia de esta pantalla?')) { mutate(x => { Object.assign(x, estadoInicial()) }); setBanner(null); setVista('lobby') } }}
                 className="w-full py-2 rounded-xl bg-gray-100 font-semibold cursor-pointer">Reiniciar todo</button>
               <button onClick={async () => { if (confirm('¿Generar un link nuevo? El anterior deja de funcionar y hay que volver a escanear.')) { try { await guardarCfg({ nuevoCodigo: true }) } catch (e) { alert((e as Error).message) } } }}
                 className="w-full py-2 rounded-xl bg-gray-100 font-semibold cursor-pointer">Generar link nuevo</button>
@@ -418,7 +418,7 @@ function Lobby({ url, jugadores, ahora }: { url: string; jugadores: HostState['j
       <div className="flex-1 min-w-0">
         <p className="text-2xl font-semibold opacity-80">Beauty Co. cumple</p>
         <h1 className="text-[9vh] leading-none font-black tracking-tight titulo-brillo">9 años</h1>
-        <p className="text-3xl mt-6 font-bold">{lista.length} {lista.length === 1 ? 'jugadora' : 'jugadoras'} adentro</p>
+        <p className="text-3xl mt-6 font-bold">{lista.length} {lista.length === 1 ? 'participante' : 'participantes'} adentro</p>
         <div className="mt-5 flex flex-wrap gap-2.5 max-h-[45vh] overflow-hidden">
           {lista.map(([id, j]) => (
             <span key={id} className={`chip-pop px-4 py-2 rounded-full text-lg font-semibold ${ahora - j.visto < ONLINE_MS * 2 ? 'bg-white/15' : 'bg-white/5 opacity-50'}`}>{j.nombre}</span>
