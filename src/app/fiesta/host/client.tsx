@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import {
-  sbFiesta, canalEntrada, canalSalida, generarCarton, semillaCarton, validarCanto, puntosPor, mezclar, triviaDe,
+  sbFiesta, canalEntrada, canalSalida, generarCarton, semillaCarton, validarCanto, puntosPor, mezclar, triviaDe, normalizarNombre,
   TIPOS, tipoLabel, COLORES, FORMAS,
   type FiestaConfig, type Pregunta, type TipoPregunta, type Modo, type FaseTrivia, type EstadoPublico, type MsgJugador, type FilaRanking, type Ganador, type Trivia,
 } from '@/lib/fiesta'
@@ -13,6 +13,7 @@ import {
 interface HostState {
   modo: Modo
   partida: string
+  rechazos: Record<string, string> // id → nombre que pidió y ya estaba tomado
   jugadores: Record<string, { nombre: string; visto: number }>
   bingo: EstadoPublico['bingo']
   trivia: {
@@ -33,7 +34,7 @@ const pregsDe = (c: FiestaConfig | null, s: HostState) => triviaDe(c, s.trivia.t
 // Hora en que cierra la pregunta: al terminar su tiempo, o antes si se tocó "Últimos 5 segundos"
 const limiteDe = (t: HostState['trivia'], q: Pregunta) => Math.min(t.inicio + q.duracion * 1000, t.cierre || Infinity)
 const nuevaPartida = () => Math.random().toString(36).slice(2, 10)
-const estadoInicial = (): HostState => ({ modo: 'lobby', partida: nuevaPartida(), jugadores: {}, bingo: bingoInicial(), trivia: triviaInicial() })
+const estadoInicial = (): HostState => ({ modo: 'lobby', partida: nuevaPartida(), rechazos: {}, jugadores: {}, bingo: bingoInicial(), trivia: triviaInicial() })
 
 type Vista = Modo | 'editor'
 const ONLINE_MS = 30000
@@ -101,6 +102,7 @@ export default function HostClient() {
     return {
       modo: s.modo,
       partida: s.partida,
+      rechazos: Object.entries(s.rechazos ?? {}).map(([id, nombre]) => ({ id, nombre })),
       bingo: { ...s.bingo, cantos: s.bingo.cantos.slice(-8) },
       trivia: {
         fase: s.trivia.fase,
@@ -152,7 +154,17 @@ export default function HostClient() {
         prev.visto = Date.now() // latido: no hace falta reenviar todo
         return
       }
-      mutate(x => { x.jugadores[m.id] = { nombre, visto: Date.now() } })
+      // No puede haber dos participantes con el mismo nombre: se rechaza y el celular lo vuelve a pedir.
+      // (Si es un cambio de nombre, sigue participando con el nombre anterior.)
+      const tomado = Object.entries(s.jugadores).some(([id, j]) => id !== m.id && normalizarNombre(j.nombre) === normalizarNombre(nombre))
+      if (tomado) {
+        if (prev) prev.visto = Date.now()
+        if (s.rechazos?.[m.id] !== nombre) mutate(x => { (x.rechazos ??= {})[m.id] = nombre })
+        else programarEnvio()
+        return
+      }
+      // Mismo id = misma persona: si cambió el nombre se actualiza, no se duplica
+      mutate(x => { x.jugadores[m.id] = { nombre, visto: Date.now() }; if (x.rechazos) delete x.rechazos[m.id] })
       return
     }
     if (!s.jugadores[m.id]) return

@@ -11,6 +11,8 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
   const [yo, setYo] = useState<{ id: string; nombre: string } | null>(null)
   const [cargado, setCargado] = useState(false)
   const [nombre, setNombre] = useState('')
+  const [cambiando, setCambiando] = useState(false) // pantalla del nombre sin perder la sesión
+  const [errorNombre, setErrorNombre] = useState('')
   const [estado, setEstado] = useState<EstadoPublico | null>(null)
   const [limite, setLimite] = useState(0) // hora local en que cierra la pregunta
   const [ahora, setAhora] = useState(() => Date.now())
@@ -58,10 +60,17 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
       if (e.partida && guardada && guardada !== e.partida) {
         // En la laptop se tocó "Reiniciar todo": se borra todo lo de este celular y vuelve a pedir el nombre
         for (const k of [KEY, `${KEY}-marcas`, `${KEY}-resp`, `${KEY}-partida`]) localStorage.removeItem(k)
-        setYo(null); setNombre(''); setEstado(null); setMiResp(null); setMarcas({ tag: '', nums: [] }); setCantando(null)
+        setYo(null); setNombre(''); setCambiando(false); setErrorNombre(''); setEstado(null); setMiResp(null); setMarcas({ tag: '', nums: [] }); setCantando(null)
         return
       }
       if (e.partida && guardada !== e.partida) localStorage.setItem(`${KEY}-partida`, e.partida)
+      // Ese nombre ya lo tiene otra persona: se vuelve a pedir (se compara también el nombre, para no
+      // tomar un estado viejo que llegue justo después de elegir otro)
+      if (e.rechazos?.some(r => r.id === yo.id && r.nombre === yo.nombre)) {
+        setErrorNombre(`Ya hay alguien que se llama “${yo.nombre}”. Agregá tu apellido o una inicial.`)
+        setNombre(yo.nombre)
+        setCambiando(true)
+      }
       setEstado(e)
       if (e.trivia.fase === 'pregunta') setLimite(Date.now() + e.trivia.restanteMs)
     })
@@ -99,7 +108,10 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
   function entrar() {
     const n = nombre.trim().slice(0, 24)
     if (!n) return
+    // Mismo id siempre (también al cambiar el nombre): es la misma persona, no se duplica
     const j = { id: yo?.id ?? nuevoId(), nombre: n }
+    setErrorNombre('')
+    setCambiando(false)
     localStorage.setItem(KEY, JSON.stringify(j))
     setYo(j)
   }
@@ -128,19 +140,21 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
 
   if (!cargado) return <Pantalla><p className="opacity-60">Cargando…</p></Pantalla>
 
-  if (!yo) return (
+  if (!yo || cambiando) return (
     <Pantalla>
       <style>{CSS}</style>
       <p className="text-lg opacity-80">Beauty Co. cumple</p>
       <h1 className="text-6xl font-black titulo-brillo">9 años</h1>
       <p className="mt-8 mb-3 text-lg font-bold text-white">¿Cómo te llamás?</p>
       <input value={nombre} onChange={e => setNombre(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') entrar() }} maxLength={24} autoFocus
-        placeholder="Tu nombre" style={{ colorScheme: 'light' }} className="w-full max-w-xs text-center text-xl px-4 py-3.5 rounded-2xl bg-white text-gray-900 placeholder:text-gray-400 caret-[#ff4fa3] outline-none shadow-lg" />
-      <button onClick={entrar} disabled={!nombre.trim()} className="mt-4 w-full max-w-xs py-4 rounded-2xl bg-[#ff4fa3] text-xl font-black disabled:opacity-40 active:scale-95 transition">Entrar</button>
+        placeholder="Nombre y apellido o inicial" style={{ colorScheme: 'light' }} className="w-full max-w-xs text-center text-xl px-4 py-3.5 rounded-2xl bg-white text-gray-900 placeholder:text-gray-400 caret-[#ff4fa3] outline-none shadow-lg" />
+      <button onClick={entrar} disabled={!nombre.trim()} className="mt-4 w-full max-w-xs py-4 rounded-2xl bg-[#ff4fa3] text-xl font-black disabled:opacity-40 active:scale-95 transition">{yo ? 'Listo' : 'Entrar'}</button>
+      {errorNombre && <p className="mt-4 max-w-xs text-[15px] font-semibold text-amber-300 chip-pop">{errorNombre}</p>}
+      {yo && !errorNombre && <button onClick={() => { setNombre(yo.nombre); setCambiando(false) }} className="mt-4 text-sm opacity-60 underline">Cancelar</button>}
     </Pantalla>
   )
 
-  const cambiarNombre = <button onClick={() => { setNombre(yo.nombre); setYo(null) }} className="text-xs opacity-40 underline">Cambiar nombre</button>
+  const cambiarNombre = <button onClick={() => { setNombre(yo.nombre); setErrorNombre(''); setCambiando(true) }} className="text-xs opacity-40 underline">Cambiar nombre</button>
   const pie = (
     <div className="fixed bottom-0 inset-x-0 flex items-center justify-between px-4 py-2 text-xs">
       <span className="flex items-center gap-1.5 opacity-60"><span className={`w-2 h-2 rounded-full ${conectado ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />{yo.nombre}</span>

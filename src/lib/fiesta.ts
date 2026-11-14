@@ -118,6 +118,7 @@ export interface FilaRanking { id: string; nombre: string; pts: number; delta: n
 export interface EstadoPublico {
   modo: Modo
   partida: string // cambia con "Reiniciar todo": los celulares borran todo lo suyo y vuelven a pedir el nombre
+  rechazos: { id: string; nombre: string }[] // quisieron entrar (o cambiarse) a un nombre que ya tiene otra persona
   bingo: { ronda: number; salidos: number[]; fase: 'linea' | 'bingo' | 'terminado'; ganadores: { linea: Ganador[]; bingo: Ganador[] }; cantos: Canto[] }
   trivia: {
     fase: FaseTrivia
@@ -134,6 +135,9 @@ export interface EstadoPublico {
 }
 // Mensajes de los celulares. `p` = partida que conoce el celular: la laptop descarta los de una
 // partida vieja (un mensaje que salió justo antes de "Reiniciar todo" no vuelve a anotar a nadie).
+// Mismo nombre = igual sin importar mayúsculas, acentos ni espacios de más ("Ana" = "aná ")
+export const normalizarNombre = (n: string) => n.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+
 export type MsgJugador = (
   | { t: 'hola'; id: string; nombre: string }
   | { t: 'resp'; id: string; qid: string; op: number }
