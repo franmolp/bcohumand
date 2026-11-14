@@ -108,7 +108,7 @@ export function validarCanto(carton: Carton, salidos: Iterable<number>, tipo: 'l
 }
 
 // ─── Protocolo ───────────────────────────────────────────────────────────────
-export type Modo = 'lobby' | 'bingo' | 'trivia'
+export type Modo = 'lobby' | 'bingo' | 'trivia' | 'impostor'
 export type FaseTrivia = 'espera' | 'pregunta' | 'revelada' | 'ranking' | 'final'
 export interface Ganador { id: string; nombre: string; bola: number }
 export interface Canto { id: string; nombre: string; tipo: 'linea' | 'bingo'; valido: boolean; ts: number }
@@ -126,12 +126,31 @@ export interface EstadoPublico {
     lanz: number // identifica cada vez que se lanza una pregunta (para no arrastrar respuestas viejas)
     n: number
     total: number
-    pregunta: { id: string; tipo: TipoPregunta; texto: string; opciones: string[]; duracion: number } | null
+    // La imagen también va a los celulares: si falla el proyector, cada uno la ve en su pantalla
+    pregunta: { id: string; tipo: TipoPregunta; texto: string; opciones: string[]; duracion: number; imagen?: string } | null
     restanteMs: number
+    transcurridoMs: number // para destapar la imagen oculta al mismo ritmo en el celular
     correcta: number | null
     respondieron: string[]
     ranking: FilaRanking[]
   }
+  impostor: EstadoImpostor
+}
+
+// ─── Impostor ────────────────────────────────────────────────────────────────
+// Todos reciben la misma palabra menos los impostores, que no la saben y tienen que disimular.
+// Se habla en persona (cada uno dice una palabra relacionada) y después se vota desde el celular.
+export type FaseImpostor = 'config' | 'roles' | 'votacion' | 'resultado'
+export interface EstadoImpostor {
+  ronda: number
+  fase: FaseImpostor
+  categoria: string // la ven todos (y el impostor solo si está activada la pista)
+  roles: Record<string, string> // id → palabra ('' = impostor). Solo quienes juegan esta ronda
+  pista: boolean
+  cantidad: number
+  orden: { id: string; nombre: string }[] // orden para hablar (empieza alguien que no es impostor)
+  votaron: string[]
+  resultado: { palabra: string; impostores: { id: string; nombre: string }[]; votos: { id: string; nombre: string; n: number }[] } | null
 }
 // Mensajes de los celulares. `p` = partida que conoce el celular: la laptop descarta los de una
 // partida vieja (un mensaje que salió justo antes de "Reiniciar todo" no vuelve a anotar a nadie).
@@ -142,4 +161,5 @@ export type MsgJugador = (
   | { t: 'hola'; id: string; nombre: string }
   | { t: 'resp'; id: string; qid: string; op: number }
   | { t: 'canto'; id: string; tipo: 'linea' | 'bingo' }
+  | { t: 'voto'; id: string; ronda: number; a: string }
 ) & { p?: string }

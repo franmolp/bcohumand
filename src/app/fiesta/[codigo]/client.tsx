@@ -2,7 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
-import { sbFiesta, canalEntrada, canalSalida, generarCarton, semillaCarton, validarCanto, COLORES, FORMAS, type EstadoPublico, type MsgJugador } from '@/lib/fiesta'
+import { sbFiesta, canalEntrada, canalSalida, generarCarton, semillaCarton, validarCanto, COLORES, FORMAS, type EstadoPublico, type EstadoImpostor, type MsgJugador } from '@/lib/fiesta'
+import { ImagenOculta } from '../compartido'
+
+// Pantalla completa (en Android oculta las barras del navegador; en iPhone no está disponible)
+function pantallaCompleta() {
+  try {
+    const d = document.documentElement
+    if (!document.fullscreenElement && d.requestFullscreen) d.requestFullscreen({ navigationUI: 'hide' }).catch(() => {})
+  } catch { /* no disponible */ }
+}
 
 const nuevoId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36))
 
@@ -21,6 +30,10 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
   // Marcas y cantos van atados a la partida + ronda del bingo (tag), así un bingo nuevo arranca limpio
   const [marcas, setMarcas] = useState<{ tag: string; nums: number[] }>({ tag: '', nums: [] })
   const [cantando, setCantando] = useState<{ tipo: 'linea' | 'bingo'; ts: number; tag: string } | null>(null)
+  const [inicioQ, setInicioQ] = useState(0) // hora local en que arrancó la pregunta (para la imagen oculta)
+  const [miVoto, setMiVoto] = useState<{ ronda: number; a: string } | null>(null)
+  const [avisoSalir, setAvisoSalir] = useState(false)
+  const [completa, setCompleta] = useState(true)
   const sb = useMemo(() => sbFiesta(), [])
   const entradaRef = useRef<RealtimeChannel | null>(null)
   const socketRef = useRef(false)
@@ -33,6 +46,40 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
     } catch { /* nada guardado */ }
     setCargado(true)
   }, [KEY])
+
+  // Que no se salga del juego sin querer: el gesto/botón "atrás" no sale (avisa), recargar o cerrar pide
+  // confirmación, la pantalla no se apaga y no se recarga al deslizar hacia abajo
+  useEffect(() => {
+    history.pushState({ fiesta: 1 }, '')
+    const atras = () => { history.pushState({ fiesta: 1 }, ''); setAvisoSalir(true); window.setTimeout(() => setAvisoSalir(false), 3500) }
+    const antesDeSalir = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('popstate', atras)
+    window.addEventListener('beforeunload', antesDeSalir)
+    let lock: { release: () => Promise<void> } | null = null
+    const despierta = async () => {
+      if (document.visibilityState !== 'visible') return
+      try { lock = await (navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<{ release: () => Promise<void> }> } }).wakeLock?.request('screen') ?? null } catch { /* no disponible */ }
+    }
+    despierta()
+    document.addEventListener('visibilitychange', despierta)
+    // Al primer toque se pasa a pantalla completa (el navegador solo lo permite después de un toque)
+    const primerToque = () => { pantallaCompleta(); despierta() }
+    window.addEventListener('pointerdown', primerToque, { once: true })
+    const cambio = () => setCompleta(!!document.fullscreenElement || !document.fullscreenEnabled)
+    cambio()
+    document.addEventListener('fullscreenchange', cambio)
+    const html = document.documentElement, prev = html.style.overscrollBehavior
+    html.style.overscrollBehavior = 'none'; document.body.style.overscrollBehavior = 'none'
+    return () => {
+      window.removeEventListener('popstate', atras)
+      window.removeEventListener('beforeunload', antesDeSalir)
+      document.removeEventListener('visibilitychange', despierta)
+      window.removeEventListener('pointerdown', primerToque)
+      document.removeEventListener('fullscreenchange', cambio)
+      lock?.release().catch(() => {})
+      html.style.overscrollBehavior = prev; document.body.style.overscrollBehavior = ''
+    }
+  }, [])
 
   // Envío a la laptop: por REST (sin unirse al canal); si falla, uniéndose al canal
   async function enviar(msg: MsgJugador) {
@@ -72,7 +119,7 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
         setCambiando(true)
       }
       setEstado(e)
-      if (e.trivia.fase === 'pregunta') setLimite(Date.now() + e.trivia.restanteMs)
+      if (e.trivia.fase === 'pregunta') { setLimite(Date.now() + e.trivia.restanteMs); setInicioQ(Date.now() - (e.trivia.transcurridoMs ?? 0)) }
     })
     salida.subscribe(s => {
       setConectado(s === 'SUBSCRIBED')
@@ -105,7 +152,24 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
     return () => window.clearInterval(t)
   }, [yo, enPregunta, preg, miResp, lanz, confirmada])
 
+  // Reintenta el voto del impostor hasta que la laptop lo confirme
+  const imp = estado?.impostor
+  const votoConfirmado = !!yo && !!imp?.votaron.includes(yo.id)
+  const faseImp = imp?.fase, rondaImp = imp?.ronda
+  useEffect(() => {
+    if (!yo || faseImp !== 'votacion' || !miVoto || miVoto.ronda !== rondaImp || votoConfirmado) return
+    const t = window.setInterval(() => enviarRef.current({ t: 'voto', id: yo.id, ronda: miVoto.ronda, a: miVoto.a }), 1500)
+    return () => window.clearInterval(t)
+  }, [yo, faseImp, rondaImp, miVoto, votoConfirmado])
+  function votar(a: string) {
+    if (!yo || !imp) return
+    setMiVoto({ ronda: imp.ronda, a })
+    navigator.vibrate?.(30)
+    enviar({ t: 'voto', id: yo.id, ronda: imp.ronda, a })
+  }
+
   function entrar() {
+    pantallaCompleta()
     const n = nombre.trim().slice(0, 24)
     if (!n) return
     // Mismo id siempre (también al cambiar el nombre): es la misma persona, no se duplica
@@ -156,10 +220,14 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
 
   const cambiarNombre = <button onClick={() => { setNombre(yo.nombre); setErrorNombre(''); setCambiando(true) }} className="text-xs opacity-40 underline">Cambiar nombre</button>
   const pie = (
-    <div className="fixed bottom-0 inset-x-0 flex items-center justify-between px-4 py-2 text-xs">
-      <span className="flex items-center gap-1.5 opacity-60"><span className={`w-2 h-2 rounded-full ${conectado ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />{yo.nombre}</span>
-      {cambiarNombre}
-    </div>
+    <>
+      {avisoSalir && <div className="fixed top-3 inset-x-3 z-50 rounded-2xl bg-white text-[#2a1650] px-4 py-3 text-sm font-semibold shadow-2xl chip-pop">Seguís en el juego. Si de verdad querés salir, cerrá la pestaña.</div>}
+      <div className="fixed bottom-0 inset-x-0 flex items-center justify-between gap-3 px-4 py-2 text-xs">
+        <span className="flex items-center gap-1.5 opacity-60 min-w-0 truncate"><span className={`w-2 h-2 rounded-full shrink-0 ${conectado ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />{yo.nombre}</span>
+        {!completa && <button onClick={pantallaCompleta} className="px-2.5 py-1 rounded-full bg-white/15 font-semibold">Pantalla completa</button>}
+        {cambiarNombre}
+      </div>
+    </>
   )
 
   if (!estado || estado.modo === 'lobby') return (
@@ -240,6 +308,8 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
     )
   }
 
+  if (estado.modo === 'impostor' && imp) return <ImpostorJugador im={imp} yoId={yo.id} miVoto={miVoto?.ronda === imp.ronda ? miVoto.a : null} confirmado={votoConfirmado} onVotar={votar} pie={pie} />
+
   // ── Trivia ──
   const t = estado.trivia
   const ranking = t.ranking
@@ -276,7 +346,16 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
         <div className="h-2 rounded-full bg-white/15 overflow-hidden"><div className="h-full bg-white rounded-full" style={{ width: `${(restante / (preg.duracion * 1000)) * 100}%`, transition: 'width .2s linear' }} /></div>
         <p className="text-center text-xs opacity-60 mt-2">Pregunta {t.n} de {t.total} · {Math.ceil(restante / 1000)} s</p>
         <p className="text-center text-xl font-bold mt-2 mb-3 leading-snug">{preg.texto}</p>
-        <div className={`flex-1 grid gap-3 ${ops.length > 2 ? 'grid-cols-2 grid-rows-2' : 'grid-cols-1'}`}>
+        {/* La imagen también se ve en el celu (por si no hay proyector) */}
+        {preg.imagen && (
+          <div className="flex justify-center mb-3 shrink-0">
+            {preg.tipo === 'revelar'
+              ? <ImagenOculta id={preg.id} imagen={preg.imagen} duracion={preg.duracion} transcurrido={ahora - inicioQ} revelada={false} clase="max-h-[32dvh] max-w-full" />
+              : /* eslint-disable-next-line @next/next/no-img-element */ <img src={preg.imagen} alt="" className="max-h-[32dvh] max-w-full rounded-2xl object-contain shadow-2xl" />}
+          </div>
+        )}
+        {preg.tipo === 'musica' && <p className="text-center text-sm opacity-80 mb-3">🎵 Escuchá el tema que está sonando</p>}
+        <div className={`flex-1 grid gap-3 min-h-[38dvh] ${ops.length > 2 ? 'grid-cols-2 grid-rows-2' : 'grid-cols-1'}`}>
           {ops.map(({ o, i }) => (
             <button key={i} onClick={() => responder(i)} disabled={restante <= 0}
               className="rounded-2xl flex flex-col items-center justify-center gap-2 p-3 text-center font-bold active:scale-95 transition shadow-lg" style={{ background: COLORES[i] }}>
@@ -321,12 +400,132 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
   )
 }
 
+// ─── Impostor (celular) ─────────────────────────────────────────────────────────
+function ImpostorJugador({ im, yoId, miVoto, confirmado, onVotar, pie }: {
+  im: EstadoImpostor; yoId: string; miVoto: string | null; confirmado: boolean; onVotar: (a: string) => void; pie: React.ReactNode
+}) {
+  const rol = im.roles[yoId] // undefined = no juega esta ronda
+  const soyImpostor = rol === ''
+  const lugar = im.orden.findIndex(j => j.id === yoId)
+
+  if (im.fase === 'config' || (rol === undefined && im.fase !== 'resultado')) return (
+    <Pantalla>
+      <style>{CSS}</style>
+      <p className="text-6xl mb-4 latido-suave">🕵️</p>
+      <h1 className="text-4xl font-black titulo-brillo">El impostor</h1>
+      <p className="mt-3 text-lg opacity-80">{im.fase === 'config' ? 'Esperá a que repartan los roles' : 'Esta ronda ya arrancó: entrás en la próxima'}</p>
+      {pie}
+    </Pantalla>
+  )
+
+  if (im.fase === 'roles') return (
+    <Pantalla>
+      <style>{CSS}</style>
+      <CartaRol soyImpostor={soyImpostor} palabra={rol ?? ''} categoria={!soyImpostor || im.pista ? im.categoria : ''} cantidad={im.cantidad} />
+      {lugar >= 0 && <p className="mt-6 text-lg">{lugar === 0 ? <b>¡Empezás vos!</b> : <>Hablás en el lugar <b className="text-2xl">{lugar + 1}</b> · empieza {im.orden[0]?.nombre}</>}</p>}
+      <p className="mt-1 text-sm opacity-60">Cuando te toque, decí una palabra relacionada{soyImpostor ? ' (¡que no te descubran!)' : ' sin regalarla'}</p>
+      {pie}
+    </Pantalla>
+  )
+
+  if (im.fase === 'votacion') {
+    if (miVoto) {
+      const a = im.orden.find(j => j.id === miVoto)
+      return (
+        <Pantalla>
+          <style>{CSS}</style>
+          <p className="text-6xl mb-3 chip-pop">🗳️</p>
+          <h1 className="text-3xl font-black">{confirmado ? 'Voto enviado' : 'Enviando…'}</h1>
+          <p className="mt-2 text-lg opacity-80">Votaste a <b>{a?.nombre}</b></p>
+          <p className="mt-1 opacity-60">Esperá el resultado 👀</p>
+          {pie}
+        </Pantalla>
+      )
+    }
+    return (
+      <div className="min-h-[100dvh] text-white px-4 pt-6 pb-14" style={FONDO}>
+        <style>{CSS}</style>
+        <h1 className="text-center text-3xl font-black titulo-brillo">¿Quién es el impostor?</h1>
+        <p className="text-center opacity-70 mt-1 mb-5">Tocá a quien quieras votar</p>
+        <div className="grid grid-cols-2 gap-2.5">
+          {im.orden.filter(j => j.id !== yoId).map(j => (
+            <button key={j.id} onClick={() => onVotar(j.id)} className="rounded-2xl bg-white/15 active:bg-[#ff4fa3] active:scale-95 transition px-3 py-4 text-lg font-bold break-words">{j.nombre}</button>
+          ))}
+        </div>
+        {pie}
+      </div>
+    )
+  }
+
+  // Resultado
+  const res = im.resultado
+  if (!res) return <Pantalla><style>{CSS}</style><p className="opacity-70">Mirá la pantalla…</p>{pie}</Pantalla>
+  const max = Math.max(0, ...res.votos.map(v => v.n))
+  const top = res.votos.filter(v => v.n === max && v.n > 0)
+  const huboVotos = res.votos.length > 0
+  const atrapado = huboVotos && top.length === 1 && res.impostores.some(i => i.id === top[0].id)
+  const yoAtrapado = huboVotos && top.length === 1 && top[0].id === yoId
+  const titulo = rol === undefined ? 'Resultado'
+    : soyImpostor ? (yoAtrapado ? '¡Te descubrieron!' : huboVotos ? '¡Zafaste! 😈' : 'Eras el impostor')
+    : !huboVotos ? 'Resultado' : atrapado ? '¡Lo encontraron! 🎉' : '¡Ganaron los impostores!'
+  return (
+    <Pantalla>
+      <style>{CSS}</style>
+      <h1 className="text-4xl font-black titulo-brillo">{titulo}</h1>
+      <p className="mt-5 opacity-80">{res.impostores.length === 1 ? 'El impostor era' : 'Los impostores eran'}</p>
+      <p className="text-3xl font-black">{res.impostores.map(i => i.nombre).join(' y ')}</p>
+      <p className="mt-4 opacity-80">La palabra era</p>
+      <p className="text-3xl font-black px-4 py-1 rounded-xl bg-white text-[#2a1650] mt-1">{res.palabra}</p>
+      {huboVotos && (
+        <div className="mt-6 w-full max-w-xs space-y-1 text-left">
+          {res.votos.slice(0, 5).map(v => <p key={v.id} className="flex justify-between gap-3"><span className="truncate">{v.nombre}</span><b>{v.n} {v.n === 1 ? 'voto' : 'votos'}</b></p>)}
+        </div>
+      )}
+      {pie}
+    </Pantalla>
+  )
+}
+
+// El rol se ve solo mientras se mantiene apretado, así nadie lo espía de costado
+function CartaRol({ soyImpostor, palabra, categoria, cantidad }: { soyImpostor: boolean; palabra: string; categoria: string; cantidad: number }) {
+  const [ver, setVer] = useState(false)
+  const [visto, setVisto] = useState(false)
+  const mostrar = () => { setVer(true); setVisto(true); navigator.vibrate?.(20) }
+  return (
+    <div className="w-full max-w-xs">
+      <button
+        onPointerDown={mostrar} onPointerUp={() => setVer(false)} onPointerLeave={() => setVer(false)} onPointerCancel={() => setVer(false)}
+        onContextMenu={e => e.preventDefault()}
+        className={`w-full aspect-[3/4] rounded-3xl shadow-2xl flex flex-col items-center justify-center p-5 transition-colors ${ver ? (soyImpostor ? 'bg-[#e21b3c]' : 'bg-white text-[#2a1650]') : 'bg-white/10 border-2 border-dashed border-white/30'}`}
+        style={{ touchAction: 'none', WebkitTouchCallout: 'none' }}>
+        {!ver ? <>
+          <span className="text-6xl">👆</span>
+          <span className="mt-4 text-xl font-black">Mantené apretado para ver tu rol</span>
+          <span className="mt-2 text-sm opacity-70">Que nadie vea tu pantalla</span>
+        </> : soyImpostor ? <>
+          <span className="text-6xl">🕵️</span>
+          <span className="mt-3 text-4xl font-black">Sos el IMPOSTOR</span>
+          {categoria && <span className="mt-3 text-lg">Categoría: <b>{categoria}</b></span>}
+          <span className="mt-3 text-sm opacity-90">No sabés la palabra: escuchá y disimulá{cantidad > 1 ? `. Hay ${cantidad} impostores` : ''}</span>
+        </> : <>
+          {categoria && <span className="text-sm font-bold uppercase tracking-wider opacity-60">{categoria}</span>}
+          <span className="mt-2 text-[clamp(28px,10vw,44px)] font-black leading-tight break-words">{palabra}</span>
+          <span className="mt-4 text-sm opacity-70">Hay {cantidad === 1 ? '1 impostor' : `${cantidad} impostores`} que no la saben</span>
+        </>}
+      </button>
+      {visto && !ver && <p className="mt-3 text-sm opacity-60">Podés volver a mirarlo cuando quieras</p>}
+    </div>
+  )
+}
+
 const FONDO = { background: 'radial-gradient(circle at 20% 0%, #6d28d9 0%, #3b1a6e 40%, #1a0d33 85%)' }
 function Pantalla({ children }: { children: React.ReactNode }) {
   return <div className="min-h-[100dvh] flex flex-col items-center justify-center text-center text-white px-6 pb-10" style={FONDO}>{children}</div>
 }
 
 const CSS = `
+html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+button { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 @keyframes chipPop { 0% { transform: scale(.4); opacity: 0 } 70% { transform: scale(1.1); opacity: 1 } 100% { transform: scale(1) } }
 @keyframes brillo { 0%,100% { background-position: 0% 50% } 50% { background-position: 100% 50% } }
 @keyframes latidoSuave { 0%,100% { transform: scale(1) } 50% { transform: scale(1.12) } }

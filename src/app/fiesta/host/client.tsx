@@ -7,8 +7,11 @@ import {
   sbFiesta, canalEntrada, canalSalida, generarCarton, semillaCarton, validarCanto, puntosPor, mezclar, triviaDe, normalizarNombre,
   TIPOS, tipoLabel, COLORES, FORMAS,
   type FiestaConfig, type Pregunta, type TipoPregunta, type Modo, type FaseTrivia, type EstadoPublico, type MsgJugador, type FilaRanking, type Ganador, type Trivia,
+  type FaseImpostor, type EstadoImpostor,
 } from '@/lib/fiesta'
 import { PLANTILLAS, type Plantilla } from '@/lib/fiesta-ejemplo'
+import { CATEGORIAS_IMPOSTOR, MIS_PALABRAS, TODAS, elegirPalabra } from '@/lib/fiesta-impostor'
+import { ImagenOculta } from '../compartido'
 
 // Pregunta de imagen sin imagen o de música sin canción (no se puede jugar bien así)
 const faltaMedia = (p: Pregunta) => ((p.tipo === 'imagen' || p.tipo === 'revelar') && !p.imagen) || (p.tipo === 'musica' && !p.audio)
@@ -30,7 +33,24 @@ interface HostState {
     previos: Record<string, number>
     cierre: number // si se tocó "Últimos 5 segundos": hora en que cierra (0 = al terminar el tiempo)
   }
+  impostor: {
+    ronda: number
+    fase: FaseImpostor
+    // Ajustes (se mantienen entre rondas)
+    cantidad: number
+    categoria: string
+    pista: boolean
+    propias: string
+    // Ronda en curso
+    palabra: string
+    cat: string
+    roles: Record<string, string> // id → palabra ('' = impostor)
+    orden: string[]
+    votos: Record<string, string> // quién votó → a quién
+    usadas: string[]
+  }
 }
+const impostorInicial = (): HostState['impostor'] => ({ ronda: 0, fase: 'config', cantidad: 1, categoria: TODAS, pista: true, propias: '', palabra: '', cat: '', roles: {}, orden: [], votos: {}, usadas: [] })
 const bingoInicial = (ronda = 0): HostState['bingo'] => ({ ronda, salidos: [], fase: 'linea', ganadores: { linea: [], bingo: [] }, cantos: [] })
 const triviaInicial = (triviaId = ''): HostState['trivia'] => ({ triviaId, idx: 0, fase: 'espera', inicio: 0, respuestas: {}, puntos: {}, previos: {}, cierre: 0 })
 // Preguntas de la trivia que se está jugando
@@ -38,7 +58,33 @@ const pregsDe = (c: FiestaConfig | null, s: HostState) => triviaDe(c, s.trivia.t
 // Hora en que cierra la pregunta: al terminar su tiempo, o antes si se tocó "Últimos 5 segundos"
 const limiteDe = (t: HostState['trivia'], q: Pregunta) => Math.min(t.inicio + q.duracion * 1000, t.cierre || Infinity)
 const nuevaPartida = () => Math.random().toString(36).slice(2, 10)
-const estadoInicial = (): HostState => ({ modo: 'lobby', partida: nuevaPartida(), rechazos: {}, jugadores: {}, bingo: bingoInicial(), trivia: triviaInicial() })
+const estadoInicial = (): HostState => ({ modo: 'lobby', partida: nuevaPartida(), rechazos: {}, jugadores: {}, bingo: bingoInicial(), trivia: triviaInicial(), impostor: impostorInicial() })
+const azar = () => crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296
+function barajar<T>(a: T[]) { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(azar() * (i + 1)); [b[i], b[j]] = [b[j], b[i]] } return b }
+// Máximo de impostores según cuántos juegan (siempre tiene que haber más gente que impostores)
+const maxImpostores = (n: number) => Math.max(1, Math.floor((n - 1) / 2))
+
+function publicoImpostor(s: HostState): EstadoImpostor {
+  const im = s.impostor
+  const nom = (id: string) => s.jugadores[id]?.nombre ?? '?'
+  let resultado: EstadoImpostor['resultado'] = null
+  if (im.fase === 'resultado') {
+    const n: Record<string, number> = {}
+    for (const a of Object.values(im.votos)) n[a] = (n[a] ?? 0) + 1
+    resultado = {
+      palabra: im.palabra,
+      impostores: Object.keys(im.roles).filter(id => im.roles[id] === '').map(id => ({ id, nombre: nom(id) })),
+      votos: Object.entries(n).map(([id, c]) => ({ id, nombre: nom(id), n: c })).sort((a, b) => b.n - a.n || a.nombre.localeCompare(b.nombre)),
+    }
+  }
+  return {
+    ronda: im.ronda, fase: im.fase, categoria: im.cat, pista: im.pista, cantidad: Object.values(im.roles).filter(r => r === '').length || im.cantidad,
+    roles: im.fase === 'config' ? {} : im.roles,
+    orden: im.orden.map(id => ({ id, nombre: nom(id) })),
+    votaron: Object.keys(im.votos),
+    resultado,
+  }
+}
 
 type Vista = Modo | 'editor'
 const ONLINE_MS = 30000
@@ -114,12 +160,14 @@ export default function HostClient() {
         lanz: s.trivia.inicio,
         n: s.trivia.idx + 1,
         total: pregs.length,
-        pregunta: mostrarPregunta ? { id: q.id, tipo: q.tipo, texto: q.texto, opciones: q.opciones, duracion: q.duracion } : null,
+        pregunta: mostrarPregunta ? { id: q.id, tipo: q.tipo, texto: q.texto, opciones: q.opciones, duracion: q.duracion, imagen: q.tipo === 'imagen' || q.tipo === 'revelar' ? q.imagen : undefined } : null,
         restanteMs: abierta && q ? Math.max(0, limiteDe(s.trivia, q) - Date.now()) : 0,
+        transcurridoMs: abierta ? Date.now() - s.trivia.inicio : 0,
         correcta: q && !abierta && q.tipo !== 'votacion' ? q.correcta : null,
         respondieron: Object.keys(resp),
         ranking: rankingDe(s, q),
       },
+      impostor: publicoImpostor(s),
     }
   }, [])
 
@@ -183,6 +231,15 @@ export default function HostClient() {
       return
     }
     if (m.t === 'canto') procesarCanto(m.id, m.tipo)
+    if (m.t === 'voto') {
+      const im = s.impostor
+      const valido = im.fase === 'votacion' && m.ronda === im.ronda && m.id in im.roles && m.a in im.roles && m.a !== m.id
+      if (!valido || im.votos[m.id]) { programarEnvio(); return } // ya estaba: solo reconfirmar
+      mutate(x => { x.impostor.votos[m.id] = m.a })
+      // Votaron todos los que juegan esta ronda: se cierra sola
+      const ahoraIm = stRef.current.impostor
+      if (Object.keys(ahoraIm.votos).length >= Object.keys(ahoraIm.roles).length) mutate(x => { x.impostor.fase = 'resultado' })
+    }
   }
 
   function procesarCanto(id: string, tipo: 'linea' | 'bingo') {
@@ -249,6 +306,9 @@ export default function HostClient() {
     }, 150)
     return () => window.clearInterval(t)
   }, [st.trivia.fase]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reloj general (quién está conectado), más lento que el de la pregunta
+  useEffect(() => { const t = window.setInterval(() => setAhora(Date.now()), 5000); return () => window.clearInterval(t) }, [])
 
   function cambiarModo(m: Vista) {
     setVista(m)
@@ -365,6 +425,31 @@ export default function HostClient() {
     mutate(x => { x.trivia = triviaInicial(x.trivia.triviaId) })
   }
 
+  // ── Impostor ──
+  function ajustarImpostor(fn: (im: HostState['impostor']) => void) { mutate(x => fn(x.impostor)) }
+  function repartirRoles() {
+    const s = stRef.current, n = Date.now()
+    const ids = Object.entries(s.jugadores).filter(([, j]) => n - j.visto < ONLINE_MS * 2).map(([id]) => id)
+    if (ids.length < 3) { alert('Hacen falta al menos 3 participantes conectados.'); return }
+    const im = s.impostor
+    const elegida = elegirPalabra(im.categoria, im.propias, im.usadas, azar)
+    if (!elegida) { alert('Escribí al menos una palabra en “Mis palabras”.'); return }
+    const cant = Math.min(im.cantidad, maxImpostores(ids.length))
+    const impostores = new Set(barajar(ids).slice(0, cant))
+    // Orden para hablar: al azar, pero arranca alguien que sabe la palabra
+    let orden = barajar(ids)
+    const primero = orden.findIndex(id => !impostores.has(id))
+    orden = [...orden.slice(primero), ...orden.slice(0, primero)]
+    mutate(x => {
+      x.modo = 'impostor'
+      Object.assign(x.impostor, {
+        ronda: x.impostor.ronda + 1, fase: 'roles', palabra: elegida.p, cat: elegida.cat, orden, votos: {},
+        roles: Object.fromEntries(ids.map(id => [id, impostores.has(id) ? '' : elegida.p])),
+        usadas: [...x.impostor.usadas, elegida.p].slice(-200),
+      })
+    })
+  }
+
   if (error) return <Fondo><div className="h-screen flex items-center justify-center text-xl">{error}</div></Fondo>
   if (!cfg) return <Fondo><div className="h-screen flex items-center justify-center text-xl opacity-70">Cargando…</div></Fondo>
 
@@ -377,16 +462,16 @@ export default function HostClient() {
       <audio ref={audioRef} preload="auto" />
 
       {/* Barra superior */}
-      <div className="fixed top-0 inset-x-0 z-40 flex items-center gap-2 px-4 py-2.5 opacity-40 hover:opacity-100 transition-opacity">
-        <div className="flex gap-1 bg-black/30 rounded-full p-1">
-          {([['lobby', 'Ingreso'], ['bingo', 'Bingo'], ['trivia', 'Trivia'], ['editor', 'Preguntas']] as [Vista, string][]).map(([k, l]) => (
-            <button key={k} onClick={() => cambiarModo(k)} className={`px-3.5 py-1.5 rounded-full text-sm font-semibold cursor-pointer ${vista === k ? 'bg-white text-[#2a1650]' : 'text-white/80 hover:bg-white/10'}`}>{l}</button>
+      <div className="relative md:fixed top-0 inset-x-0 z-40 flex flex-wrap items-center gap-2 px-3 md:px-4 py-2.5 md:opacity-40 md:hover:opacity-100 transition-opacity">
+        <div className="flex gap-1 bg-black/30 rounded-full p-1 max-w-full overflow-x-auto">
+          {([['lobby', 'Ingreso'], ['bingo', 'Bingo'], ['trivia', 'Trivia'], ['impostor', 'Impostor'], ['editor', 'Preguntas']] as [Vista, string][]).map(([k, l]) => (
+            <button key={k} onClick={() => cambiarModo(k)} className={`px-2.5 md:px-3.5 py-1.5 rounded-full text-sm font-semibold cursor-pointer whitespace-nowrap ${vista === k ? 'bg-white text-[#2a1650]' : 'text-white/80 hover:bg-white/10'}`}>{l}</button>
           ))}
         </div>
-        <span className="ml-2 text-sm flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${conexion === 'ok' ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />{conexion === 'ok' ? 'En vivo' : 'Conectando…'}</span>
+        <span className="md:ml-2 text-sm flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${conexion === 'ok' ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />{conexion === 'ok' ? 'En vivo' : 'Conectando…'}</span>
         <span className="text-sm opacity-80">· {Object.keys(st.jugadores).length} participantes</span>
         <div className="ml-auto flex gap-2 relative">
-          <button onClick={() => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()} className="px-3 py-1.5 rounded-full bg-black/30 text-sm cursor-pointer hover:bg-black/50">Pantalla completa</button>
+          <button onClick={() => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {})} className="hidden md:block px-3 py-1.5 rounded-full bg-black/30 text-sm cursor-pointer hover:bg-black/50">Pantalla completa</button>
           <button onClick={() => setMenu(v => !v)} className="px-3 py-1.5 rounded-full bg-black/30 text-sm cursor-pointer hover:bg-black/50">Ajustes</button>
           {menu && (
             <div className="absolute right-0 top-10 w-72 bg-white text-gray-800 rounded-2xl shadow-2xl p-3 space-y-2 text-sm">
@@ -395,7 +480,7 @@ export default function HostClient() {
                 className={`w-full py-2 rounded-xl font-semibold cursor-pointer ${cfg.activa ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>
                 {cfg.activa ? 'Apagar la fiesta (cierra el link)' : 'Encender la fiesta'}
               </button>
-              <button onClick={() => { if (confirm('¿Reiniciar TODO? Se borran participantes, bingo y trivia, y en los celulares se borra todo y vuelven a poner su nombre. Las preguntas cargadas no se borran.')) { audioRef.current?.pause(); mutate(x => { Object.assign(x, estadoInicial()) }); setBanner(null); setVista('lobby') } }}
+              <button onClick={() => { if (confirm('¿Reiniciar TODO? Se borran participantes, bingo, trivia e impostor, y en los celulares se borra todo y vuelven a poner su nombre. Las preguntas cargadas no se borran.')) { audioRef.current?.pause(); mutate(x => { Object.assign(x, estadoInicial()) }); setBanner(null); setVista('lobby') } }}
                 className="w-full py-2 rounded-xl bg-gray-100 font-semibold cursor-pointer">Reiniciar todo</button>
               <button onClick={async () => { if (confirm('¿Generar un link nuevo? El anterior deja de funcionar y hay que volver a escanear.')) { try { await guardarCfg({ nuevoCodigo: true }) } catch (e) { alert((e as Error).message) } } }}
                 className="w-full py-2 rounded-xl bg-gray-100 font-semibold cursor-pointer">Generar link nuevo</button>
@@ -406,12 +491,15 @@ export default function HostClient() {
 
       {!cfg.activa && <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-red-500 text-white px-4 py-2 rounded-full text-sm font-semibold">La fiesta está apagada: el link no funciona</div>}
 
+      <Escalar activo={vista !== 'editor'} clave={vista}>
       {vista === 'lobby' && <Lobby url={urlJugar} jugadores={st.jugadores} ahora={ahora} />}
       {vista === 'bingo' && <BingoHost st={st} girando={girando} onSacar={sacarBolilla} onDeshacer={deshacerBolilla} onReiniciar={reiniciarBingo} />}
       {vista === 'trivia' && (
         <TriviaHost st={st} trivias={cfg.trivias} triviaActual={triviaActual} onElegir={elegirTrivia} preguntas={preguntas} q={q} ahora={ahora} online={online} ranking={ranking}
           onLanzar={lanzarPregunta} onCerrar={cerrarPregunta} onUltimos5={ultimos5} onRanking={verRanking} onSiguiente={siguiente} onIr={irAPregunta} onReiniciar={reiniciarTrivia} />
       )}
+      {vista === 'impostor' && <ImpostorHost st={st} ahora={ahora} onAjustar={ajustarImpostor} onRepartir={repartirRoles} />}
+      </Escalar>
       {vista === 'editor' && <Editor trivias={cfg.trivias} onGuardar={async t => { await guardarCfg({ trivias: t }) }} />}
 
       {banner && <BannerGanador {...banner} onCerrar={() => setBanner(null)} />}
@@ -433,7 +521,35 @@ function rankingDe(s: HostState, q: Pregunta | undefined): FilaRanking[] {
 
 // ─── Piezas visuales ────────────────────────────────────────────────────────────
 function Fondo({ children }: { children: React.ReactNode }) {
-  return <div className="min-h-screen text-white overflow-hidden select-none" style={{ background: 'radial-gradient(circle at 15% 0%, #6d28d9 0%, #3b1a6e 35%, #1a0d33 75%)', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>{children}</div>
+  return <div className="min-h-[100dvh] md:h-[100dvh] text-white overflow-x-hidden md:overflow-hidden select-none" style={{ background: 'radial-gradient(circle at 15% 0%, #6d28d9 0%, #3b1a6e 35%, #1a0d33 75%)', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>{children}</div>
+}
+
+// En pantallas grandes (proyector) todo tiene que entrar sin scroll: si el contenido queda más alto que
+// la pantalla, se achica entero hasta que entre. En el celular se deja scrollear normal.
+function Escalar({ activo, clave, children }: { activo: boolean; clave: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [esc, setEsc] = useState(1)
+  const escRef = useRef(1)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const medir = () => {
+      let s = 1
+      if (activo && window.innerWidth >= 768) s = Math.min(1, Math.max(0.4, window.innerHeight / Math.max(1, el.scrollHeight)))
+      // el alto natural cambia con el ancho (que depende de la escala): se ignoran cambios mínimos para no oscilar
+      if (Math.abs(s - escRef.current) > 0.015 || (s === 1 && escRef.current !== 1)) { escRef.current = s; setEsc(s) }
+    }
+    medir()
+    const ro = new ResizeObserver(medir)
+    ro.observe(el)
+    window.addEventListener('resize', medir)
+    return () => { ro.disconnect(); window.removeEventListener('resize', medir) }
+  }, [activo, clave])
+  return (
+    <div ref={ref} style={esc < 1 ? { width: `${100 / esc}%`, transform: `scale(${esc})`, transformOrigin: 'top left' } : undefined}>
+      {children}
+    </div>
+  )
 }
 
 function Confeti({ n = 90 }: { n?: number }) {
@@ -450,19 +566,19 @@ function Lobby({ url, jugadores, ahora }: { url: string; jugadores: HostState['j
   useEffect(() => { if (url) QRCode.toDataURL(url, { width: 700, margin: 1, color: { dark: '#1a0d33', light: '#ffffff' } }).then(setQr) }, [url])
   const lista = Object.entries(jugadores).sort((a, b) => a[1].visto - b[1].visto)
   return (
-    <div className="min-h-screen flex items-center gap-12 px-16 pt-16 pb-10">
+    <div className="min-h-[calc(100dvh-100px)] md:min-h-[100dvh] flex flex-col md:flex-row items-center gap-6 md:gap-12 px-5 md:px-16 pt-4 md:pt-16 pb-10">
       <div className="shrink-0 text-center">
-        <div className="bg-white rounded-[2rem] p-5 shadow-2xl qr-flota">{qr && /* eslint-disable-next-line @next/next/no-img-element */ <img src={qr} alt="QR" className="w-[min(42vh,420px)] h-[min(42vh,420px)]" />}</div>
+        <div className="bg-white rounded-[2rem] p-5 shadow-2xl qr-flota">{qr && /* eslint-disable-next-line @next/next/no-img-element */ <img src={qr} alt="QR" className="w-[min(42vh,420px,70vw)] h-[min(42vh,420px,70vw)]" />}</div>
         <p className="mt-5 text-lg opacity-80">Escaneá con la cámara del celu</p>
         <p className="text-sm opacity-50 break-all max-w-[420px] mx-auto mt-1">{url}</p>
       </div>
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 w-full text-center md:text-left">
         <p className="text-2xl font-semibold opacity-80">Beauty Co. cumple</p>
         <h1 className="text-[9vh] leading-none font-black tracking-tight titulo-brillo">9 años</h1>
-        <p className="text-3xl mt-6 font-bold">{lista.length} {lista.length === 1 ? 'participante' : 'participantes'} adentro</p>
-        <div className="mt-5 flex flex-wrap gap-2.5 max-h-[45vh] overflow-hidden">
+        <p className="text-2xl md:text-3xl mt-6 font-bold">{lista.length} {lista.length === 1 ? 'participante' : 'participantes'} adentro</p>
+        <div className="mt-5 flex flex-wrap justify-center md:justify-start gap-2.5 md:max-h-[45vh] overflow-hidden">
           {lista.map(([id, j]) => (
-            <span key={id} className={`chip-pop px-4 py-2 rounded-full text-lg font-semibold ${ahora - j.visto < ONLINE_MS * 2 ? 'bg-white/15' : 'bg-white/5 opacity-50'}`}>{j.nombre}</span>
+            <span key={id} className={`chip-pop px-3 md:px-4 py-1.5 md:py-2 rounded-full text-base md:text-lg font-semibold ${ahora - j.visto < ONLINE_MS * 2 ? 'bg-white/15' : 'bg-white/5 opacity-50'}`}>{j.nombre}</span>
           ))}
         </div>
       </div>
@@ -477,17 +593,17 @@ function BingoHost({ st, girando, onSacar, onDeshacer, onReiniciar }: { st: Host
   const salidos = new Set(b.salidos)
   const fin = b.fase === 'terminado'
   return (
-    <div className="min-h-screen flex gap-10 px-12 pt-16 pb-8">
-      <div className="flex flex-col items-center justify-center w-[38%] shrink-0">
-        <p className="text-2xl font-bold tracking-wide uppercase opacity-80">{fin ? 'Bingo terminado' : b.fase === 'linea' ? 'Jugamos por LÍNEA' : 'Jugamos por BINGO'}</p>
-        <div key={girando != null ? 'g' : ultimo} className={`mt-6 w-[min(38vh,380px)] aspect-square rounded-full flex items-center justify-center bola ${girando != null ? '' : 'bola-pop'}`}>
-          <span className="text-[min(17vh,170px)] font-black text-[#2a1650] leading-none">{girando ?? ultimo ?? '–'}</span>
+    <div className="min-h-[calc(100dvh-100px)] md:min-h-[100dvh] flex flex-col md:flex-row gap-6 md:gap-10 px-4 md:px-12 pt-4 md:pt-16 pb-8">
+      <div className="flex flex-col items-center justify-center w-full md:w-[38%] shrink-0">
+        <p className="text-xl md:text-2xl font-bold tracking-wide uppercase opacity-80">{fin ? 'Bingo terminado' : b.fase === 'linea' ? 'Jugamos por LÍNEA' : 'Jugamos por BINGO'}</p>
+        <div key={girando != null ? 'g' : ultimo} className={`mt-4 md:mt-6 w-[min(36vh,380px,55vw)] aspect-square rounded-full flex items-center justify-center bola ${girando != null ? '' : 'bola-pop'}`}>
+          <span className="text-[min(16vh,170px,25vw)] font-black text-[#2a1650] leading-none">{girando ?? ultimo ?? '–'}</span>
         </div>
-        <div className="mt-6 flex gap-3 h-16">
-          {anteriores.map((n, i) => <span key={n} className="w-16 h-16 rounded-full bg-white/15 flex items-center justify-center text-2xl font-bold" style={{ opacity: 1 - i * 0.15 }}>{n}</span>)}
+        <div className="mt-4 md:mt-6 flex gap-2 md:gap-3 h-12 md:h-16">
+          {anteriores.map((n, i) => <span key={n} className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-white/15 flex items-center justify-center text-xl md:text-2xl font-bold" style={{ opacity: 1 - i * 0.15 }}>{n}</span>)}
         </div>
         <button onClick={onSacar} disabled={girando != null || fin || b.salidos.length >= 90}
-          className="mt-8 px-10 py-5 rounded-full bg-[#ff4fa3] hover:bg-[#ff3594] disabled:opacity-40 text-2xl font-black shadow-xl cursor-pointer transition active:scale-95">
+          className="mt-5 md:mt-8 px-10 py-4 md:py-5 rounded-full bg-[#ff4fa3] hover:bg-[#ff3594] disabled:opacity-40 text-2xl font-black shadow-xl cursor-pointer transition active:scale-95">
           {girando != null ? 'Girando…' : 'Sacar bolilla'}
         </button>
         <p className="mt-2 text-sm opacity-50">o barra espaciadora · {b.salidos.length}/90 salieron</p>
@@ -498,12 +614,12 @@ function BingoHost({ st, girando, onSacar, onDeshacer, onReiniciar }: { st: Host
       </div>
       <div className="flex-1 flex flex-col justify-center min-w-0">
         {/* Ancho limitado por el alto de la pantalla, así entran la grilla y los premios en cualquier proyector */}
-        <div className="grid grid-cols-10 gap-1.5 mx-auto w-full" style={{ maxWidth: 'calc((100vh - 260px) * 10 / 9)' }}>
+        <div className="grid grid-cols-10 gap-1 md:gap-1.5 mx-auto w-full md:max-w-[calc((100vh-260px)*10/9)]">
           {Array.from({ length: 90 }, (_, i) => i + 1).map(n => (
-            <div key={n} className={`aspect-square rounded-xl flex items-center justify-center text-[2.3vh] font-bold transition-all duration-500 ${n === ultimo ? 'bg-[#ff4fa3] text-white scale-110 shadow-lg celda-ultima' : salidos.has(n) ? 'bg-white text-[#2a1650]' : 'bg-white/[0.06] text-white/30'}`}>{n}</div>
+            <div key={n} className={`aspect-square rounded-lg md:rounded-xl flex items-center justify-center text-[3.4vw] md:text-[2.3vh] font-bold transition-all duration-500 ${n === ultimo ? 'bg-[#ff4fa3] text-white scale-110 shadow-lg celda-ultima' : salidos.has(n) ? 'bg-white text-[#2a1650]' : 'bg-white/[0.06] text-white/30'}`}>{n}</div>
           ))}
         </div>
-        <div className="mt-6 grid grid-cols-2 gap-4">
+        <div className="mt-4 md:mt-6 grid grid-cols-2 gap-3 md:gap-4">
           <PremioBox titulo="Línea" ganadores={b.ganadores.linea} />
           <PremioBox titulo="Bingo" ganadores={b.ganadores.bingo} />
         </div>
@@ -517,9 +633,9 @@ function BingoHost({ st, girando, onSacar, onDeshacer, onReiniciar }: { st: Host
 
 function PremioBox({ titulo, ganadores }: { titulo: string; ganadores: Ganador[] }) {
   return (
-    <div className={`rounded-2xl px-5 py-4 ${ganadores.length ? 'bg-gradient-to-r from-amber-400 to-pink-500' : 'bg-white/[0.06]'}`}>
+    <div className={`rounded-2xl px-4 md:px-5 py-3 md:py-4 ${ganadores.length ? 'bg-gradient-to-r from-amber-400 to-pink-500' : 'bg-white/[0.06]'}`}>
       <p className="text-sm font-bold uppercase tracking-wider opacity-80">Premio {titulo}</p>
-      <p className="text-2xl font-black mt-0.5">{ganadores.length ? ganadores.map(g => g.nombre).join(' y ') : '—'}</p>
+      <p className="text-lg md:text-2xl font-black mt-0.5">{ganadores.length ? ganadores.map(g => g.nombre).join(' y ') : '—'}</p>
     </div>
   )
 }
@@ -529,7 +645,7 @@ function BannerGanador({ tipo, nombres, onCerrar }: { tipo: 'linea' | 'bingo'; n
     <div onClick={onCerrar} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 cursor-pointer">
       <Confeti />
       <div className="text-center banner-entra">
-        <p className="text-[16vh] font-black leading-none titulo-brillo">¡{tipo === 'linea' ? 'LÍNEA' : 'BINGO'}!</p>
+        <p className="text-[min(16vh,22vw)] font-black leading-none titulo-brillo">¡{tipo === 'linea' ? 'LÍNEA' : 'BINGO'}!</p>
         <p className="text-[6vh] font-bold mt-4">{nombres.join(' y ')}</p>
         <p className="mt-6 opacity-60">Tocá para seguir</p>
       </div>
@@ -555,9 +671,9 @@ function TriviaHost({ st, trivias, triviaActual, onElegir, preguntas, q, ahora, 
       ))}
     </div>
   )
-  if (!trivias.length) return <div className="min-h-screen flex items-center justify-center text-2xl opacity-70">Creá una trivia y sus preguntas en la pestaña “Preguntas”.</div>
+  if (!trivias.length) return <div className="min-h-[calc(100dvh-100px)] md:min-h-[100dvh] flex items-center justify-center text-center px-6 text-2xl opacity-70">Creá una trivia y sus preguntas en la pestaña “Preguntas”.</div>
   if (!preguntas.length) return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-6 text-center px-10">
+    <div className="min-h-[calc(100dvh-100px)] md:min-h-[100dvh] flex flex-col items-center justify-center gap-6 text-center px-5 md:px-10">
       <p className="text-2xl opacity-70">“{triviaActual?.nombre}” todavía no tiene preguntas. Cargalas en la pestaña “Preguntas”.</p>
       {selector}
     </div>
@@ -574,17 +690,17 @@ function TriviaHost({ st, trivias, triviaActual, onElegir, preguntas, q, ahora, 
   const revelada = t.fase === 'revelada' || t.fase === 'ranking'
 
   if (t.fase === 'espera') return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-10 text-center">
+    <div className="min-h-[calc(100dvh-100px)] md:min-h-[100dvh] flex flex-col items-center justify-center px-5 md:px-10 py-6 text-center">
       {t.idx === 0 && selector && <div className="mb-10"><p className="text-sm opacity-60 mb-2 uppercase tracking-wider font-bold">¿Qué trivia jugamos?</p>{selector}</div>}
       <p className="text-3xl font-black opacity-90">{triviaActual?.nombre}</p>
       <p className="text-2xl opacity-70 font-semibold mt-1">Pregunta {t.idx + 1} de {preguntas.length}</p>
       <p className="mt-3 text-[7vh] font-black leading-tight titulo-brillo">{tipoLabel(q.tipo)}</p>
       {q.tipo === 'musica' && <p className="text-2xl mt-2 opacity-80">🎵 Subí el volumen</p>}
       {q.tipo === 'votacion' && <p className="text-2xl mt-2 opacity-80">No hay respuesta correcta: ¡votá lo que pensás!</p>}
-      <button onClick={onLanzar} className="mt-10 px-12 py-5 rounded-full bg-[#ff4fa3] hover:bg-[#ff3594] text-3xl font-black shadow-xl cursor-pointer active:scale-95 transition">Lanzar pregunta</button>
-      <div className="mt-10 flex items-center gap-3 text-sm opacity-60">
+      <button onClick={onLanzar} className="mt-8 md:mt-10 px-10 md:px-12 py-5 rounded-full bg-[#ff4fa3] hover:bg-[#ff3594] text-3xl font-black shadow-xl cursor-pointer active:scale-95 transition">Lanzar pregunta</button>
+      <div className="mt-10 flex flex-wrap items-center justify-center gap-3 text-sm opacity-60">
         <span>Ir a:</span>
-        <select value={t.idx} onChange={e => onIr(Number(e.target.value))} className="bg-black/30 rounded-lg px-2 py-1">
+        <select value={t.idx} onChange={e => onIr(Number(e.target.value))} className="bg-black/30 rounded-lg px-2 py-1 max-w-[70vw]">
           {preguntas.map((p, i) => <option key={p.id} value={i}>{i + 1}. {p.texto.slice(0, 50)}</option>)}
         </select>
         <button onClick={onReiniciar} className="underline cursor-pointer">Reiniciar trivia</button>
@@ -599,10 +715,10 @@ function TriviaHost({ st, trivias, triviaActual, onElegir, preguntas, q, ahora, 
   )
 
   if (t.fase === 'ranking') return (
-    <div className="min-h-screen flex flex-col items-center px-10 pt-20 pb-8">
+    <div className="min-h-[calc(100dvh-100px)] md:min-h-[100dvh] flex flex-col items-center px-4 md:px-10 pt-4 md:pt-20 pb-8">
       <p className="text-[5vh] font-black titulo-brillo">Ranking</p>
       <p className="opacity-60 -mt-1">{triviaActual?.nombre} · después de la pregunta {t.idx + 1} de {preguntas.length}</p>
-      <div className="w-full max-w-4xl mt-6"><RankingAnimado key={q.id} filas={ranking} /></div>
+      <div className="w-full max-w-4xl mt-6 mb-6"><RankingAnimado key={q.id} filas={ranking} /></div>
       <button onClick={onSiguiente} className="mt-auto px-10 py-4 rounded-full bg-[#ff4fa3] hover:bg-[#ff3594] text-2xl font-black cursor-pointer active:scale-95 transition">
         {t.idx + 1 < preguntas.length ? 'Siguiente pregunta' : 'Ver podio'}
       </button>
@@ -610,21 +726,21 @@ function TriviaHost({ st, trivias, triviaActual, onElegir, preguntas, q, ahora, 
   )
 
   return (
-    <div className="min-h-screen flex flex-col px-10 pt-16 pb-6">
-      <div className="flex items-center gap-4">
-        <span className="text-lg opacity-60 font-semibold">{t.idx + 1}/{preguntas.length}</span>
-        <h2 className="flex-1 text-center text-[4.6vh] font-black leading-tight">{q.texto}</h2>
-        <div className="w-24 h-24 shrink-0 relative">
+    <div className="min-h-[calc(100dvh-100px)] md:min-h-[100dvh] flex flex-col px-3 md:px-10 pt-3 md:pt-16 pb-6">
+      <div className="flex items-center gap-2 md:gap-4">
+        <span className="text-sm md:text-lg opacity-60 font-semibold">{t.idx + 1}/{preguntas.length}</span>
+        <h2 className="flex-1 text-center text-[clamp(18px,min(4.6vh,6.2vw),64px)] font-black leading-tight">{q.texto}</h2>
+        <div className="w-16 h-16 md:w-24 md:h-24 shrink-0 relative">
           <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
             <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.15)" strokeWidth="9" />
             <circle cx="50" cy="50" r="44" fill="none" stroke={restante <= 5 ? '#ff4fa3' : '#fff'} strokeWidth="9" strokeLinecap="round"
               strokeDasharray={276.5} strokeDashoffset={276.5 * (t.fase === 'pregunta' ? 1 - restanteMs / (q.duracion * 1000) : 1)} style={{ transition: 'stroke-dashoffset .15s linear' }} />
           </svg>
-          <span className={`absolute inset-0 flex items-center justify-center text-3xl font-black ${restante <= 5 && !revelada ? 'latido' : ''}`}>{revelada ? '✓' : restante}</span>
+          <span className={`absolute inset-0 flex items-center justify-center text-xl md:text-3xl font-black ${restante <= 5 && !revelada ? 'latido' : ''}`}>{revelada ? '✓' : restante}</span>
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center gap-8 min-h-0 py-5">
+      <div className="flex-1 flex flex-col md:flex-row items-center justify-center gap-4 md:gap-8 min-h-0 py-4 md:py-5">
         {revelada && (q.tipo === 'texto' || q.tipo === 'votacion')
           ? <BarrasResultado q={q} conteo={conteo} />
           : <Media q={q} transcurrido={transcurrido} revelada={revelada} />}
@@ -636,12 +752,12 @@ function TriviaHost({ st, trivias, triviaActual, onElegir, preguntas, q, ahora, 
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-2 md:gap-4">
         {opciones.map(({ o, i }) => {
           const ok = q.tipo !== 'votacion' && i === q.correcta
           const max = Math.max(1, ...conteo)
           return (
-            <div key={i} className={`relative overflow-hidden rounded-2xl px-6 py-5 flex items-center gap-4 text-[3.2vh] font-bold transition-all duration-500 ${revelada && q.tipo !== 'votacion' && !ok ? 'opacity-30 scale-[0.98]' : ''} ${revelada && ok ? 'ring-8 ring-white/80 scale-[1.02]' : ''}`}
+            <div key={i} className={`relative overflow-hidden rounded-2xl px-3 md:px-6 py-3 md:py-5 flex items-center gap-2 md:gap-4 text-[clamp(14px,3.2vh,40px)] font-bold transition-all duration-500 ${revelada && q.tipo !== 'votacion' && !ok ? 'opacity-30 scale-[0.98]' : ''} ${revelada && ok ? 'ring-8 ring-white/80 scale-[1.02]' : ''}`}
               style={{ background: COLORES[i] }}>
               {revelada && <span className="absolute inset-y-0 left-0 bg-black/20 barra-crece" style={{ width: `${(conteo[i] / max) * 100}%` }} />}
               <span className="relative text-[3.6vh]">{FORMAS[i]}</span>
@@ -653,7 +769,7 @@ function TriviaHost({ st, trivias, triviaActual, onElegir, preguntas, q, ahora, 
         })}
       </div>
 
-      <div className="mt-4 flex justify-center gap-3">
+      <div className="mt-4 flex flex-wrap justify-center gap-3">
         {t.fase === 'pregunta' && <>
           {restanteMs > 5500 && <button onClick={onUltimos5} className="px-6 py-2.5 rounded-full bg-white/20 hover:bg-white/30 font-bold cursor-pointer">Últimos 5 segundos</button>}
           <button onClick={onCerrar} className="px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-sm font-semibold cursor-pointer opacity-70">Cerrar ya</button>
@@ -672,7 +788,7 @@ function BarrasResultado({ q, conteo }: { q: Pregunta; conteo: number[] }) {
   return (
     <div className="flex items-end gap-[3vw] h-[34vh]">
       {q.opciones.map((o, i) => o.trim() ? (
-        <div key={i} className="flex flex-col items-center justify-end h-full w-[9vw]">
+        <div key={i} className="flex flex-col items-center justify-end h-full w-[16vw] md:w-[9vw]">
           <span className="text-[4.2vh] font-black mb-1 chip-pop" style={{ animationDelay: `${0.5 + i * 0.12}s` }}>{conteo[i]}</span>
           <div className="w-full rounded-t-2xl podio-sube flex items-start justify-center pt-2 text-[3vh]"
             style={{ height: `${(conteo[i] / max) * 26 + 1.5}vh`, background: COLORES[i], animationDelay: `${i * 0.12}s` }}>{FORMAS[i]}</div>
@@ -685,38 +801,20 @@ function BarrasResultado({ q, conteo }: { q: Pregunta; conteo: number[] }) {
 
 function Media({ q, transcurrido, revelada }: { q: Pregunta; transcurrido: number; revelada: boolean }) {
   if (q.tipo === 'imagen' && q.imagen) /* eslint-disable-next-line @next/next/no-img-element */
-    return <img src={q.imagen} alt="" className="max-h-[42vh] max-w-[60vw] rounded-2xl shadow-2xl object-contain" />
-  if (q.tipo === 'revelar' && q.imagen) return <ImagenOculta q={q} transcurrido={transcurrido} revelada={revelada} />
+    return <img src={q.imagen} alt="" className={`${TAM_IMG} rounded-2xl shadow-2xl object-contain`} />
+  if (q.tipo === 'revelar' && q.imagen) return <ImagenOculta id={q.id} imagen={q.imagen} duracion={q.duracion} transcurrido={transcurrido} revelada={revelada} clase={TAM_IMG} />
   if (q.tipo === 'musica') return (
     <div className="flex flex-col items-center">
       {revelada && q.cancion?.artwork
-        ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={q.cancion.artwork} alt="" className="w-[30vh] h-[30vh] rounded-2xl shadow-2xl banner-entra" />
-        : <div className="flex items-end gap-2 h-[24vh]">{Array.from({ length: 9 }, (_, i) => <span key={i} className="w-6 rounded-full bg-[#ff4fa3] eq" style={{ animationDelay: `${i * 0.11}s` }} />)}</div>}
-      {revelada && q.cancion && <p className="mt-4 text-2xl font-bold">{q.cancion.nombre} — {q.cancion.artista}</p>}
+        ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={q.cancion.artwork} alt="" className="w-[min(30vh,60vw)] h-[min(30vh,60vw)] rounded-2xl shadow-2xl banner-entra" />
+        : <div className="flex items-end gap-2 h-[24vh]">{Array.from({ length: 9 }, (_, i) => <span key={i} className="w-4 md:w-6 rounded-full bg-[#ff4fa3] eq" style={{ animationDelay: `${i * 0.11}s` }} />)}</div>}
+      {revelada && q.cancion && <p className="mt-4 text-lg md:text-2xl font-bold text-center">{q.cancion.nombre} — {q.cancion.artista}</p>}
     </div>
   )
   return null
 }
 
-const COLS = 8, FILAS = 5
-function ImagenOculta({ q, transcurrido, revelada }: { q: Pregunta; transcurrido: number; revelada: boolean }) {
-  const orden = useMemo(() => mezclar(Array.from({ length: COLS * FILAS }, (_, i) => i), q.id), [q.id])
-  // Se destapa hasta el 85% de los cuadros a lo largo del 90% del tiempo; al revelar, todo
-  const prog = Math.min(1, transcurrido / (q.duracion * 1000 * 0.9))
-  const destapados = revelada ? orden.length : Math.floor(prog * orden.length * 0.85)
-  const visibles = new Set(orden.slice(0, destapados))
-  return (
-    <div className="relative max-h-[42vh] rounded-2xl overflow-hidden shadow-2xl">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={q.imagen} alt="" className="max-h-[42vh] max-w-[60vw] object-contain block" />
-      <div className="absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${COLS}, 1fr)`, gridTemplateRows: `repeat(${FILAS}, 1fr)` }}>
-        {Array.from({ length: COLS * FILAS }, (_, i) => (
-          <div key={i} className="transition-all duration-700 border border-black/10" style={{ background: '#3b1a6e', opacity: visibles.has(i) ? 0 : 1, transform: visibles.has(i) ? 'scale(0.6) rotate(8deg)' : 'none' }} />
-        ))}
-      </div>
-    </div>
-  )
-}
+const TAM_IMG = 'max-h-[34vh] md:max-h-[42vh] max-w-[92vw] md:max-w-[60vw]'
 
 function Num({ desde, hasta, activo }: { desde: number; hasta: number; activo: boolean }) {
   const [v, setV] = useState(desde)
@@ -768,23 +866,160 @@ function Podio({ ranking, nombre, otras, onElegir, onReiniciar }: { ranking: Fil
   const [a, b, c] = ranking
   const lugares = [{ f: b, n: 2, h: '34vh', d: '0.9s' }, { f: a, n: 1, h: '46vh', d: '1.8s' }, { f: c, n: 3, h: '24vh', d: '0s' }]
   return (
-    <div className="min-h-screen flex flex-col items-center pt-16">
+    <div className="min-h-[calc(100dvh-100px)] md:min-h-[100dvh] flex flex-col items-center pt-6 md:pt-16 px-2">
       <Confeti n={120} />
       <p className="text-[6vh] font-black titulo-brillo leading-tight">¡Felicitaciones!</p>
       <p className="text-xl opacity-70 -mt-1">{nombre}</p>
-      <div className="flex-1 flex items-end gap-6 pb-0 w-full max-w-5xl justify-center">
+      <div className="flex-1 flex items-end gap-2 md:gap-6 pb-0 w-full max-w-5xl justify-center min-h-[60vh] md:min-h-0">
         {lugares.map(({ f, n, h, d }) => f && (
           <div key={n} className="flex-1 flex flex-col items-center">
-            <p className="text-[3.2vh] font-black text-center podio-nombre" style={{ animationDelay: `calc(${d} + .6s)` }}>{f.nombre}</p>
-            <p className="text-xl opacity-80 podio-nombre" style={{ animationDelay: `calc(${d} + .6s)` }}>{f.pts.toLocaleString('es-AR')} pts</p>
+            <p className="text-[clamp(14px,3.2vh,44px)] font-black text-center podio-nombre break-words max-w-full" style={{ animationDelay: `calc(${d} + .6s)` }}>{f.nombre}</p>
+            <p className="text-sm md:text-xl opacity-80 podio-nombre" style={{ animationDelay: `calc(${d} + .6s)` }}>{f.pts.toLocaleString('es-AR')} pts</p>
             <div className="w-full rounded-t-3xl mt-3 flex items-start justify-center pt-5 text-[8vh] font-black podio-sube"
               style={{ height: h, animationDelay: d, background: n === 1 ? 'linear-gradient(#fbbf24,#d97706)' : n === 2 ? 'linear-gradient(#e5e7eb,#9ca3af)' : 'linear-gradient(#f59e0b,#92400e)', color: '#2a1650' }}>{n}</div>
           </div>
         ))}
       </div>
-      <div className="fixed bottom-3 right-4 flex items-center gap-2 text-xs opacity-40 hover:opacity-100 transition-opacity">
+      <div className="fixed bottom-3 right-4 left-4 md:left-auto flex flex-wrap justify-end items-center gap-2 text-xs opacity-60 md:opacity-40 hover:opacity-100 transition-opacity">
         {otras.map(o => <button key={o.id} onClick={() => onElegir(o.id)} className="px-3 py-1.5 rounded-full bg-white/15 hover:bg-white/25 font-semibold cursor-pointer">Jugar “{o.nombre}”</button>)}
         <button onClick={onReiniciar} className="underline cursor-pointer">Reiniciar trivia</button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Impostor ───────────────────────────────────────────────────────────────────
+function ImpostorHost({ st, ahora, onAjustar, onRepartir }: {
+  st: HostState; ahora: number; onAjustar: (fn: (im: HostState['impostor']) => void) => void; onRepartir: () => void
+}) {
+  const im = st.impostor
+  const pub = publicoImpostor(st)
+  const conectados = Object.values(st.jugadores).filter(j => ahora - j.visto < ONLINE_MS * 2).length
+  const max = maxImpostores(conectados)
+  const enRonda = Object.keys(im.roles).length
+  const plural = (n: number) => n === 1 ? '1 impostor' : `${n} impostores`
+  const btn = 'px-8 py-4 rounded-full bg-[#ff4fa3] hover:bg-[#ff3594] text-xl md:text-2xl font-black shadow-xl cursor-pointer active:scale-95 transition'
+  const btn2 = 'px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 font-semibold cursor-pointer'
+  const chip = (activo: boolean) => `px-4 py-2 rounded-full font-bold cursor-pointer transition ${activo ? 'bg-white text-[#2a1650]' : 'bg-white/10 hover:bg-white/20'}`
+
+  if (im.fase === 'config') return (
+    <div className="min-h-[calc(100dvh-100px)] md:min-h-[100dvh] flex flex-col items-center justify-center text-center px-4 md:px-10 pt-4 md:pt-16 pb-8">
+      <h1 className="text-[clamp(36px,min(9vh,13vw),110px)] leading-none font-black titulo-brillo">El impostor</h1>
+      <p className="mt-3 max-w-2xl text-lg md:text-xl opacity-80">Todos reciben la misma palabra en el celu, menos los impostores. Por turno, cada uno dice una palabra relacionada. ¿Quién no sabe de qué se habla?</p>
+      <div className="mt-8 w-full max-w-3xl space-y-6">
+        <div>
+          <p className="text-sm font-bold uppercase tracking-wider opacity-60 mb-2">¿Cuántos impostores?</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {[1, 2, 3, 4, 5].map(n => (
+              <button key={n} onClick={() => onAjustar(x => { x.cantidad = n })} disabled={n > max} className={`${chip(im.cantidad === n)} w-14 disabled:opacity-25 disabled:cursor-not-allowed`}>{n}</button>
+            ))}
+          </div>
+          {im.cantidad > max && <p className="mt-2 text-sm text-amber-300">Con {conectados} participantes puede haber hasta {plural(max)}: se va a usar ese máximo.</p>}
+        </div>
+        <div>
+          <p className="text-sm font-bold uppercase tracking-wider opacity-60 mb-2">Categoría</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {[TODAS, ...CATEGORIAS_IMPOSTOR.map(c => c.nombre), MIS_PALABRAS].map(c => (
+              <button key={c} onClick={() => onAjustar(x => { x.categoria = c })} className={chip(im.categoria === c)}>{c}</button>
+            ))}
+          </div>
+          {im.categoria === MIS_PALABRAS && (
+            <textarea value={im.propias} onChange={e => { const v = e.target.value; onAjustar(x => { x.propias = v }) }} rows={3}
+              placeholder="Una palabra por línea (o separadas por coma)" style={{ colorScheme: 'light' }}
+              className="mt-3 w-full max-w-xl rounded-2xl px-4 py-3 bg-white text-gray-900 placeholder:text-gray-400 outline-none select-text" />
+          )}
+        </div>
+        <label className="inline-flex items-center gap-3 cursor-pointer text-lg">
+          <input type="checkbox" checked={im.pista} onChange={e => { const v = e.target.checked; onAjustar(x => { x.pista = v }) }} className="w-5 h-5 accent-[#ff4fa3]" />
+          El impostor ve la categoría (más fácil para disimular)
+        </label>
+      </div>
+      <button onClick={onRepartir} disabled={conectados < 3} className={`mt-8 ${btn} disabled:opacity-40`}>Repartir roles</button>
+      <p className="mt-2 text-sm opacity-60">{conectados < 3 ? 'Hacen falta al menos 3 participantes conectados' : `Juegan los ${conectados} participantes conectados`}</p>
+    </div>
+  )
+
+  const acciones = (
+    <div className="mt-8 flex flex-wrap justify-center gap-3 text-sm">
+      <button onClick={() => { if (confirm('¿Repartir roles de nuevo? Se arranca otra ronda con otra palabra.')) onRepartir() }} className={btn2}>Otra palabra</button>
+      <button onClick={() => onAjustar(x => { x.fase = 'config' })} className={btn2}>Cambiar ajustes</button>
+    </div>
+  )
+
+  if (im.fase === 'roles') return (
+    <div className="min-h-[calc(100dvh-100px)] md:min-h-[100dvh] flex flex-col items-center justify-center text-center px-4 md:px-10 pt-4 md:pt-16 pb-8">
+      <p className="text-[clamp(56px,10vh,120px)] latido-suave">🤫</p>
+      <h1 className="text-[clamp(28px,6vh,72px)] font-black leading-tight">Miren su rol en el celu</h1>
+      <p className="mt-2 text-lg md:text-2xl opacity-80">Hay <b>{plural(pub.cantidad)}</b> entre {enRonda} {im.pista && im.cat ? <>· Categoría: <b>{im.cat}</b></> : null}</p>
+      <div className="mt-8 w-full max-w-4xl">
+        <p className="text-sm font-bold uppercase tracking-wider opacity-60 mb-3">Orden para hablar · cada uno dice una palabra</p>
+        <div className="flex flex-wrap justify-center gap-2">
+          {pub.orden.map((j, i) => (
+            <span key={j.id} className={`chip-pop px-4 py-2 rounded-full font-bold ${i === 0 ? 'bg-[#ff4fa3] text-lg md:text-xl' : 'bg-white/15'}`} style={{ animationDelay: `${i * 0.05}s` }}>{i + 1}. {j.nombre}</span>
+          ))}
+        </div>
+      </div>
+      <div className="mt-8 flex flex-wrap justify-center gap-3">
+        <button onClick={() => onAjustar(x => { x.fase = 'votacion'; x.votos = {} })} className={btn}>¡A votar!</button>
+        <button onClick={() => onAjustar(x => { x.fase = 'resultado' })} className={btn2}>Revelar sin votar</button>
+      </div>
+      {acciones}
+    </div>
+  )
+
+  if (im.fase === 'votacion') {
+    const votaron = new Set(Object.keys(im.votos))
+    return (
+      <div className="min-h-[calc(100dvh-100px)] md:min-h-[100dvh] flex flex-col items-center justify-center text-center px-4 md:px-10 pt-4 md:pt-16 pb-8">
+        <h1 className="text-[clamp(32px,7vh,90px)] font-black titulo-brillo leading-tight">¿Quién es el impostor?</h1>
+        <p className="mt-2 text-lg md:text-2xl opacity-80">Voten desde el celu</p>
+        <p className="mt-6 text-[clamp(48px,11vh,130px)] font-black leading-none">{votaron.size}<span className="opacity-50 text-[0.5em]"> / {enRonda}</span></p>
+        <p className="opacity-70">votaron</p>
+        <div className="mt-6 flex flex-wrap justify-center gap-2 max-w-4xl">
+          {pub.orden.map(j => <span key={j.id} className={`px-4 py-2 rounded-full font-semibold transition ${votaron.has(j.id) ? 'bg-emerald-500/80' : 'bg-white/10 opacity-60'}`}>{votaron.has(j.id) ? '✓ ' : ''}{j.nombre}</span>)}
+        </div>
+        <button onClick={() => onAjustar(x => { x.fase = 'resultado' })} className={`mt-8 ${btn}`}>Ver resultado</button>
+      </div>
+    )
+  }
+
+  return <ResultadoImpostor res={pub.resultado} conVotos={Object.keys(im.votos).length > 0} onOtra={onRepartir} onAjustes={() => onAjustar(x => { x.fase = 'config' })} />
+}
+
+// Primero se ven los votos y a los 2,5 s se revela quiénes eran los impostores
+function ResultadoImpostor({ res, conVotos, onOtra, onAjustes }: { res: EstadoImpostor['resultado']; conVotos: boolean; onOtra: () => void; onAjustes: () => void }) {
+  const [revelar, setRevelar] = useState(!conVotos)
+  useEffect(() => { if (conVotos) { const t = window.setTimeout(() => setRevelar(true), 2500); return () => window.clearTimeout(t) } }, [conVotos])
+  if (!res) return null
+  const max = Math.max(1, ...res.votos.map(v => v.n))
+  const top = res.votos.filter(v => v.n === max && v.n > 0)
+  const atrapado = conVotos && top.length === 1 && res.impostores.some(i => i.id === top[0].id)
+  return (
+    <div className="min-h-[calc(100dvh-100px)] md:min-h-[100dvh] flex flex-col items-center justify-center text-center px-4 md:px-10 pt-4 md:pt-16 pb-8">
+      {revelar && atrapado && <Confeti />}
+      {conVotos && (
+        <div className="w-full max-w-3xl space-y-2 mb-6">
+          {res.votos.slice(0, 6).map(v => (
+            <div key={v.id} className="flex items-center gap-3">
+              <span className="w-32 md:w-48 text-right font-bold truncate text-lg md:text-2xl">{v.nombre}</span>
+              <div className="flex-1 h-9 md:h-11 rounded-xl bg-white/10 overflow-hidden">
+                <div className={`h-full rounded-xl barra-crece flex items-center justify-end pr-3 font-black ${revelar && res.impostores.some(i => i.id === v.id) ? 'bg-[#e21b3c]' : 'bg-white/40'}`} style={{ width: `${(v.n / max) * 100}%`, transition: 'background-color .6s' }}>{v.n}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {!revelar ? <p className="text-[clamp(28px,6vh,72px)] font-black latido">Y el impostor era…</p> : (
+        <div className="banner-entra">
+          {conVotos && <p className="text-[clamp(26px,5vh,64px)] font-black">{atrapado ? '¡Lo atraparon! 🎉' : top.length > 1 ? 'Empate… ¡ganan los impostores! 😈' : '¡Ganan los impostores! 😈'}</p>}
+          <p className="mt-2 text-lg md:text-2xl opacity-80">{res.impostores.length === 1 ? 'El impostor era' : 'Los impostores eran'}</p>
+          <p className="text-[clamp(36px,9vh,110px)] font-black leading-tight titulo-brillo">{res.impostores.map(i => i.nombre).join(' y ')}</p>
+          <p className="mt-3 text-xl md:text-3xl">La palabra era <b className="px-3 py-1 rounded-xl bg-white text-[#2a1650]">{res.palabra}</b></p>
+        </div>
+      )}
+      <div className="mt-10 flex flex-wrap justify-center gap-3">
+        <button onClick={onOtra} className="px-8 py-4 rounded-full bg-[#ff4fa3] hover:bg-[#ff3594] text-xl md:text-2xl font-black shadow-xl cursor-pointer active:scale-95 transition">Otra ronda</button>
+        <button onClick={onAjustes} className="px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 font-semibold cursor-pointer">Cambiar ajustes</button>
       </div>
     </div>
   )
@@ -858,8 +1093,8 @@ function Editor({ trivias, onGuardar }: { trivias: Trivia[]; onGuardar: (t: Triv
     guardar(l)
   }
   return (
-    <div className="min-h-screen pt-20 pb-10 px-6 overflow-y-auto" style={{ maxHeight: '100vh' }}>
-      <div className="max-w-3xl mx-auto bg-white text-gray-800 rounded-3xl p-6 shadow-2xl">
+    <div className="pt-2 md:pt-20 pb-10 px-2 md:px-6 md:h-[100dvh] md:overflow-y-auto">
+      <div className="max-w-3xl mx-auto bg-white text-gray-800 rounded-3xl p-4 md:p-6 shadow-2xl">
         <div className="flex items-center gap-3 mb-3">
           <h2 className="text-2xl font-black flex-1">Trivias</h2>
           {guardando && <span className="text-sm text-gray-400">Guardando…</span>}
@@ -880,16 +1115,16 @@ function Editor({ trivias, onGuardar }: { trivias: Trivia[]; onGuardar: (t: Triv
         </div>
         {cargando && <p className="mb-4 text-sm text-violet-700 bg-violet-50 rounded-xl px-3 py-2">{cargando}</p>}
         {!sel ? <p className="text-gray-500 py-8 text-center">Creá tu primera trivia con “+ Nueva trivia”.</p> : <>
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex flex-wrap items-center gap-2 mb-4">
             <input key={sel.id} defaultValue={sel.nombre} onBlur={e => renombrar(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-              className="flex-1 text-lg font-bold border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-violet-500" title="Nombre de la trivia" />
+              className="flex-1 min-w-[12rem] text-lg font-bold border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-violet-500" title="Nombre de la trivia" />
             <button onClick={() => setEditando(nuevaPregunta())} className="px-4 py-2 rounded-xl bg-[#6d28d9] text-white font-semibold cursor-pointer whitespace-nowrap">+ Pregunta</button>
             <button onClick={borrarTrivia} className="px-3 py-2 rounded-xl text-red-500 hover:bg-red-50 text-sm font-semibold cursor-pointer whitespace-nowrap">Borrar trivia</button>
           </div>
           {!preguntas.length && <p className="text-gray-500 py-8 text-center">Esta trivia todavía no tiene preguntas.</p>}
           <div className="space-y-2">
             {preguntas.map((p, i) => (
-              <div key={p.id} className="flex items-center gap-3 border border-gray-200 rounded-2xl px-4 py-3">
+              <div key={p.id} className="flex flex-wrap md:flex-nowrap items-center gap-x-3 gap-y-1 border border-gray-200 rounded-2xl px-3 md:px-4 py-3">
                 <span className="text-gray-400 font-bold w-6">{i + 1}</span>
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 shrink-0">{tipoLabel(p.tipo)}</span>
                 <span className="flex-1 min-w-0 truncate">{p.texto || <i className="text-gray-400">(sin texto)</i>}
