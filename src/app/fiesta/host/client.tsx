@@ -815,7 +815,7 @@ function Editor({ trivias, onGuardar }: { trivias: Trivia[]; onGuardar: (t: Triv
   const [cargando, setCargando] = useState('')
   async function cargarPlantilla(pl: Plantilla) {
     if (cargando) return
-    const pregs: Pregunta[] = []
+    const pregs: Pregunta[] = [], sinTema: string[] = []
     for (const [i, q] of pl.preguntas.entries()) {
       setCargando(`Preparando «${pl.nombre}»… ${i + 1}/${pl.preguntas.length}`)
       const { wiki, busqueda, artista, ...resto } = q
@@ -828,6 +828,7 @@ function Editor({ trivias, onGuardar }: { trivias: Trivia[]; onGuardar: (t: Triv
         const lista = await fetch(`/api/fiesta/musica?q=${encodeURIComponent(busqueda)}`).then(r => r.ok ? r.json() : []).catch(() => []) as { nombre: string; artista: string; preview: string; artwork?: string }[]
         const t = (Array.isArray(lista) ? lista : []).find(x => !artista || normalizarNombre(x.artista).includes(normalizarNombre(artista)))
         if (t) { p.audio = t.preview; p.cancion = { nombre: t.nombre, artista: t.artista, artwork: t.artwork } }
+        else { sinTema.push(busqueda); continue } // si el tema no está en Apple Music, la pregunta no se agrega
       }
       pregs.push(p)
     }
@@ -836,8 +837,10 @@ function Editor({ trivias, onGuardar }: { trivias: Trivia[]; onGuardar: (t: Triv
     for (let k = 2; usados.has(nombre); k++) nombre = `${pl.nombre} ${k}`
     const t: Trivia = { id: Math.random().toString(36).slice(2, 10), nombre, preguntas: pregs }
     await guardarTodo([...trivias, t]); setSelId(t.id); setCargando('')
-    const faltan = pregs.filter(faltaMedia).length
-    if (faltan) alert(`Listo. ${faltan} pregunta${faltan > 1 ? 's quedaron' : ' quedó'} sin imagen o sin canción (están marcadas): abrilas con “Editar” y cargalas a mano.`)
+    const faltan = pregs.filter(faltaMedia).length, avisos: string[] = []
+    if (sinTema.length) avisos.push(`No se encontr${sinTema.length > 1 ? 'aron' : 'ó'} en Apple Music y no se agreg${sinTema.length > 1 ? 'aron' : 'ó'}: ${sinTema.join(', ')}.`)
+    if (faltan) avisos.push(`${faltan} pregunta${faltan > 1 ? 's quedaron' : ' quedó'} sin imagen (están marcadas): abrilas con “Editar” y cargalas a mano.`)
+    if (avisos.length) alert(`Listo, se cargaron ${pregs.length} preguntas.\n\n${avisos.join('\n\n')}`)
   }
   function renombrar(nombre: string) {
     if (!sel || !nombre.trim() || nombre.trim() === sel.nombre) return

@@ -58,7 +58,35 @@ const MUSICAL: PreguntaEjemplo[] = [
   m('Abel Pintos Sin principio ni final', 'abel pintos', quien, ['Luciano Pereyra', 'Axel', 'Abel Pintos', 'Soledad'], 2),
 ]
 
+// Más difícil: opciones del mismo artista o del mismo estilo, temas menos obvios y 20 s para contestar
+const md = (busqueda: string, artista: string, texto: string, opciones: string[], correcta: number): PreguntaEjemplo =>
+  ({ ...m(busqueda, artista, texto, opciones, correcta), duracion: 20 })
+
+const MUSICAL_DIFICIL: PreguntaEjemplo[] = [
+  md('Gilda Fuiste', 'gilda', que, ['Paisaje', 'Corazón valiente', 'Fuiste', 'Se me ha perdido un corazón'], 2),
+  md('Leo Mattioli Llorarás más de diez veces', 'mattioli', quien, ['Walter Olmos', 'Leo Mattioli', 'Antonio Ríos', 'Daniel Agostini'], 1),
+  md('Ráfaga Una cerveza', 'rafaga', que, ['Mentirosa', 'Maldito amor', 'Agüita', 'Una cerveza'], 3),
+  md('Lía Crucet La güera Salomé', 'crucet', quien, ['Gilda', 'Ángela Leiva', 'Lía Crucet', 'Karina'], 2),
+  md('Los Abuelos de la Nada Mil horas', 'abuelos', '¿Quién la canta? (ojo con esta versión)', ['Agapornis', 'Los Abuelos de la Nada', 'Los Fabulosos Cadillacs', 'Virus'], 1),
+  md('Rodrigo Soy cordobés', 'rodrigo', que, ['La mano de Dios', 'Lo mejor del amor', 'Como olvidarla', 'Soy cordobés'], 3),
+  md('Walter Olmos Por lo que yo te quiero', 'olmos', quien, ['Walter Olmos', 'Rodrigo', 'Leo Mattioli', 'Daniel Agostini'], 0),
+  md('Virus Wadu wadu', 'virus', que, ['Amor descartable', 'Wadu wadu', 'Pronta entrega', 'Imágenes paganas'], 1),
+  md('Ricky Maravilla Un tipo como yo', 'maravilla', quien, ['Pocho La Pantera', 'Leo Mattioli', 'Ricky Maravilla', 'Walter Olmos'], 2),
+  md('Soda Stereo Persiana americana', 'soda stereo', que, ['Prófugos', 'Nada personal', 'Sobredosis de TV', 'Persiana americana'], 3),
+  md('Pibes Chorros Llegamos los Pibes Chorros', 'pibes chorros', quien, ['Damas Gratis', 'Pibes Chorros', 'Yerba Brava', 'Flor de Piedra'], 1),
+  md('Charly García Demoliendo hoteles', 'charly', que, ['Demoliendo hoteles', 'Los dinosaurios', 'Nos siguen pegando abajo', 'Cerca de la revolución'], 0),
+  md('Karina Con la frente en alto', 'karina', que, ['Corazón mentiroso', 'Duele', 'Con la frente en alto', 'Ya te olvidé'], 2),
+  md('Patricio Rey y sus Redonditos de Ricota Ji ji ji', 'redonditos', quien, ['Divididos', 'La Renga', 'Los Piojos', 'Patricio Rey y sus Redonditos de Ricota'], 3),
+  md('Los Palmeras Soy sabalero', 'palmeras', que, ['Bombón asesino', 'Soy sabalero', 'La suavecita', 'El vestido azul'], 1),
+  md('Fito Páez Mariposa tecknicolor', 'fito', que, ['A rodar mi vida', '11 y 6', 'Mariposa tecknicolor', 'El amor después del amor'], 2),
+  md('Los Auténticos Decadentes Loco tu forma de ser', 'decadentes', que, ['Loco (tu forma de ser)', 'La guitarra', 'El murguero', 'Corazón'], 0),
+  md('Los Pericos Runaway', 'pericos', quien, ['Los Cafres', 'Los Pericos', 'Nonpalidece', 'Dread Mar I'], 1),
+  md('Bersuit Vergarabat Un pacto', 'bersuit', que, ['La bolsa', 'Se viene', 'Un pacto', 'Sr. Cobranza'], 2),
+  md('Duki She Don\'t Give a FO', 'duki', quien, ['Khea', 'Neo Pistea', 'YSY A', 'Duki'], 3),
+]
+
 export const PLANTILLAS: Plantilla[] = [
   { nombre: 'Trivia de ejemplo', desc: '20 preguntas variadas: belleza, lugares, obras de arte, música y votaciones', preguntas: VARIADA },
   { nombre: 'Trivia musical argentina', desc: '19 temas de cumbia, cuarteto y rock nacional + 1 votación', preguntas: MUSICAL },
+  { nombre: 'Trivia musical difícil', desc: '20 temas argentinos (cumbia, cuarteto, rock y trap), opciones parecidas y 20 s para contestar', preguntas: MUSICAL_DIFICIL },
 ]
