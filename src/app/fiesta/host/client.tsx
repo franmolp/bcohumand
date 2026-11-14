@@ -11,6 +11,7 @@ import {
 } from '@/lib/fiesta'
 import { CATEGORIAS_IMPOSTOR, MIS_PALABRAS, TODAS, elegirPalabra } from '@/lib/fiesta-impostor'
 import { ImagenOculta } from '../compartido'
+import Protector from './protector'
 
 // Pregunta de imagen sin imagen o de música sin canción (no se puede jugar bien así)
 const faltaMedia = (p: Pregunta) => ((p.tipo === 'imagen' || p.tipo === 'revelar') && !p.imagen) || (p.tipo === 'musica' && !p.audio)
@@ -137,6 +138,7 @@ export default function HostClient() {
   const [ahora, setAhora] = useState(() => Date.now())
   const [banner, setBanner] = useState<{ tipo: 'linea' | 'bingo'; nombres: string[] } | null>(null)
   const [menu, setMenu] = useState(false)
+  const [protector, setProtector] = useState(false) // protector de pantalla para proyectar
   const salidaRef = useRef<RealtimeChannel | null>(null)
   const sonidoRef = useRef<AudioContext | null>(null)
   const segRef = useRef(0)
@@ -520,6 +522,8 @@ export default function HostClient() {
         <span className="text-sm opacity-80">· {Object.keys(st.jugadores).length} participantes</span>
         <div className="ml-auto flex gap-2 relative">
           <button onClick={() => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {})} className="hidden md:block px-3 py-1.5 rounded-full bg-black/30 text-sm cursor-pointer hover:bg-black/50">Pantalla completa</button>
+          <button onClick={() => { setMenu(false); setProtector(true); if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}) }}
+            title="Pantalla animada con el logo. Cualquier tecla o clic vuelve a los juegos" className="px-3 py-1.5 rounded-full bg-black/30 text-sm cursor-pointer hover:bg-black/50">Protector</button>
           <button onClick={() => setMenu(v => !v)} className="px-3 py-1.5 rounded-full bg-black/30 text-sm cursor-pointer hover:bg-black/50">Ajustes</button>
           {menu && (
             <div className="absolute right-0 top-10 w-72 bg-white text-gray-800 rounded-2xl shadow-2xl p-3 space-y-2 text-sm">
@@ -551,6 +555,7 @@ export default function HostClient() {
       {vista === 'editor' && <Editor trivias={cfg.trivias} onGuardar={async t => { await guardarCfg({ trivias: t }) }} />}
 
       {banner && <BannerGanador {...banner} onCerrar={() => setBanner(null)} />}
+      {protector && <Protector onSalir={() => setProtector(false)} />}
     </Fondo>
   )
 }
