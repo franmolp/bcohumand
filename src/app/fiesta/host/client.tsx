@@ -9,7 +9,6 @@ import {
   type FiestaConfig, type Pregunta, type TipoPregunta, type Modo, type FaseTrivia, type EstadoPublico, type MsgJugador, type FilaRanking, type Ganador, type Trivia,
   type FaseImpostor, type EstadoImpostor,
 } from '@/lib/fiesta'
-import { PLANTILLAS, type Plantilla } from '@/lib/fiesta-ejemplo'
 import { CATEGORIAS_IMPOSTOR, MIS_PALABRAS, TODAS, elegirPalabra } from '@/lib/fiesta-impostor'
 import { ImagenOculta } from '../compartido'
 
@@ -784,7 +783,7 @@ function TriviaHost({ st, trivias, triviaActual, onElegir, preguntas, q, ahora, 
       <div className="flex-1 flex flex-col md:flex-row items-center justify-center gap-4 md:gap-8 min-h-0 py-4 md:py-5">
         {revelada && (q.tipo === 'texto' || q.tipo === 'votacion')
           ? <BarrasResultado q={q} conteo={conteo} />
-          : <Media q={q} transcurrido={transcurrido} revelada={revelada} />}
+          : <Media q={q} transcurrido={transcurrido} totalMs={limiteDe(t, q) - t.inicio} revelada={revelada} />}
         {!revelada && (
           <div className="text-center shrink-0">
             <p className="text-[9vh] font-black leading-none">{nResp}</p>
@@ -840,10 +839,10 @@ function BarrasResultado({ q, conteo }: { q: Pregunta; conteo: number[] }) {
   )
 }
 
-function Media({ q, transcurrido, revelada }: { q: Pregunta; transcurrido: number; revelada: boolean }) {
+function Media({ q, transcurrido, totalMs, revelada }: { q: Pregunta; transcurrido: number; totalMs: number; revelada: boolean }) {
   if (q.tipo === 'imagen' && q.imagen) /* eslint-disable-next-line @next/next/no-img-element */
     return <img src={q.imagen} alt="" className={`${TAM_IMG} rounded-2xl shadow-2xl object-contain`} />
-  if (q.tipo === 'revelar' && q.imagen) return <ImagenOculta id={q.id} imagen={q.imagen} duracion={q.duracion} transcurrido={transcurrido} revelada={revelada} clase={TAM_IMG} />
+  if (q.tipo === 'revelar' && q.imagen) return <ImagenOculta id={q.id} imagen={q.imagen} totalMs={totalMs} transcurrido={transcurrido} revelada={revelada} clase={TAM_IMG} />
   if (q.tipo === 'musica') return (
     <div className="flex flex-col items-center">
       {revelada && q.cancion?.artwork
@@ -1087,27 +1086,6 @@ function Editor({ trivias, onGuardar }: { trivias: Trivia[]; onGuardar: (t: Triv
     const t: Trivia = { id: Math.random().toString(36).slice(2, 10), nombre: `Trivia ${trivias.length + 1}`, preguntas: [] }
     guardarTodo([...trivias, t]); setSelId(t.id)
   }
-  // Carga una trivia armada, buscando cada foto en Wikipedia al momento
-  const [cargando, setCargando] = useState('')
-  async function cargarPlantilla(pl: Plantilla) {
-    if (cargando) return
-    const pregs: Pregunta[] = []
-    for (const [i, q] of pl.preguntas.entries()) {
-      setCargando(`Preparando «${pl.nombre}»… ${i + 1}/${pl.preguntas.length}`)
-      const { wiki, ...resto } = q
-      const p: Pregunta = { ...resto, opciones: [...resto.opciones], id: Math.random().toString(36).slice(2, 10) }
-      if (wiki) {
-        const r = await fetch(`/api/fiesta/imagen?titulo=${encodeURIComponent(wiki)}`).then(r => r.ok ? r.json() : null).catch(() => null) as { url?: string } | null
-        if (r?.url) p.imagen = r.url
-      }
-      pregs.push(p)
-    }
-    const t: Trivia = { id: Math.random().toString(36).slice(2, 10), nombre: pl.nombre, preguntas: pregs }
-    await guardarTodo([...trivias, t]); setSelId(t.id); setCargando('')
-    const faltan = pregs.filter(faltaMedia).length
-    if (faltan) alert(`Listo, se cargaron ${pregs.length} preguntas. ${faltan} quedaron marcadas con “Falta la imagen”: abrilas con “Editar” para subir ${faltan > 1 ? 'las fotos' : 'la foto'} y completar las opciones.`)
-  }
-  const plantillasNuevas = PLANTILLAS.filter(pl => !trivias.some(t => t.nombre === pl.nombre))
   function renombrar(nombre: string) {
     if (!sel || !nombre.trim() || nombre.trim() === sel.nombre) return
     guardarTodo(trivias.map(t => t.id === sel.id ? { ...t, nombre: nombre.trim() } : t))
@@ -1138,12 +1116,7 @@ function Editor({ trivias, onGuardar }: { trivias: Trivia[]; onGuardar: (t: Triv
             {trivias.map(t => <option key={t.id} value={t.id}>{t.nombre} · {t.preguntas.length} {t.preguntas.length === 1 ? "pregunta" : "preguntas"}</option>)}
           </select>
           <button onClick={nuevaTrivia} className="px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer border border-dashed border-violet-400 text-violet-600 hover:bg-violet-50 whitespace-nowrap">+ Nueva trivia</button>
-          {plantillasNuevas.map(pl => (
-            <button key={pl.nombre} onClick={() => cargarPlantilla(pl)} disabled={!!cargando} title={pl.desc}
-              className="px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer border border-dashed border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap">+ {pl.nombre}</button>
-          ))}
         </div>
-        {cargando && <p className="mb-4 text-sm text-violet-700 bg-violet-50 rounded-xl px-3 py-2">{cargando}</p>}
         {!sel ? <p className="text-gray-500 py-8 text-center">Creá tu primera trivia con “+ Nueva trivia”.</p> : <>
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <input key={sel.id} defaultValue={sel.nombre} onBlur={e => renombrar(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}

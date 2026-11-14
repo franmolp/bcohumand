@@ -350,7 +350,7 @@ export default function JugadorClient({ codigo }: { codigo: string }) {
         {preg.imagen && (
           <div className="flex justify-center mb-3 shrink-0">
             {preg.tipo === 'revelar'
-              ? <ImagenOculta id={preg.id} imagen={preg.imagen} duracion={preg.duracion} transcurrido={ahora - inicioQ} revelada={false} clase="max-h-[32dvh] max-w-full" />
+              ? <ImagenOculta id={preg.id} imagen={preg.imagen} totalMs={limite - inicioQ} transcurrido={ahora - inicioQ} revelada={false} clase="max-h-[32dvh] max-w-full" />
               : /* eslint-disable-next-line @next/next/no-img-element */ <img src={preg.imagen} alt="" className="max-h-[32dvh] max-w-full rounded-2xl object-contain shadow-2xl" />}
           </div>
         )}
