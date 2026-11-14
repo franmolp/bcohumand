@@ -9,7 +9,6 @@ import {
   type FiestaConfig, type Pregunta, type TipoPregunta, type Modo, type FaseTrivia, type EstadoPublico, type MsgJugador, type FilaRanking, type Ganador, type Trivia,
   type FaseImpostor, type EstadoImpostor,
 } from '@/lib/fiesta'
-import { PLANTILLAS, type Plantilla } from '@/lib/fiesta-ejemplo'
 import { CATEGORIAS_IMPOSTOR, MIS_PALABRAS, TODAS, elegirPalabra } from '@/lib/fiesta-impostor'
 import { ImagenOculta } from '../compartido'
 
@@ -662,14 +661,10 @@ function TriviaHost({ st, trivias, triviaActual, onElegir, preguntas, q, ahora, 
   const t = st.trivia
   // Para elegir qué trivia jugar (solo si hay más de una)
   const selector = trivias.length > 1 && (
-    <div className="flex flex-wrap justify-center gap-2">
-      {trivias.map(tr => (
-        <button key={tr.id} onClick={() => onElegir(tr.id)}
-          className={`px-4 py-2 rounded-full text-base font-bold cursor-pointer transition ${tr.id === triviaActual?.id ? 'bg-white text-[#2a1650]' : 'bg-white/10 hover:bg-white/20'}`}>
-          {tr.nombre} <span className="opacity-60 font-semibold">· {tr.preguntas.length}</span>
-        </button>
-      ))}
-    </div>
+    <select value={triviaActual?.id ?? ''} onChange={e => onElegir(e.target.value)}
+      className="max-w-[90vw] bg-white text-[#2a1650] rounded-full px-5 py-2.5 text-lg font-bold cursor-pointer outline-none shadow-lg" style={{ colorScheme: 'light' }}>
+      {trivias.map(tr => <option key={tr.id} value={tr.id}>{tr.nombre} · {tr.preguntas.length} {tr.preguntas.length === 1 ? "pregunta" : "preguntas"}</option>)}
+    </select>
   )
   if (!trivias.length) return <div className="min-h-[calc(100dvh-100px)] md:min-h-[100dvh] flex items-center justify-center text-center px-6 text-2xl opacity-70">Creá una trivia y sus preguntas en la pestaña “Preguntas”.</div>
   if (!preguntas.length) return (
@@ -1046,37 +1041,6 @@ function Editor({ trivias, onGuardar }: { trivias: Trivia[]; onGuardar: (t: Triv
     const t: Trivia = { id: Math.random().toString(36).slice(2, 10), nombre: `Trivia ${trivias.length + 1}`, preguntas: [] }
     guardarTodo([...trivias, t]); setSelId(t.id)
   }
-  // Carga una trivia armada: busca cada imagen (Wikipedia) y cada canción (Apple Music) al momento
-  const [cargando, setCargando] = useState('')
-  async function cargarPlantilla(pl: Plantilla) {
-    if (cargando) return
-    const pregs: Pregunta[] = [], sinTema: string[] = []
-    for (const [i, q] of pl.preguntas.entries()) {
-      setCargando(`Preparando «${pl.nombre}»… ${i + 1}/${pl.preguntas.length}`)
-      const { wiki, busqueda, artista, ...resto } = q
-      const p: Pregunta = { ...resto, id: Math.random().toString(36).slice(2, 10) }
-      if (wiki) {
-        const r = await fetch(`/api/fiesta/imagen?titulo=${encodeURIComponent(wiki)}`).then(r => r.ok ? r.json() : null).catch(() => null) as { url?: string } | null
-        if (r?.url) p.imagen = r.url
-      }
-      if (busqueda) {
-        const lista = await fetch(`/api/fiesta/musica?q=${encodeURIComponent(busqueda)}`).then(r => r.ok ? r.json() : []).catch(() => []) as { nombre: string; artista: string; preview: string; artwork?: string }[]
-        const t = (Array.isArray(lista) ? lista : []).find(x => !artista || normalizarNombre(x.artista).includes(normalizarNombre(artista)))
-        if (t) { p.audio = t.preview; p.cancion = { nombre: t.nombre, artista: t.artista, artwork: t.artwork } }
-        else { sinTema.push(busqueda); continue } // si el tema no está en Apple Music, la pregunta no se agrega
-      }
-      pregs.push(p)
-    }
-    const usados = new Set(trivias.map(t => t.nombre))
-    let nombre = pl.nombre
-    for (let k = 2; usados.has(nombre); k++) nombre = `${pl.nombre} ${k}`
-    const t: Trivia = { id: Math.random().toString(36).slice(2, 10), nombre, preguntas: pregs }
-    await guardarTodo([...trivias, t]); setSelId(t.id); setCargando('')
-    const faltan = pregs.filter(faltaMedia).length, avisos: string[] = []
-    if (sinTema.length) avisos.push(`No se encontr${sinTema.length > 1 ? 'aron' : 'ó'} en Apple Music y no se agreg${sinTema.length > 1 ? 'aron' : 'ó'}: ${sinTema.join(', ')}.`)
-    if (faltan) avisos.push(`${faltan} pregunta${faltan > 1 ? 's quedaron' : ' quedó'} sin imagen (están marcadas): abrilas con “Editar” y cargalas a mano.`)
-    if (avisos.length) alert(`Listo, se cargaron ${pregs.length} preguntas.\n\n${avisos.join('\n\n')}`)
-  }
   function renombrar(nombre: string) {
     if (!sel || !nombre.trim() || nombre.trim() === sel.nombre) return
     guardarTodo(trivias.map(t => t.id === sel.id ? { ...t, nombre: nombre.trim() } : t))
@@ -1099,21 +1063,15 @@ function Editor({ trivias, onGuardar }: { trivias: Trivia[]; onGuardar: (t: Triv
           <h2 className="text-2xl font-black flex-1">Trivias</h2>
           {guardando && <span className="text-sm text-gray-400">Guardando…</span>}
         </div>
-        {/* Una pestaña por trivia */}
-        <div className="flex flex-wrap gap-2 mb-5">
-          {trivias.map(t => (
-            <button key={t.id} onClick={() => setSelId(t.id)}
-              className={`px-3.5 py-1.5 rounded-full text-sm font-semibold cursor-pointer border ${t.id === sel?.id ? 'bg-violet-600 text-white border-violet-600' : 'border-gray-200 hover:bg-gray-50'}`}>
-              {t.nombre} <span className="opacity-60">· {t.preguntas.length}</span>
-            </button>
-          ))}
-          <button onClick={nuevaTrivia} className="px-3.5 py-1.5 rounded-full text-sm font-semibold cursor-pointer border border-dashed border-violet-400 text-violet-600 hover:bg-violet-50">+ Nueva trivia</button>
-          {PLANTILLAS.map(pl => (
-            <button key={pl.nombre} onClick={() => cargarPlantilla(pl)} disabled={!!cargando} title={pl.desc}
-              className="px-3.5 py-1.5 rounded-full text-sm font-semibold cursor-pointer border border-dashed border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50">+ {pl.nombre}</button>
-          ))}
+        {/* Qué trivia se edita */}
+        <div className="flex flex-wrap items-center gap-2 mb-5">
+          <select value={sel?.id ?? ''} onChange={e => setSelId(e.target.value)} disabled={!trivias.length}
+            className="flex-1 min-w-[12rem] border border-gray-200 rounded-xl px-3 py-2 font-semibold cursor-pointer outline-none focus:border-violet-500 bg-white" style={{ colorScheme: 'light' }}>
+            {!trivias.length && <option value="">Todavía no hay trivias</option>}
+            {trivias.map(t => <option key={t.id} value={t.id}>{t.nombre} · {t.preguntas.length} {t.preguntas.length === 1 ? "pregunta" : "preguntas"}</option>)}
+          </select>
+          <button onClick={nuevaTrivia} className="px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer border border-dashed border-violet-400 text-violet-600 hover:bg-violet-50 whitespace-nowrap">+ Nueva trivia</button>
         </div>
-        {cargando && <p className="mb-4 text-sm text-violet-700 bg-violet-50 rounded-xl px-3 py-2">{cargando}</p>}
         {!sel ? <p className="text-gray-500 py-8 text-center">Creá tu primera trivia con “+ Nueva trivia”.</p> : <>
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <input key={sel.id} defaultValue={sel.nombre} onBlur={e => renombrar(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
