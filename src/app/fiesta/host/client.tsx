@@ -543,7 +543,8 @@ export default function HostClient() {
 
       {!cfg.activa && <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-red-500 text-white px-4 py-2 rounded-full text-sm font-semibold">La fiesta está apagada: el link no funciona</div>}
 
-      <Escalar activo={vista !== 'editor'} clave={vista}>
+      {/* Con el protector puesto no se dibujan los juegos de fondo (siguen funcionando igual) */}
+      {!protector && <Escalar activo={vista !== 'editor'} clave={vista}>
       {vista === 'lobby' && <Lobby url={urlJugar} jugadores={st.jugadores} ahora={ahora} />}
       {vista === 'bingo' && <BingoHost st={st} girando={girando} onSacar={sacarBolilla} onDeshacer={deshacerBolilla} onReiniciar={reiniciarBingo} />}
       {vista === 'trivia' && (
@@ -551,7 +552,7 @@ export default function HostClient() {
           onLanzar={lanzarPregunta} onCerrar={cerrarPregunta} onUltimos5={ultimos5} onRanking={verRanking} onSiguiente={siguiente} onReiniciar={reiniciarTrivia} />
       )}
       {vista === 'impostor' && <ImpostorHost st={st} ahora={ahora} onAjustar={ajustarImpostor} onRepartir={repartirRoles} />}
-      </Escalar>
+      </Escalar>}
       {vista === 'editor' && <Editor trivias={cfg.trivias} onGuardar={async t => { await guardarCfg({ trivias: t }) }} />}
 
       {banner && <BannerGanador {...banner} onCerrar={() => setBanner(null)} />}
