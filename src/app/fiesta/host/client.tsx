@@ -88,6 +88,10 @@ function publicoImpostor(s: HostState): EstadoImpostor {
 type Vista = Modo | 'editor'
 const ONLINE_MS = 30000
 
+// Los 60 y los 70 se confunden al oído ("sesenta"/"setenta"): se dicen también cifra por cifra
+const DIGITOS = ['cero', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve']
+const lecturaBolilla = (n: number) => n >= 60 && n <= 79 ? `${n}. ${DIGITOS[Math.floor(n / 10)]}, ${DIGITOS[n % 10]}` : `${n}`
+
 function hablar(texto: string) {
   try { const u = new SpeechSynthesisUtterance(texto); u.lang = 'es-AR'; u.rate = 0.95; speechSynthesis.cancel(); speechSynthesis.speak(u) } catch { /* sin voz */ }
 }
@@ -315,24 +319,32 @@ export default function HostClient() {
   }
 
   // ── Bingo ──
-  const [girando, setGirando] = useState<number | null>(null)
+  // Bolillero: gira ~3 s haciendo ruido de bolillas, frena y sale la bolilla
+  const [girando, setGirando] = useState<'gira' | 'frena' | null>(null)
   function sacarBolilla() {
     const s = stRef.current
     if (girando != null || s.bingo.fase === 'terminado') return
     const quedan = Array.from({ length: 90 }, (_, i) => i + 1).filter(n => !s.bingo.salidos.includes(n))
     if (!quedan.length) return
     const elegida = quedan[crypto.getRandomValues(new Uint32Array(1))[0] % quedan.length]
-    let k = 0
-    const t = window.setInterval(() => {
-      k++
-      setGirando(quedan[Math.floor(Math.random() * quedan.length)])
-      if (k >= 18) {
-        window.clearInterval(t)
-        setGirando(null)
-        mutate(x => { x.bingo.salidos.push(elegida) })
-        hablar(`${elegida}`)
-      }
-    }, 70)
+    try { sonidoRef.current ??= new AudioContext(); sonidoRef.current.resume() } catch { /* sin sonido */ }
+    setGirando('gira')
+    const t0 = Date.now(), DUR = 3400, FRENA = 2500
+    // Traqueteo: golpecitos cada vez más espaciados a medida que frena
+    const golpe = () => {
+      const t = Date.now() - t0
+      if (t >= DUR) return
+      pitido(900 + Math.random() * 900, 0.03, 0.06, 'triangle')
+      window.setTimeout(golpe, t < FRENA ? 55 + Math.random() * 40 : 120 + (t - FRENA) / 3)
+    }
+    golpe()
+    window.setTimeout(() => setGirando('frena'), FRENA)
+    window.setTimeout(() => {
+      setGirando(null)
+      mutate(x => { x.bingo.salidos.push(elegida) })
+      pitido(523, 0.12, 0.2, 'sine'); window.setTimeout(() => pitido(784, 0.2, 0.2, 'sine'), 110)
+      hablar(lecturaBolilla(elegida))
+    }, DUR)
   }
   function deshacerBolilla() {
     if (!confirm('¿Sacar la última bolilla de la lista?')) return
@@ -584,7 +596,7 @@ function Lobby({ url, jugadores, ahora }: { url: string; jugadores: HostState['j
   )
 }
 
-function BingoHost({ st, girando, onSacar, onDeshacer, onReiniciar }: { st: HostState; girando: number | null; onSacar: () => void; onDeshacer: () => void; onReiniciar: () => void }) {
+function BingoHost({ st, girando, onSacar, onDeshacer, onReiniciar }: { st: HostState; girando: 'gira' | 'frena' | null; onSacar: () => void; onDeshacer: () => void; onReiniciar: () => void }) {
   const b = st.bingo
   const ultimo = b.salidos.at(-1)
   const anteriores = b.salidos.slice(-6, -1).reverse()
@@ -594,9 +606,11 @@ function BingoHost({ st, girando, onSacar, onDeshacer, onReiniciar }: { st: Host
     <div className="min-h-[calc(100dvh-100px)] md:min-h-[100dvh] flex flex-col md:flex-row gap-6 md:gap-10 px-4 md:px-12 pt-4 md:pt-16 pb-8">
       <div className="flex flex-col items-center justify-center w-full md:w-[38%] shrink-0">
         <p className="text-xl md:text-2xl font-bold tracking-wide uppercase opacity-80">{fin ? 'Bingo terminado' : b.fase === 'linea' ? 'Jugamos por LÍNEA' : 'Jugamos por BINGO'}</p>
-        <div key={girando != null ? 'g' : ultimo} className={`mt-4 md:mt-6 w-[min(36vh,380px,55vw)] aspect-square rounded-full flex items-center justify-center bola ${girando != null ? '' : 'bola-pop'}`}>
-          <span className="text-[min(16vh,170px,25vw)] font-black text-[#2a1650] leading-none">{girando ?? ultimo ?? '–'}</span>
-        </div>
+        {girando != null
+          ? <Bolillero frenando={girando === 'frena'} />
+          : <div key={ultimo ?? 'nada'} className={`mt-4 md:mt-6 w-[min(36vh,380px,55vw)] aspect-square rounded-full flex items-center justify-center bola ${ultimo ? 'bola-sale' : ''}`}>
+            <span className="text-[min(16vh,170px,25vw)] font-black text-[#2a1650] leading-none">{ultimo ?? '–'}</span>
+          </div>}
         <div className="mt-4 md:mt-6 flex gap-2 md:gap-3 h-12 md:h-16">
           {anteriores.map((n, i) => <span key={n} className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-white/15 flex items-center justify-center text-xl md:text-2xl font-bold" style={{ opacity: 1 - i * 0.15 }}>{n}</span>)}
         </div>
@@ -625,6 +639,32 @@ function BingoHost({ st, girando, onSacar, onDeshacer, onReiniciar }: { st: Host
           <p key={c.ts} className="mt-3 text-center text-lg opacity-80 chip-pop">{c.nombre} cantó {c.tipo === 'linea' ? 'línea' : 'bingo'}… ¡pero llegó tarde! 😅</p>
         ))}
       </div>
+    </div>
+  )
+}
+
+// Bombo que gira con bolillas rebotando adentro
+function Bolillero({ frenando }: { frenando: boolean }) {
+  const bolillas = useMemo(() => Array.from({ length: 16 }, (_, i) => ({
+    n: 1 + Math.floor(Math.random() * 90), x: 18 + Math.random() * 64, y: 40 + Math.random() * 42,
+    dx: (Math.random() - 0.5) * 160, dy: -60 - Math.random() * 120, dur: 0.35 + Math.random() * 0.35, color: ['#fff', '#ffe4f1', '#fde68a', '#bfdbfe'][i % 4],
+  })), [])
+  return (
+    <div className="mt-4 md:mt-6 w-[min(36vh,380px,55vw)] aspect-square relative">
+      <div className="absolute inset-0 rounded-full overflow-hidden border-[6px] border-white/70 shadow-[0_30px_80px_rgba(255,79,163,.35)]"
+        style={{ background: 'radial-gradient(circle at 40% 35%, rgba(255,255,255,.18), rgba(255,255,255,.04) 60%, rgba(0,0,0,.25))' }}>
+        {bolillas.map((b, i) => (
+          <span key={i} className="absolute w-[17%] aspect-square rounded-full flex items-center justify-center text-[min(2.6vh,4vw)] font-black text-[#2a1650] bolilla-rebota"
+            style={{ left: `${b.x}%`, top: `${b.y}%`, marginLeft: '-8.5%', marginTop: '-8.5%', background: `radial-gradient(circle at 35% 30%, #fff, ${b.color})`, boxShadow: 'inset -3px -4px 6px rgba(0,0,0,.18)',
+              ['--dx' as string]: `${b.dx}%`, ['--dy' as string]: `${b.dy}%`, animationDuration: `${frenando ? b.dur * 2.2 : b.dur}s`, animationDelay: `${-i * 0.07}s` }}>{b.n}</span>
+        ))}
+        {/* Rejas del bombo, girando */}
+        <div className={`absolute inset-[-10%] bombo-gira ${frenando ? 'bombo-frena' : ''}`}
+          style={{ background: 'repeating-conic-gradient(from 0deg, rgba(255,255,255,.35) 0deg 1.6deg, transparent 1.6deg 22.5deg)' }} />
+        <div className="absolute inset-[46%] rounded-full bg-white/80 shadow-inner" />
+      </div>
+      {/* Salida de la bolilla */}
+      <div className="absolute left-1/2 -bottom-[5%] -translate-x-1/2 w-[22%] h-[9%] rounded-b-2xl bg-white/70" />
     </div>
   )
 }
@@ -1238,6 +1278,13 @@ const CSS = `
 @keyframes ultima { 0%,100% { box-shadow: 0 0 0 0 rgba(255,79,163,.7) } 50% { box-shadow: 0 0 0 10px rgba(255,79,163,0) } }
 .bola { background: radial-gradient(circle at 35% 30%, #fff 0%, #ffe4f1 45%, #ff9ccc 100%); box-shadow: 0 30px 80px rgba(255,79,163,.45), inset -14px -18px 40px rgba(0,0,0,.12) }
 .bola-pop { animation: pop .7s cubic-bezier(.2,.9,.3,1.3) }
+@keyframes bolaSale { 0% { transform: translateY(45%) scale(.18); opacity: 0 } 35% { opacity: 1; transform: translateY(-10%) scale(1.08) } 55% { transform: translateY(4%) scale(.96) } 75% { transform: translateY(-2%) scale(1.02) } 100% { transform: none } }
+.bola-sale { animation: bolaSale 1s cubic-bezier(.2,.8,.3,1.2) both }
+@keyframes giraBombo { to { transform: rotate(360deg) } }
+.bombo-gira { animation: giraBombo .55s linear infinite }
+.bombo-frena { animation-duration: 1.6s }
+@keyframes rebota { 0%, 100% { transform: translate(0, 0) rotate(0) } 30% { transform: translate(var(--dx), var(--dy)) rotate(120deg) } 60% { transform: translate(calc(var(--dx) * -.7), calc(var(--dy) * .4)) rotate(250deg) } 80% { transform: translate(calc(var(--dx) * .3), calc(var(--dy) * -.2)) rotate(320deg) } }
+.bolilla-rebota { animation: rebota .5s ease-in-out infinite }
 .chip-pop { animation: chipPop .5s cubic-bezier(.2,.9,.3,1.3) both }
 .confeti { position: absolute; top: -5vh; border-radius: 2px; animation-name: caer; animation-timing-function: linear; animation-iteration-count: infinite }
 .titulo-brillo { background: linear-gradient(90deg, #ff4fa3, #fbbf24, #a78bfa, #ff4fa3); background-size: 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: brillo 4s ease infinite }
