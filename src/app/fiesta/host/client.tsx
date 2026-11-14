@@ -408,7 +408,6 @@ export default function HostClient() {
       else x.trivia.fase = 'final'
     })
   }
-  function irAPregunta(i: number) { audioRef.current?.pause(); mutate(x => { x.trivia.idx = i; x.trivia.fase = 'espera' }) }
   // Cambiar de trivia: arranca de cero (puntos, ranking y podio propios)
   function elegirTrivia(id: string) {
     const t = stRef.current.trivia
@@ -495,7 +494,7 @@ export default function HostClient() {
       {vista === 'bingo' && <BingoHost st={st} girando={girando} onSacar={sacarBolilla} onDeshacer={deshacerBolilla} onReiniciar={reiniciarBingo} />}
       {vista === 'trivia' && (
         <TriviaHost st={st} trivias={cfg.trivias} triviaActual={triviaActual} onElegir={elegirTrivia} preguntas={preguntas} q={q} ahora={ahora} online={online} ranking={ranking}
-          onLanzar={lanzarPregunta} onCerrar={cerrarPregunta} onUltimos5={ultimos5} onRanking={verRanking} onSiguiente={siguiente} onIr={irAPregunta} onReiniciar={reiniciarTrivia} />
+          onLanzar={lanzarPregunta} onCerrar={cerrarPregunta} onUltimos5={ultimos5} onRanking={verRanking} onSiguiente={siguiente} onReiniciar={reiniciarTrivia} />
       )}
       {vista === 'impostor' && <ImpostorHost st={st} ahora={ahora} onAjustar={ajustarImpostor} onRepartir={repartirRoles} />}
       </Escalar>
@@ -653,10 +652,10 @@ function BannerGanador({ tipo, nombres, onCerrar }: { tipo: 'linea' | 'bingo'; n
 }
 
 // ─── Trivia ─────────────────────────────────────────────────────────────────────
-function TriviaHost({ st, trivias, triviaActual, onElegir, preguntas, q, ahora, online, ranking, onLanzar, onCerrar, onUltimos5, onRanking, onSiguiente, onIr, onReiniciar }: {
+function TriviaHost({ st, trivias, triviaActual, onElegir, preguntas, q, ahora, online, ranking, onLanzar, onCerrar, onUltimos5, onRanking, onSiguiente, onReiniciar }: {
   st: HostState; trivias: Trivia[]; triviaActual: Trivia | undefined; onElegir: (id: string) => void
   preguntas: Pregunta[]; q: Pregunta | undefined; ahora: number; online: number; ranking: FilaRanking[]
-  onLanzar: () => void; onCerrar: () => void; onUltimos5: () => void; onRanking: () => void; onSiguiente: () => void; onIr: (i: number) => void; onReiniciar: () => void
+  onLanzar: () => void; onCerrar: () => void; onUltimos5: () => void; onRanking: () => void; onSiguiente: () => void; onReiniciar: () => void
 }) {
   const t = st.trivia
   // Para elegir qué trivia jugar (solo si hay más de una)
@@ -694,10 +693,6 @@ function TriviaHost({ st, trivias, triviaActual, onElegir, preguntas, q, ahora, 
       {q.tipo === 'votacion' && <p className="text-2xl mt-2 opacity-80">No hay respuesta correcta: ¡votá lo que pensás!</p>}
       <button onClick={onLanzar} className="mt-8 md:mt-10 px-10 md:px-12 py-5 rounded-full bg-[#ff4fa3] hover:bg-[#ff3594] text-3xl font-black shadow-xl cursor-pointer active:scale-95 transition">Lanzar pregunta</button>
       <div className="mt-10 flex flex-wrap items-center justify-center gap-3 text-sm opacity-60">
-        <span>Ir a:</span>
-        <select value={t.idx} onChange={e => onIr(Number(e.target.value))} className="bg-black/30 rounded-lg px-2 py-1 max-w-[70vw]">
-          {preguntas.map((p, i) => <option key={p.id} value={i}>{i + 1}. {p.texto.slice(0, 50)}</option>)}
-        </select>
         <button onClick={onReiniciar} className="underline cursor-pointer">Reiniciar trivia</button>
         {t.idx > 0 && trivias.length > 1 && (
           <select value="" onChange={e => { if (e.target.value) onElegir(e.target.value) }} className="bg-black/30 rounded-lg px-2 py-1">
