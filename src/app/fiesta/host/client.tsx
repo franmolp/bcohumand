@@ -31,6 +31,7 @@ interface HostState {
     puntos: Record<string, number>
     previos: Record<string, number>
     cierre: number // si se tocó "Últimos 5 segundos": hora en que cierra (0 = al terminar el tiempo)
+    orden?: string[] | null // en modo aleatorio: ids de las preguntas mezcladas al arrancar la trivia
   }
   impostor: {
     ronda: number
@@ -51,9 +52,19 @@ interface HostState {
 }
 const impostorInicial = (): HostState['impostor'] => ({ ronda: 0, fase: 'config', cantidad: 1, categoria: TODAS, pista: true, propias: '', palabra: '', cat: '', roles: {}, orden: [], votos: {}, usadas: [] })
 const bingoInicial = (ronda = 0): HostState['bingo'] => ({ ronda, salidos: [], fase: 'linea', ganadores: { linea: [], bingo: [] }, cantos: [] })
-const triviaInicial = (triviaId = ''): HostState['trivia'] => ({ triviaId, idx: 0, fase: 'espera', inicio: 0, respuestas: {}, puntos: {}, previos: {}, cierre: 0 })
+const triviaInicial = (triviaId = ''): HostState['trivia'] => ({ triviaId, idx: 0, fase: 'espera', inicio: 0, respuestas: {}, puntos: {}, previos: {}, cierre: 0, orden: null })
 // Preguntas de la trivia que se está jugando
-const pregsDe = (c: FiestaConfig | null, s: HostState) => triviaDe(c, s.trivia.triviaId)?.preguntas ?? []
+function pregsDe(c: FiestaConfig | null, s: HostState) {
+  const base = triviaDe(c, s.trivia.triviaId)?.preguntas ?? []
+  const orden = s.trivia.orden
+  if (!orden?.length) return base
+  // Mezcladas; si se agregó alguna después de mezclar, va al final (y las borradas se ignoran)
+  const porId = new Map(base.map(q => [q.id, q]))
+  return [...orden.map(id => porId.get(id)).filter((q): q is Pregunta => !!q), ...base.filter(q => !orden.includes(q.id))]
+}
+const esAleatoria = (t: Trivia | undefined) => t?.aleatorio !== false
+// La trivia todavía no arrancó (se puede cambiar el modo aleatorio sin desordenar nada)
+const sinEmpezar = (t: HostState['trivia']) => t.idx === 0 && t.fase === 'espera'
 // Hora en que cierra la pregunta: al terminar su tiempo, o antes si se tocó "Últimos 5 segundos"
 const limiteDe = (t: HostState['trivia'], q: Pregunta) => Math.min(t.inicio + q.duracion * 1000, t.cierre || Infinity)
 const nuevaPartida = () => Math.random().toString(36).slice(2, 10)
@@ -134,7 +145,7 @@ export default function HostClient() {
   const sb = useMemo(() => sbFiesta(), [])
 
   const triviaActual = triviaDe(cfg, st.trivia.triviaId)
-  const preguntas = triviaActual?.preguntas ?? []
+  const preguntas = pregsDe(cfg, st)
   const codigo = cfg?.codigo ?? ''
   const urlJugar = typeof window !== 'undefined' && codigo ? `${window.location.origin}/fiesta/${codigo}` : ''
 
@@ -431,6 +442,23 @@ export default function HostClient() {
     })
   }
   // Cambiar de trivia: arranca de cero (puntos, ranking y podio propios)
+  // Modo aleatorio: se mezclan las preguntas antes de arrancar cada trivia (al elegirla o reiniciarla)
+  useEffect(() => {
+    const t = st.trivia
+    if (!cfg || !sinEmpezar(t)) return
+    const tr = triviaDe(cfg, t.triviaId)
+    if (esAleatoria(tr) && !t.orden?.length && tr?.preguntas.length) mutate(x => { x.trivia.orden = barajar(tr.preguntas.map(q => q.id)) })
+    else if (!esAleatoria(tr) && t.orden) mutate(x => { x.trivia.orden = null })
+  }, [cfg, st.trivia, mutate])
+  async function cambiarAleatorio(v: boolean) {
+    const id = triviaDe(cfgRef.current, stRef.current.trivia.triviaId)?.id
+    const antes = cfgRef.current
+    if (!antes || !id) return
+    const trivias = antes.trivias.map(t => t.id === id ? { ...t, aleatorio: v } : t)
+    const ya = { ...antes, trivias }; setCfg(ya); cfgRef.current = ya // el tilde cambia al instante
+    try { await guardarCfg({ trivias }) } catch (e) { setCfg(antes); cfgRef.current = antes; alert((e as Error).message); return }
+    if (sinEmpezar(stRef.current.trivia)) mutate(x => { x.trivia.orden = null }) // se vuelve a mezclar (o queda en orden)
+  }
   function elegirTrivia(id: string) {
     const t = stRef.current.trivia
     if (id === triviaDe(cfgRef.current, t.triviaId)?.id) return
@@ -515,7 +543,7 @@ export default function HostClient() {
       {vista === 'lobby' && <Lobby url={urlJugar} jugadores={st.jugadores} ahora={ahora} />}
       {vista === 'bingo' && <BingoHost st={st} girando={girando} onSacar={sacarBolilla} onDeshacer={deshacerBolilla} onReiniciar={reiniciarBingo} />}
       {vista === 'trivia' && (
-        <TriviaHost st={st} trivias={cfg.trivias} triviaActual={triviaActual} onElegir={elegirTrivia} preguntas={preguntas} q={q} ahora={ahora} online={online} ranking={ranking}
+        <TriviaHost st={st} trivias={cfg.trivias} triviaActual={triviaActual} onElegir={elegirTrivia} onAleatorio={cambiarAleatorio} preguntas={preguntas} q={q} ahora={ahora} online={online} ranking={ranking}
           onLanzar={lanzarPregunta} onCerrar={cerrarPregunta} onUltimos5={ultimos5} onRanking={verRanking} onSiguiente={siguiente} onReiniciar={reiniciarTrivia} />
       )}
       {vista === 'impostor' && <ImpostorHost st={st} ahora={ahora} onAjustar={ajustarImpostor} onRepartir={repartirRoles} />}
@@ -702,8 +730,8 @@ function BannerGanador({ tipo, nombres, onCerrar }: { tipo: 'linea' | 'bingo'; n
 }
 
 // ─── Trivia ─────────────────────────────────────────────────────────────────────
-function TriviaHost({ st, trivias, triviaActual, onElegir, preguntas, q, ahora, online, ranking, onLanzar, onCerrar, onUltimos5, onRanking, onSiguiente, onReiniciar }: {
-  st: HostState; trivias: Trivia[]; triviaActual: Trivia | undefined; onElegir: (id: string) => void
+function TriviaHost({ st, trivias, triviaActual, onElegir, onAleatorio, preguntas, q, ahora, online, ranking, onLanzar, onCerrar, onUltimos5, onRanking, onSiguiente, onReiniciar }: {
+  st: HostState; trivias: Trivia[]; triviaActual: Trivia | undefined; onElegir: (id: string) => void; onAleatorio: (v: boolean) => void
   preguntas: Pregunta[]; q: Pregunta | undefined; ahora: number; online: number; ranking: FilaRanking[]
   onLanzar: () => void; onCerrar: () => void; onUltimos5: () => void; onRanking: () => void; onSiguiente: () => void; onReiniciar: () => void
 }) {
@@ -735,7 +763,13 @@ function TriviaHost({ st, trivias, triviaActual, onElegir, preguntas, q, ahora, 
 
   if (t.fase === 'espera') return (
     <div className="min-h-[calc(100dvh-100px)] md:min-h-[100dvh] flex flex-col items-center justify-center px-5 md:px-10 py-6 text-center">
-      {t.idx === 0 && selector && <div className="mb-10"><p className="text-sm opacity-60 mb-2 uppercase tracking-wider font-bold">¿Qué trivia jugamos?</p>{selector}</div>}
+      {t.idx === 0 && selector && <div className="mb-6"><p className="text-sm opacity-60 mb-2 uppercase tracking-wider font-bold">¿Qué trivia jugamos?</p>{selector}</div>}
+      {t.idx === 0 && (
+        <label className="mb-8 inline-flex items-center gap-2.5 cursor-pointer text-base opacity-80 hover:opacity-100">
+          <input type="checkbox" checked={esAleatoria(triviaActual)} onChange={e => onAleatorio(e.target.checked)} className="w-5 h-5 accent-[#ff4fa3]" />
+          Preguntas en orden aleatorio
+        </label>
+      )}
       <p className="text-3xl font-black opacity-90">{triviaActual?.nombre}</p>
       <p className="text-2xl opacity-70 font-semibold mt-1">Pregunta {t.idx + 1} de {preguntas.length}</p>
       <p className="mt-3 text-[7vh] font-black leading-tight titulo-brillo">{tipoLabel(q.tipo)}</p>

@@ -24,7 +24,7 @@ export interface Pregunta {
   duracion: number // segundos
 }
 // Se pueden armar varias trivias (cada una con su nombre y sus preguntas) y elegir cuál jugar
-export interface Trivia { id: string; nombre: string; preguntas: Pregunta[] }
+export interface Trivia { id: string; nombre: string; preguntas: Pregunta[]; aleatorio?: boolean } // aleatorio: sí por defecto
 export interface FiestaConfig { codigo: string; activa: boolean; trivias: Trivia[] }
 // La trivia elegida para jugar (o la primera, si no hay ninguna elegida o se borró)
 export const triviaDe = (c: FiestaConfig | null | undefined, id: string | undefined) => c?.trivias.find(t => t.id === id) ?? c?.trivias[0]
