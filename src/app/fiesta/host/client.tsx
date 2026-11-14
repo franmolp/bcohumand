@@ -8,6 +8,10 @@ import {
   TIPOS, tipoLabel, COLORES, FORMAS,
   type FiestaConfig, type Pregunta, type TipoPregunta, type Modo, type FaseTrivia, type EstadoPublico, type MsgJugador, type FilaRanking, type Ganador, type Trivia,
 } from '@/lib/fiesta'
+import { PLANTILLAS, type Plantilla } from '@/lib/fiesta-ejemplo'
+
+// Pregunta de imagen sin imagen o de música sin canción (no se puede jugar bien así)
+const faltaMedia = (p: Pregunta) => ((p.tipo === 'imagen' || p.tipo === 'revelar') && !p.imagen) || (p.tipo === 'musica' && !p.audio)
 
 // ─── Estado de la laptop (se guarda en el navegador por si se recarga la página) ───
 interface HostState {
@@ -807,6 +811,34 @@ function Editor({ trivias, onGuardar }: { trivias: Trivia[]; onGuardar: (t: Triv
     const t: Trivia = { id: Math.random().toString(36).slice(2, 10), nombre: `Trivia ${trivias.length + 1}`, preguntas: [] }
     guardarTodo([...trivias, t]); setSelId(t.id)
   }
+  // Carga una trivia armada: busca cada imagen (Wikipedia) y cada canción (Apple Music) al momento
+  const [cargando, setCargando] = useState('')
+  async function cargarPlantilla(pl: Plantilla) {
+    if (cargando) return
+    const pregs: Pregunta[] = []
+    for (const [i, q] of pl.preguntas.entries()) {
+      setCargando(`Preparando «${pl.nombre}»… ${i + 1}/${pl.preguntas.length}`)
+      const { wiki, busqueda, artista, ...resto } = q
+      const p: Pregunta = { ...resto, id: Math.random().toString(36).slice(2, 10) }
+      if (wiki) {
+        const r = await fetch(`/api/fiesta/imagen?titulo=${encodeURIComponent(wiki)}`).then(r => r.ok ? r.json() : null).catch(() => null) as { url?: string } | null
+        if (r?.url) p.imagen = r.url
+      }
+      if (busqueda) {
+        const lista = await fetch(`/api/fiesta/musica?q=${encodeURIComponent(busqueda)}`).then(r => r.ok ? r.json() : []).catch(() => []) as { nombre: string; artista: string; preview: string; artwork?: string }[]
+        const t = (Array.isArray(lista) ? lista : []).find(x => !artista || normalizarNombre(x.artista).includes(normalizarNombre(artista)))
+        if (t) { p.audio = t.preview; p.cancion = { nombre: t.nombre, artista: t.artista, artwork: t.artwork } }
+      }
+      pregs.push(p)
+    }
+    const usados = new Set(trivias.map(t => t.nombre))
+    let nombre = pl.nombre
+    for (let k = 2; usados.has(nombre); k++) nombre = `${pl.nombre} ${k}`
+    const t: Trivia = { id: Math.random().toString(36).slice(2, 10), nombre, preguntas: pregs }
+    await guardarTodo([...trivias, t]); setSelId(t.id); setCargando('')
+    const faltan = pregs.filter(faltaMedia).length
+    if (faltan) alert(`Listo. ${faltan} pregunta${faltan > 1 ? 's quedaron' : ' quedó'} sin imagen o sin canción (están marcadas): abrilas con “Editar” y cargalas a mano.`)
+  }
   function renombrar(nombre: string) {
     if (!sel || !nombre.trim() || nombre.trim() === sel.nombre) return
     guardarTodo(trivias.map(t => t.id === sel.id ? { ...t, nombre: nombre.trim() } : t))
@@ -838,7 +870,12 @@ function Editor({ trivias, onGuardar }: { trivias: Trivia[]; onGuardar: (t: Triv
             </button>
           ))}
           <button onClick={nuevaTrivia} className="px-3.5 py-1.5 rounded-full text-sm font-semibold cursor-pointer border border-dashed border-violet-400 text-violet-600 hover:bg-violet-50">+ Nueva trivia</button>
+          {PLANTILLAS.map(pl => (
+            <button key={pl.nombre} onClick={() => cargarPlantilla(pl)} disabled={!!cargando} title={pl.desc}
+              className="px-3.5 py-1.5 rounded-full text-sm font-semibold cursor-pointer border border-dashed border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50">+ {pl.nombre}</button>
+          ))}
         </div>
+        {cargando && <p className="mb-4 text-sm text-violet-700 bg-violet-50 rounded-xl px-3 py-2">{cargando}</p>}
         {!sel ? <p className="text-gray-500 py-8 text-center">Creá tu primera trivia con “+ Nueva trivia”.</p> : <>
           <div className="flex items-center gap-2 mb-4">
             <input key={sel.id} defaultValue={sel.nombre} onBlur={e => renombrar(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
@@ -852,7 +889,9 @@ function Editor({ trivias, onGuardar }: { trivias: Trivia[]; onGuardar: (t: Triv
               <div key={p.id} className="flex items-center gap-3 border border-gray-200 rounded-2xl px-4 py-3">
                 <span className="text-gray-400 font-bold w-6">{i + 1}</span>
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 shrink-0">{tipoLabel(p.tipo)}</span>
-                <span className="flex-1 min-w-0 truncate">{p.texto || <i className="text-gray-400">(sin texto)</i>}</span>
+                <span className="flex-1 min-w-0 truncate">{p.texto || <i className="text-gray-400">(sin texto)</i>}
+                  {p.cancion && <span className="text-gray-400"> · {p.cancion.artista} — {p.cancion.nombre}</span>}</span>
+                {faltaMedia(p) && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 shrink-0">{p.tipo === 'musica' ? 'Falta la canción' : 'Falta la imagen'}</span>}
                 <button onClick={() => mover(i, -1)} className="px-2 text-gray-400 hover:text-gray-700 cursor-pointer">↑</button>
                 <button onClick={() => mover(i, 1)} className="px-2 text-gray-400 hover:text-gray-700 cursor-pointer">↓</button>
                 <button onClick={() => setEditando(p)} className="px-2 text-violet-600 font-semibold cursor-pointer">Editar</button>
