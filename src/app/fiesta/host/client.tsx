@@ -92,8 +92,27 @@ const ONLINE_MS = 30000
 const DIGITOS = ['cero', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve']
 const lecturaBolilla = (n: number) => n >= 60 && n <= 79 ? `${n}. ${DIGITOS[Math.floor(n / 10)]}, ${DIGITOS[n % 10]}` : `${n}`
 
+// Se guarda la última frase: si el navegador la descarta de memoria antes de terminar, a veces la corta
+let fraseActual: SpeechSynthesisUtterance | null = null
+function vozEspanol() {
+  const voces = speechSynthesis.getVoices()
+  return voces.find(v => v.lang === 'es-AR') ?? voces.find(v => v.lang.startsWith('es-4')) ?? voces.find(v => v.lang.startsWith('es')) ?? null
+}
 function hablar(texto: string) {
-  try { const u = new SpeechSynthesisUtterance(texto); u.lang = 'es-AR'; u.rate = 0.95; speechSynthesis.cancel(); speechSynthesis.speak(u) } catch { /* sin voz */ }
+  try {
+    const u = new SpeechSynthesisUtterance(texto)
+    u.lang = 'es-AR'; u.rate = 0.95
+    const v = vozEspanol(); if (v) u.voice = v
+    if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel()
+    speechSynthesis.resume()
+    fraseActual = u
+    speechSynthesis.speak(u)
+  } catch { /* sin voz */ }
+}
+// Safari (y algunos celulares) solo deja hablar si arranca con un toque: como el número se lee unos
+// segundos después del toque, en el mismo toque se "destraba" la voz con una frase muda
+function destrabarVoz() {
+  try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; fraseActual = u; speechSynthesis.resume(); speechSynthesis.speak(u) } catch { /* sin voz */ }
 }
 
 export default function HostClient() {
@@ -319,7 +338,7 @@ export default function HostClient() {
   }
 
   // ── Bingo ──
-  // Bolillero: gira ~3 s haciendo ruido de bolillas, frena y sale la bolilla
+  // Bolillero: gira ~3 s, frena y sale la bolilla (sin sonido: solo se lee el número)
   const [girando, setGirando] = useState<'gira' | 'frena' | null>(null)
   function sacarBolilla() {
     const s = stRef.current
@@ -327,22 +346,13 @@ export default function HostClient() {
     const quedan = Array.from({ length: 90 }, (_, i) => i + 1).filter(n => !s.bingo.salidos.includes(n))
     if (!quedan.length) return
     const elegida = quedan[crypto.getRandomValues(new Uint32Array(1))[0] % quedan.length]
-    try { sonidoRef.current ??= new AudioContext(); sonidoRef.current.resume() } catch { /* sin sonido */ }
+    destrabarVoz()
     setGirando('gira')
-    const t0 = Date.now(), DUR = 3400, FRENA = 2500
-    // Traqueteo: golpecitos cada vez más espaciados a medida que frena
-    const golpe = () => {
-      const t = Date.now() - t0
-      if (t >= DUR) return
-      pitido(900 + Math.random() * 900, 0.03, 0.06, 'triangle')
-      window.setTimeout(golpe, t < FRENA ? 55 + Math.random() * 40 : 120 + (t - FRENA) / 3)
-    }
-    golpe()
+    const DUR = 3400, FRENA = 2500
     window.setTimeout(() => setGirando('frena'), FRENA)
     window.setTimeout(() => {
       setGirando(null)
       mutate(x => { x.bingo.salidos.push(elegida) })
-      pitido(523, 0.12, 0.2, 'sine'); window.setTimeout(() => pitido(784, 0.2, 0.2, 'sine'), 110)
       hablar(lecturaBolilla(elegida))
     }, DUR)
   }
