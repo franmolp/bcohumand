@@ -9,6 +9,7 @@ import {
   type FiestaConfig, type Pregunta, type TipoPregunta, type Modo, type FaseTrivia, type EstadoPublico, type MsgJugador, type FilaRanking, type Ganador, type Trivia,
   type FaseImpostor, type EstadoImpostor,
 } from '@/lib/fiesta'
+import { PLANTILLAS, type Plantilla } from '@/lib/fiesta-ejemplo'
 import { CATEGORIAS_IMPOSTOR, MIS_PALABRAS, TODAS, elegirPalabra } from '@/lib/fiesta-impostor'
 import { ImagenOculta } from '../compartido'
 
@@ -1086,6 +1087,27 @@ function Editor({ trivias, onGuardar }: { trivias: Trivia[]; onGuardar: (t: Triv
     const t: Trivia = { id: Math.random().toString(36).slice(2, 10), nombre: `Trivia ${trivias.length + 1}`, preguntas: [] }
     guardarTodo([...trivias, t]); setSelId(t.id)
   }
+  // Carga una trivia armada, buscando cada foto en Wikipedia al momento
+  const [cargando, setCargando] = useState('')
+  async function cargarPlantilla(pl: Plantilla) {
+    if (cargando) return
+    const pregs: Pregunta[] = []
+    for (const [i, q] of pl.preguntas.entries()) {
+      setCargando(`Preparando «${pl.nombre}»… ${i + 1}/${pl.preguntas.length}`)
+      const { wiki, ...resto } = q
+      const p: Pregunta = { ...resto, opciones: [...resto.opciones], id: Math.random().toString(36).slice(2, 10) }
+      if (wiki) {
+        const r = await fetch(`/api/fiesta/imagen?titulo=${encodeURIComponent(wiki)}`).then(r => r.ok ? r.json() : null).catch(() => null) as { url?: string } | null
+        if (r?.url) p.imagen = r.url
+      }
+      pregs.push(p)
+    }
+    const t: Trivia = { id: Math.random().toString(36).slice(2, 10), nombre: pl.nombre, preguntas: pregs }
+    await guardarTodo([...trivias, t]); setSelId(t.id); setCargando('')
+    const faltan = pregs.filter(faltaMedia).length
+    if (faltan) alert(`Listo, se cargaron ${pregs.length} preguntas. ${faltan} quedaron marcadas con “Falta la imagen”: abrilas con “Editar” para subir ${faltan > 1 ? 'las fotos' : 'la foto'} y completar las opciones.`)
+  }
+  const plantillasNuevas = PLANTILLAS.filter(pl => !trivias.some(t => t.nombre === pl.nombre))
   function renombrar(nombre: string) {
     if (!sel || !nombre.trim() || nombre.trim() === sel.nombre) return
     guardarTodo(trivias.map(t => t.id === sel.id ? { ...t, nombre: nombre.trim() } : t))
@@ -1116,7 +1138,12 @@ function Editor({ trivias, onGuardar }: { trivias: Trivia[]; onGuardar: (t: Triv
             {trivias.map(t => <option key={t.id} value={t.id}>{t.nombre} · {t.preguntas.length} {t.preguntas.length === 1 ? "pregunta" : "preguntas"}</option>)}
           </select>
           <button onClick={nuevaTrivia} className="px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer border border-dashed border-violet-400 text-violet-600 hover:bg-violet-50 whitespace-nowrap">+ Nueva trivia</button>
+          {plantillasNuevas.map(pl => (
+            <button key={pl.nombre} onClick={() => cargarPlantilla(pl)} disabled={!!cargando} title={pl.desc}
+              className="px-4 py-2 rounded-xl text-sm font-semibold cursor-pointer border border-dashed border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap">+ {pl.nombre}</button>
+          ))}
         </div>
+        {cargando && <p className="mb-4 text-sm text-violet-700 bg-violet-50 rounded-xl px-3 py-2">{cargando}</p>}
         {!sel ? <p className="text-gray-500 py-8 text-center">Creá tu primera trivia con “+ Nueva trivia”.</p> : <>
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <input key={sel.id} defaultValue={sel.nombre} onBlur={e => renombrar(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
