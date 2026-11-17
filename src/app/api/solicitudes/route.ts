@@ -5,6 +5,7 @@ import { getSession } from '@/lib/auth'
 import { crearNotificacion, crearNotificaciones, getAdminAndHRIds } from '@/lib/notificaciones'
 import { avisarTurnos } from '@/lib/bco-turnos'
 import { aplicarCambio, esCambioHorario } from '@/lib/cambio-horario'
+import { validarPedidoVacaciones } from '@/lib/vacaciones-cupos'
 
 function fmtF(iso: string): string { const [, m, d] = iso.split('-'); return `${parseInt(d)}/${parseInt(m)}` }
 
@@ -107,6 +108,9 @@ export async function POST(request: NextRequest) {
             error: `Las vacaciones deben pedirse con al menos ${cfg.vacaciones_min_dias} días de anticipación`,
           }, { status: 400 })
         }
+        // Lunes a domingo, 7 o 14 días, y con cupo en su área (manicuría por franja, el resto 1 por semana)
+        const errCupo = await validarPedidoVacaciones(session.id, fecha_inicio, fecha_fin || null)
+        if (errCupo) return NextResponse.json({ error: errCupo }, { status: 400 })
       } else if (tipo === 'Solicitud de Días' || tipo === 'Cambio de horario/día') {
         const minFecha = addDays(todayAR, cfg.otros_min_dias)
         if (fecha_inicio < minFecha) {

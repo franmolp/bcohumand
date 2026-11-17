@@ -145,7 +145,7 @@ function DetallePeriodo({ sol }: { sol: Solicitud }) {
 // ─── FormFields ───────────────────────────────────────────────────────────────
 
 function FormFields({
-  form, setForm, isAdmin, isAdminOrHR, editMode, empleados = [], certFile, setCertFile, config, showRecepHint = false,
+  form, setForm, isAdmin, isAdminOrHR, editMode, empleados = [], certFile, setCertFile, config,
 }: {
   form: Form
   setForm: (f: Form) => void
@@ -156,7 +156,6 @@ function FormFields({
   certFile: File | null
   setCertFile: (f: File | null) => void
   config: SolicitudesConfig
-  showRecepHint?: boolean
 }) {
   const tipos     = isAdmin ? TIPOS_ADMIN : TIPOS_EMPLEADO
   const isHorario = form.tipo === 'Cambio de Horario' || form.tipo === 'Cambio de horario/día'
@@ -183,6 +182,7 @@ function FormFields({
     return today
   })()
   const motivoRequired = !isAdminOrHR && !editMode && (form.tipo === 'Solicitud de Días' || isHorario)
+  const vacEmpleada = form.tipo === 'Vacaciones' && !isAdminOrHR && !editMode
 
   const inp = (label: string, k: keyof Form, type = 'text', placeholder = '') => {
     const isDateField = type === 'date'
@@ -304,18 +304,15 @@ function FormFields({
         </div>
       )}
 
-      {/* Aviso regla de vacaciones para recepcionistas */}
-      {showRecepHint && form.tipo === 'Vacaciones' && (
-        <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-50 border border-blue-100 rounded-xl">
-          <IconAlertCircle size={14} className="text-blue-500 shrink-0 mt-0.5" />
-          <p className="text-[12px] text-blue-700">
-            Las recepcionistas solo pueden tomar vacaciones en bloques de <strong>7 o 14 días corridos</strong>.
-          </p>
-        </div>
-      )}
+
+      {/* Vacaciones (empleadas): se eligen semanas de lunes a domingo según el cupo del área */}
+      {vacEmpleada && <SelectorSemanas form={form} setForm={setForm} />}
+
+      {/* Admin/RRHH cargando vacaciones: aviso si la fecha supera el cupo del área (pueden igual, es excepción) */}
+      {!vacEmpleada && isAdminOrHR && form.tipo === 'Vacaciones' && <AvisoCupoAdmin usuarioId={form.empleado_id} inicio={form.fecha_inicio} fin={form.fecha_fin} />}
 
       {/* Fechas estándar (no Horario) */}
-      {!isHorario && (
+      {!isHorario && !vacEmpleada && (
         <>
           <div className="grid grid-cols-2 gap-3">
             {inp('Fecha inicio', 'fecha_inicio', 'date')}
@@ -326,7 +323,7 @@ function FormFields({
               {dias} día{dias !== 1 ? 's' : ''}
             </p>
           )}
-          {excedeVac && vacBalance && (
+          {excedeVac && vacBalance && !vacEmpleada && (
             <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
               <IconAlertCircle size={15} className="text-amber-500 shrink-0 mt-0.5" />
               <p className="text-[12px] text-amber-800">
@@ -335,6 +332,15 @@ function FormFields({
             </div>
           )}
         </>
+      )}
+
+      {vacEmpleada && excedeVac && vacBalance && (
+        <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+          <IconAlertCircle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-[12px] text-amber-800">
+            Con estos {dias} días te pasás de tus vacaciones: ya usaste <b>{vacBalance.usadas}</b> de <b>{vacBalance.total}</b> días este período. Igual podés enviar la solicitud y el admin decide.
+          </p>
+        </div>
       )}
 
       {/* Cambio de Horario — mismo_dia */}
@@ -434,6 +440,106 @@ function FormFields({
         area('Comentario al empleado', 'comentario_admin', 'Comentario interno...', 2)
       )}
 
+    </div>
+  )
+}
+
+// ─── Vacaciones por semanas y cupos ───────────────────────────────────────────
+
+interface SemanaVac { lunes: string; domingo: string; libre: boolean; motivo: string | null; estimada: boolean }
+type GrupoVac = 'manicuria' | 'peluqueria' | 'masajes' | 'recepcion' | null
+const REGLA_GRUPO: Record<string, string> = {
+  manicuria: 'Como máximo 2 manicuras de tu mismo turno de vacaciones a la vez.',
+  peluqueria: 'Como máximo 1 peluquera de vacaciones por semana.',
+  masajes: 'Como máximo 1 persona de masajes y depilación de vacaciones por semana.',
+  recepcion: 'Como máximo 1 recepcionista de vacaciones por semana.',
+}
+const DIAS_CORTOS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
+const MESES_VAC = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+const fCorta = (f: string) => `${DIAS_CORTOS[new Date(f + 'T12:00:00Z').getUTCDay()]} ${Number(f.slice(8))}/${Number(f.slice(5, 7))}`
+
+function SelectorSemanas({ form, setForm }: { form: Form; setForm: (f: Form) => void }) {
+  const [datos, setDatos] = useState<{ grupo: GrupoVac; semanas: SemanaVac[] } | null>(null)
+  const [error, setError] = useState('')
+  const [largo, setLargo] = useState<7 | 14>(() => calcDias(form.fecha_inicio, form.fecha_fin) === 14 ? 14 : 7)
+  useEffect(() => {
+    fetch('/api/vacaciones/semanas').then(r => r.json()).then(d => { if (d.semanas) setDatos(d); else setError(d.error || 'No se pudieron cargar las semanas') })
+      .catch(() => setError('No se pudieron cargar las semanas'))
+  }, [])
+  const elegir = (inicio: string, fin: string) => setForm({ ...form, fecha_inicio: inicio, fecha_fin: fin })
+  const cambiarLargo = (n: 7 | 14) => { setLargo(n); setForm({ ...form, fecha_inicio: '', fecha_fin: '' }) }
+
+  if (error) return <p className="text-[13px] text-red-600">{error}</p>
+  if (!datos) return <p className="text-[13px] text-[var(--text-muted)]">Buscando semanas disponibles…</p>
+  const sem = datos.semanas
+  const opciones = sem.map((s, i) => {
+    const ult = largo === 14 ? sem[i + 1] : s
+    if (!ult) return null
+    const bloqueada = !s.libre ? s : largo === 14 && !ult.libre ? ult : null
+    return { inicio: s.lunes, fin: ult.domingo, libre: !bloqueada, motivo: bloqueada?.motivo ?? null, estimada: s.estimada || ult.estimada }
+  }).filter((o): o is NonNullable<typeof o> => !!o)
+  const mesDe = (f: string) => MESES_VAC[Number(f.slice(5, 7)) - 1] + ' ' + f.slice(0, 4)
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-50 border border-blue-100 rounded-xl">
+        <IconAlertCircle size={14} className="text-blue-500 shrink-0 mt-0.5" />
+        <p className="text-[12px] text-blue-700">
+          Las vacaciones se piden de <strong>lunes a domingo</strong>, por 1 o 2 semanas.{datos.grupo ? ` ${REGLA_GRUPO[datos.grupo]}` : ''} Las semanas en gris ya no tienen lugar.
+        </p>
+      </div>
+      <div className="flex bg-gray-100 rounded-xl p-0.5">
+        {([7, 14] as const).map(n => (
+          <button key={n} type="button" onClick={() => cambiarLargo(n)}
+            className={`flex-1 py-2 text-[12px] font-medium rounded-[10px] cursor-pointer transition-all ${largo === n ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+            {n === 7 ? '1 semana (7 días)' : '2 semanas (14 días)'}
+          </button>
+        ))}
+      </div>
+      <div className="max-h-80 overflow-y-auto rounded-xl border border-[var(--border)] divide-y divide-[var(--border)]">
+        {opciones.map((o, i) => {
+          const cabecera = i === 0 || mesDe(o.inicio) !== mesDe(opciones[i - 1].inicio) ? mesDe(o.inicio) : null
+          const elegida = form.fecha_inicio === o.inicio && form.fecha_fin === o.fin
+          return (
+            <div key={o.inicio}>
+              {cabecera && <p className="px-3 pt-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-muted)] bg-gray-50 capitalize">{cabecera}</p>}
+              <button type="button" disabled={!o.libre} onClick={() => elegir(o.inicio, o.fin)}
+                className={`w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors ${elegida ? 'bg-[var(--primary-light)]' : o.libre ? 'hover:bg-gray-50 cursor-pointer' : 'bg-gray-50 cursor-not-allowed'}`}>
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${o.libre ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                <span className="flex-1 min-w-0">
+                  <span className={`block text-[14px] font-medium ${o.libre ? 'text-[var(--text)]' : 'text-gray-400'}`}>{fCorta(o.inicio)} → {fCorta(o.fin)}</span>
+                  <span className={`block text-[12px] ${o.libre ? 'text-emerald-700' : 'text-gray-400'}`}>
+                    {o.libre ? (o.estimada ? 'Disponible (según tu horario habitual)' : 'Disponible') : o.motivo}
+                  </span>
+                </span>
+                {elegida && <span className="text-[12px] font-semibold text-[var(--primary)]">Elegida</span>}
+              </button>
+            </div>
+          )
+        })}
+        {!opciones.length && <p className="px-3 py-4 text-[13px] text-[var(--text-muted)]">No hay semanas para elegir todavía.</p>}
+      </div>
+    </div>
+  )
+}
+
+// Admin/RRHH: si las fechas cargadas caen en una semana sin cupo para esa persona, se avisa (pueden igual)
+function AvisoCupoAdmin({ usuarioId, inicio, fin }: { usuarioId: string; inicio: string; fin: string }) {
+  const [semanas, setSemanas] = useState<{ uid: string; lista: SemanaVac[] } | null>(null)
+  useEffect(() => {
+    if (!usuarioId) return
+    fetch(`/api/vacaciones/semanas?usuario_id=${usuarioId}`).then(r => r.json()).then(d => { if (d.semanas) setSemanas({ uid: usuarioId, lista: d.semanas }) }).catch(() => {})
+  }, [usuarioId])
+  if (!usuarioId || !inicio || semanas?.uid !== usuarioId) return null
+  const hasta = fin || inicio
+  const choca = semanas.lista.filter(s => !s.libre && s.lunes <= hasta && s.domingo >= inicio)
+  if (!choca.length) return null
+  return (
+    <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+      <IconAlertCircle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+      <div className="text-[12px] text-amber-800 space-y-0.5">
+        <p className="font-semibold">Supera el cupo de su área (se puede cargar igual como excepción):</p>
+        {choca.map(s => <p key={s.lunes}>Semana del {fCorta(s.lunes)}: {s.motivo}</p>)}
+      </div>
     </div>
   )
 }
@@ -642,9 +748,6 @@ function HistorialModal({ sol, onClose }: { sol: Solicitud; onClose: () => void 
 
 interface Empleado { id: string; nombre: string; equipo?: string }
 
-function isRecepcionEquipo(equipo: string): boolean {
-  return equipo.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes('recep')
-}
 
 // Advertencias de vacaciones para el admin (exceso de días + coincidencia con el mismo equipo).
 type ValidacionSol = {
@@ -843,7 +946,7 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
     if (isAdminOrHR && !editId && !isFeriado && !form.empleado_id) {
       setFormError('Debe seleccionar un empleado'); setSaving(false); return
     }
-    if (!form.fecha_inicio) { setFormError('La fecha inicio es requerida'); setSaving(false); return }
+    if (!form.fecha_inicio) { setFormError(form.tipo === 'Vacaciones' && !isAdminOrHR ? 'Elegí la semana de tus vacaciones' : 'La fecha inicio es requerida'); setSaving(false); return }
     if (!isFeriado && !isHorario && !form.fecha_fin) { setFormError('La fecha fin es requerida'); setSaving(false); return }
     if (isFeriado && !form.fecha_fin) { setFormError('Las fechas son requeridas'); setSaving(false); return }
     // La fecha fin nunca puede ser anterior a la fecha inicio.
@@ -862,14 +965,6 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
         if (form.fecha_inicio < minFecha) {
           setFormError(`Las vacaciones deben pedirse con al menos ${config.vacaciones_min_dias} días de anticipación`)
           setSaving(false); return
-        }
-        // Recepcionistas: solo pueden pedir 7 o 14 días corridos
-        if (isRecepcionEquipo(user.equipo)) {
-          const diasVac = calcDias(form.fecha_inicio, form.fecha_fin)
-          if (diasVac !== 7 && diasVac !== 14) {
-            setFormError('Las recepcionistas solo pueden pedir vacaciones en bloques de 7 o 14 días corridos')
-            setSaving(false); return
-          }
         }
       } else if (form.tipo === 'Solicitud de Días' || isHorario) {
         const minFecha = addDaysStr(today, config.otros_min_dias)
@@ -1448,7 +1543,7 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
             {editId ? 'Guardar' : form.tipo === 'Feriado/Local cerrado' ? 'Crear feriado' : 'Enviar'}
           </Button>
         </>}>
-        <FormFields form={form} setForm={setForm} isAdmin={isAdminOrHR} isAdminOrHR={isAdminOrHR} editMode={!!editId} empleados={empleados} certFile={modalCertFile} setCertFile={setModalCertFile} config={config} showRecepHint={!isAdminOrHR && isRecepcionEquipo(user.equipo)} />
+        <FormFields form={form} setForm={setForm} isAdmin={isAdminOrHR} isAdminOrHR={isAdminOrHR} editMode={!!editId} empleados={empleados} certFile={modalCertFile} setCertFile={setModalCertFile} config={config} />
         {formError && (
           <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl mt-4">
             <IconAlertCircle size={16} className="text-red-500 shrink-0" />
