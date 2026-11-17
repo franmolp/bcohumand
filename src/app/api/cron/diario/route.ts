@@ -6,6 +6,7 @@ import { ejecutarPedidosRecordatorio } from '../pedidos-recordatorio/route'
 import { ejecutarRecordatorioInvitaciones } from '../invitaciones-recordatorio/route'
 import { ejecutarGoogleReviewsRefresh } from '@/app/api/google-reviews/refresh/route'
 import { notificar as ejecutarMonotributoNotificar } from '@/app/api/monotributo/notificar/route'
+import { importarHorariosTurnos } from '@/lib/horarios-turnos'
 
 // Vercel (según el plan) limita la cantidad de cron jobs por proyecto — este
 // endpoint agrupa en un solo horario (9am) varias tareas diarias/mensuales de
@@ -44,6 +45,11 @@ export async function GET(request: NextRequest) {
     return res.json().catch(() => null)
   })
   if (esDia28) await correr('certificados', ejecutarCertificados)
+  // Horarios base desde BCO Turnos (una semana atrás y 90 días adelante): así el Espacio de trabajo y
+  // Mi horario siempre tienen los turnos programados de los próximos meses, aunque nadie guarde un horario
+  await correr('horariosTurnos', async () => (await importarHorariosTurnos()).body)
 
   return NextResponse.json({ ok: true, resultados })
 }
+
+export const maxDuration = 60
