@@ -14,7 +14,7 @@ export const esCambioHorario = (tipo: string) => tipo === 'Cambio de horario/dí
 export const CAMPOS_SOL = 'id, usuario_id, tipo, estado, subtipo_horario, fecha_inicio, fecha_compensacion, horario_nuevo'
 
 const fecha = (f: string | null) => (f ?? '').slice(0, 10)
-const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const fmt = (f: string) => `el ${DIAS[new Date(f + 'T12:00:00Z').getUTCDay()]} ${f.split('-').reverse().slice(0, 2).join('/')}`
 const hm = (t: string) => String(t).slice(0, 5)
 const espacio = (equipo: string) => isMasajistaODepiladora(equipo) ? ['un box', 'ningún box'] : isPeluqueria(equipo) ? ['un puesto de peluquería', 'ningún puesto de peluquería'] : isRecepcion(equipo) ? ['un puesto de recepción', 'ningún puesto de recepción'] : ['una mesa', 'ninguna mesa']

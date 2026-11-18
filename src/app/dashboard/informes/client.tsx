@@ -1,4 +1,5 @@
 'use client'
+import { mayusFecha } from '@/lib/mayus-fecha'
 
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
@@ -35,15 +36,15 @@ function fmtMin(m: number) {
 function fmtMes(mes: string) {
   const [y, m] = mes.split('-').map(Number)
   const d = new Date(y, m - 1, 1)
-  const label = d.toLocaleString('es', { month: 'long' })
+  const label = mayusFecha(d.toLocaleString('es', { month: 'long' }))
   return label.charAt(0).toUpperCase() + label.slice(1) + ' ' + y
 }
 
 function fmtFecha(fecha: string) {
   const [y, m, d] = fecha.split('-').map(Number)
   const dt = new Date(y, m - 1, d)
-  const dia = dt.toLocaleString('es', { weekday: 'long' })
-  return `${dia.charAt(0).toUpperCase() + dia.slice(1)} ${d} ${dt.toLocaleString('es', { month: 'short' }).replace('.', '')} ${y}`
+  const dia = mayusFecha(dt.toLocaleString('es', { weekday: 'long' }))
+  return `${dia.charAt(0).toUpperCase() + dia.slice(1)} ${d} ${mayusFecha(dt.toLocaleString('es', { month: 'short' })).replace('.', '')} ${y}`
 }
 
 function mesActual() {
@@ -1184,7 +1185,7 @@ function fmtCompacto(n: number): string {
 
 function mesCorto(mes: string): string {
   const [y, m] = mes.split('-').map(Number)
-  return new Date(y, m - 1, 1).toLocaleString('es', { month: 'short' }).replace('.', '')
+  return mayusFecha(new Date(y, m - 1, 1).toLocaleString('es', { month: 'short' })).replace('.', '')
 }
 
 // % de variación vs el mes anterior. null si no hay mes previo o el previo es 0.

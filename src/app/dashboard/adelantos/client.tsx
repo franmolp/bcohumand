@@ -44,7 +44,7 @@ const CONCEPTOS = [
 ]
 const DEFAULT_CONFIG: Config = { monto_minimo: 10000, monto_maximo: 100000, dia_habilitacion: 15, max_por_mes: 1, precio_remera: PRECIO_REMERA, precio_buzo: PRECIO_BUZO }
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-const MESES_CORTOS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+const MESES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
 // Fecha de hoy en Argentina como YYYY-MM-DD (para el input date)
 function todayISO() {

@@ -5,6 +5,7 @@ import { Spinner } from '@/components/ui'
 import { IconClipboard } from '@/components/ui/Icons'
 import { CHIP_INFO } from '@/lib/asistencia'
 import type { SessionUser } from '@/types'
+import { mayusFecha } from '@/lib/mayus-fecha'
 
 interface Registro {
   fecha: string
@@ -54,7 +55,7 @@ function fmtH(h: number): string {
 
 function mesLabel(mes: string): string {
   const [y, m] = mes.split('-').map(Number)
-  const raw = new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+  const raw = mayusFecha(new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }))
   return raw.charAt(0).toUpperCase() + raw.slice(1)
 }
 

@@ -540,7 +540,7 @@ export default function NotificacionesClient({ session }: { session: SessionUser
             label="Título"
             value={form.titulo}
             onChange={e => setForm({ ...form, titulo: e.target.value })}
-            placeholder="Ej: Reunión de equipo el viernes"
+            placeholder="Ej: Reunión de equipo el Viernes"
             required
           />
           <div>

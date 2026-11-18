@@ -3,6 +3,10 @@
 ## Idioma
 Siempre responder en español. Nunca usar inglés en los mensajes al usuario.
 
+## Fechas
+- Los días de la semana y los meses van SIEMPRE con la inicial en mayúscula, en todos lados ("Lun", "Lunes", "Enero", "Ene"), también en medio de una oración.
+- `toLocaleDateString`/`toLocaleString` en español los devuelven en minúscula: pasar el resultado por `mayusFecha` (`src/lib/mayus-fecha.ts`). Las listas de nombres escritas a mano, ya con mayúscula.
+
 ## Git
 - La rama principal es `main`. Nunca hacer push a `master`.
 - Siempre hacer push a `main` al terminar cada tarea: `git push -u origin main`

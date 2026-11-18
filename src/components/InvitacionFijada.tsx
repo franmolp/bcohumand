@@ -12,7 +12,7 @@ export interface InvFijada {
   mi_rsvp: { asiste: boolean; restriccion: string | null } | null
 }
 
-const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 function fmtFecha(d: string) {
   const [, m, day] = d.slice(0, 10).split('-').map(Number)
   return `${day} de ${MESES[(m || 1) - 1]}`

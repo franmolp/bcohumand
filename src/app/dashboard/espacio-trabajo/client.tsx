@@ -203,7 +203,7 @@ function relTime(iso: string): string {
 
 // ── Labels ────────────────────────────────────────────────────────────────────
 const DIAS_CORTO = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
-const MESES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+const MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
 function dayLabel(dateStr: string) {
   const d = new Date(dateStr + 'T12:00:00')

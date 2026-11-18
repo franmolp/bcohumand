@@ -402,8 +402,8 @@ function AjustesEquipos() {
           <p className="text-[13px] font-semibold text-[var(--text)]">Aviso semanal</p>
         </div>
         <p className="text-[12px] text-[var(--text-muted)] mb-3">
-          Todos los sábados se avisa automáticamente a cada equipo si tiene puestos libres la semana próxima.
-          Usá este botón para mandarlo ahora mismo, sin esperar al sábado.
+          Todos los Sábados se avisa automáticamente a cada equipo si tiene puestos libres la semana próxima.
+          Usá este botón para mandarlo ahora mismo, sin esperar al Sábado.
         </p>
         <button onClick={notificarAhora} disabled={notificando}
           className="w-full flex items-center justify-center gap-2 py-2.5 border border-[var(--border)] text-[var(--text)] hover:bg-gray-50 rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-50">

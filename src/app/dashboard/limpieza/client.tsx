@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Button, Modal, Spinner, Toast, Select, Confirm } from '@/components/ui'
 import { IconSparkles, IconChevronLeft, IconChevronRight, IconPlus, IconTrash, IconEdit, IconCheck } from '@/components/ui/Icons'
+import { mayusFecha } from '@/lib/mayus-fecha'
 
 type Tarea = {
   id: number
@@ -525,7 +526,7 @@ const PRIO: Record<string, { label: string; cls: string }> = {
 }
 function fmtFechaCorta(iso: string): string {
   const d = new Date(iso)
-  return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+  return mayusFecha(d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }))
 }
 
 function TabPedidos({ showToast, onCount, isAdmin }: { showToast: (m: string, t?: 'success' | 'error') => void; onCount: (n: number) => void; isAdmin: boolean }) {

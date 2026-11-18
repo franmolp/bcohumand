@@ -1,4 +1,5 @@
 'use client'
+import { mayusFecha } from '@/lib/mayus-fecha'
 
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
@@ -186,11 +187,11 @@ function timeAgo(iso: string) {
   if (d === 0) return 'hoy'
   if (d === 1) return 'ayer'
   if (d < 7) return `hace ${d} días`
-  return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+  return mayusFecha(new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }))
 }
 
 function fmtFecha(iso: string) {
-  return new Date(iso).toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })
+  return mayusFecha(new Date(iso).toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }))
 }
 
 // ─── Popup de detalle de pilar ─────────────────────────────────────────────

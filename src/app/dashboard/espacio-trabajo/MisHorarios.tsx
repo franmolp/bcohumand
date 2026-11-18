@@ -8,7 +8,7 @@ interface Turno { inicio: string; fin: string; origen: 'fresha' | 'aprobado' | '
 interface Dia { fecha: string; turnos: Turno[]; ausencia: string | null }
 
 const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
-const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
 const AUSENCIA_LABEL: Record<string, string> = {
   'Vacaciones': 'Vacaciones',

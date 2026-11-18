@@ -11,6 +11,7 @@ import { esEquipoLimpieza } from '@/lib/limpieza'
 import LimpiezaHomeCard from '@/components/LimpiezaHomeCard'
 import InvitacionFijada, { type InvFijada } from '@/components/InvitacionFijada'
 import { fmtFechaLarga } from '@/lib/fecha'
+import { mayusFecha } from '@/lib/mayus-fecha'
 
 const VACACIONES_DEFAULT = 14
 
@@ -25,7 +26,7 @@ function timeAgo(dateStr: string | null): string {
   const days = Math.floor(hs / 24)
   if (days === 1) return 'ayer'
   if (days < 7) return `hace ${days}d`
-  return new Date(dateStr).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+  return mayusFecha(new Date(dateStr).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }))
 }
 
 function getUpcomingBirthdays(
@@ -63,13 +64,13 @@ function getUpcomingBirthdays(
 
 function fmtFecha(iso: string): string {
   const [, m, d] = iso.split('-')
-  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+  const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
   return `${parseInt(d)} de ${meses[parseInt(m) - 1]}`
 }
 
 function fmtDateLabel(d: Date): string {
-  const dias  = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
-  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+  const dias  = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
+  const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const wd  = dias[d.getDay()]
   const mon = meses[d.getMonth()]
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
@@ -77,7 +78,7 @@ function fmtDateLabel(d: Date): string {
 }
 
 function fmtRango(inicio: string, fin: string | null): string {
-  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+  const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
   const [,mi,di] = inicio.split('-')
   const startStr = `${parseInt(di)} ${meses[parseInt(mi)-1]}`
   if (!fin || fin === inicio) return startStr
@@ -195,7 +196,7 @@ export default async function EmpleadoDashboard({ session }: { session: SessionU
   // Mes actual para ranking de juegos
   const mesStart = `${yr}-${String(mo).padStart(2,'0')}-01`
   const mesEnd   = `${yr}-${String(mo).padStart(2,'0')}-${String(new Date(yr, mo, 0).getDate()).padStart(2,'0')}`
-  const mesNombre = today.toLocaleString('es', { month: 'long' })
+  const mesNombre = mayusFecha(today.toLocaleString('es', { month: 'long' }))
   const mesCiclo  = `${yr}-${String(mo).padStart(2,'0')}`
 
   const [vacRes, notifRes, usersRes, evRes, configRes, solPendRes, ausentesRes, muroRes, palabraHoyRes, partidaHoyRes, rankingMesRes, efemRes, recoRes] = await Promise.all([

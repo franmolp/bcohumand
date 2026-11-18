@@ -6,6 +6,7 @@ import { IconUsers, IconFileText, IconCalendar, IconChevronRight, IconCheck, Ico
 import GoogleReviewsCarousel from '@/components/GoogleReviewsCarousel'
 import AdminKpiCard from './AdminKpiCard'
 import LimpiezaProgresoCard from '@/components/LimpiezaProgresoCard'
+import { mayusFecha } from '@/lib/mayus-fecha'
 
 
 function timeAgo(dateStr: string | null): string {
@@ -25,12 +26,12 @@ function timeAgo(dateStr: string | null): string {
   if (calDays === 0) return `hace ${hs}h`
   if (calDays === 1) return 'ayer'
   if (calDays < 7)  return `hace ${calDays}d`
-  return date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+  return mayusFecha(date.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }))
 }
 
 function fmtFecha(iso: string): string {
   const [, m, d] = iso.split('-')
-  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+  const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
   return `${parseInt(d)} ${meses[parseInt(m)-1]}`
 }
 
@@ -93,8 +94,8 @@ function getUpcomingBirthdays(
 }
 
 function fmtDateLabel(d: Date): string {
-  const dias  = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
-  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+  const dias  = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
+  const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const wd  = dias[d.getDay()]
   const mon = meses[d.getMonth()]
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)

@@ -5,7 +5,7 @@ import { crearNotificaciones, getAdminIds } from '@/lib/notificaciones'
 
 export const maxDuration = 60
 
-const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
 type ConvertirMesResult =
   | { ok: false; error: string }

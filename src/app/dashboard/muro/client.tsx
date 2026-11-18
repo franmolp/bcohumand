@@ -5,6 +5,7 @@ import type { SessionUser } from '@/types'
 import { Spinner, Toast, Confirm } from '@/components/ui'
 import { IconPlus, IconX, IconCheck, IconAlertCircle, IconHeart, IconHeartFilled, IconMessageCircle, IconWall, IconEdit } from '@/components/ui/Icons'
 import { createPortal } from 'react-dom'
+import { mayusFecha } from '@/lib/mayus-fecha'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,14 +63,14 @@ function timeAgo(dateStr: string): string {
   if (h < 24) return `${h}h`
   const d = Math.floor(h / 24)
   if (d < 7) return `${d}d`
-  return new Date(dateStr).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+  return mayusFecha(new Date(dateStr).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }))
 }
 
 function initials(n: string) {
   return n.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 }
 
-const MESES_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+const MESES_ES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 function fmtFechaLarga(d: string): string {
   const [, m, day] = d.slice(0, 10).split('-').map(Number)
   return `${day} de ${MESES_ES[(m || 1) - 1]}`

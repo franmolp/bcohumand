@@ -10,7 +10,7 @@ export async function ejecutarCertificados() {
   const inicioMes = `${year}-${mesStr}-01`
   const finMes = new Date(year, month + 1, 0)
   const finMesStr = `${year}-${mesStr}-${String(finMes.getDate()).padStart(2, '0')}`
-  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+  const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const nombreMes = meses[month]
 
   // Buscar ausencias por salud del mes sin certificado cargado

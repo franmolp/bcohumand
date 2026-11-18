@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { SessionUser } from '@/types'
 import { IconStar, IconTrophy, IconPlus, IconTrash } from '@/components/ui/Icons'
+import { mayusFecha } from '@/lib/mayus-fecha'
 
 type Estado = 'correct' | 'present' | 'absent'
 type FilaIntento = { palabra: string; resultado: Estado[] }
@@ -460,7 +461,7 @@ function RankingAyer({ data }: { data: { ranking: RankingEntry[]; palabra: strin
 function RankingMes({ data }: { data: RankingMesData | null }) {
   if (!data) return null
   const _d = new Date()
-  const _m = _d.toLocaleString('es', { month: 'long' })
+  const _m = mayusFecha(_d.toLocaleString('es', { month: 'long' }))
   const mes = `${_m.charAt(0).toUpperCase() + _m.slice(1)} ${_d.getFullYear()}`
   return (
     <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden">
@@ -660,7 +661,7 @@ function PalabrasList({ palabras, hoy, onEditar, onEliminar }: {
               {p.palabra}
             </span>
             <span className="text-[11px] text-gray-400">
-              {esHoy ? '· hoy' : esPasada ? '· jugada' : `· ${new Date(p.fecha + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })}`}
+              {esHoy ? '· hoy' : esPasada ? '· jugada' : `· ${mayusFecha(new Date(p.fecha + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' }))}`}
             </span>
           </div>
           {p.pista && <p className="text-[11px] text-gray-400 truncate mt-0.5">{p.pista}</p>}

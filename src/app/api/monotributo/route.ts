@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
     .eq('mes', mes)
     .single()
 
-  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+  const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   const [yr, mo] = mes.split('-')
   const nombreMes = meses[parseInt(mo) - 1]
 

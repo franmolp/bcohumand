@@ -43,7 +43,7 @@ export const sumarDias = (f: string, n: number) => { const d = d0(f); d.setUTCDa
 const diaSemana = (f: string) => (d0(f).getUTCDay() + 6) % 7 // 0 = lunes
 export const lunesDe = (f: string) => sumarDias(f, -diaSemana(f))
 const semanasEntre = (a: string, b: string) => Math.round((d0(b).getTime() - d0(a).getTime()) / (7 * 864e5))
-const DIAS = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom']
+const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const corta = (f: string) => `${DIAS[diaSemana(f)]} ${Number(f.slice(8))}/${Number(f.slice(5, 7))}`
 
 // Franjas que cubre un turno (al menos 1 hora dentro de la franja de mañana o de tarde)
@@ -187,7 +187,7 @@ export async function validarPedidoVacaciones(usuarioId: string, inicio: string,
   const finReal = fin ?? inicio
   const dias = Math.round((d0(finReal).getTime() - d0(inicio).getTime()) / 864e5) + 1
   if (diaSemana(inicio) !== 0 || diaSemana(finReal) !== 6 || (dias !== 7 && dias !== 14)) {
-    return 'Las vacaciones se piden de lunes a domingo, por 7 o 14 días corridos'
+    return 'Las vacaciones se piden de Lunes a Domingo, por 7 o 14 días corridos'
   }
   const { semanas } = await semanasVacaciones(usuarioId, inicio, finReal)
   const ocupada = semanas.find(s => !s.libre)

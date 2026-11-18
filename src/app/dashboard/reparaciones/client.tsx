@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import type { SessionUser } from '@/types'
 import { IconPlus, IconWrench, IconAlertCircle } from '@/components/ui/Icons'
 import { Modal, Button, Input, Select, Toast } from '@/components/ui'
+import { mayusFecha } from '@/lib/mayus-fecha'
 
 type Reparacion = {
   id: string
@@ -54,7 +55,7 @@ const FILTERS = [
 ]
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })
+  return mayusFecha(new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' }))
 }
 function getCat(v: string) { return CATEGORIAS.find(c => c.value === v) ?? CATEGORIAS[5] }
 function getPrio(v: string) { return PRIORIDADES.find(p => p.value === v) ?? PRIORIDADES[1] }

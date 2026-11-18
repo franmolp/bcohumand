@@ -454,8 +454,8 @@ const REGLA_GRUPO: Record<string, string> = {
   masajes: 'Como máximo 1 persona de masajes y depilación de vacaciones por semana.',
   recepcion: 'Como máximo 1 recepcionista de vacaciones por semana.',
 }
-const DIAS_CORTOS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
-const MESES_VAC = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+const MESES_VAC = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 const fCorta = (f: string) => `${DIAS_CORTOS[new Date(f + 'T12:00:00Z').getUTCDay()]} ${Number(f.slice(8))}/${Number(f.slice(5, 7))}`
 
 function SelectorSemanas({ form, setForm }: { form: Form; setForm: (f: Form) => void }) {
@@ -484,7 +484,7 @@ function SelectorSemanas({ form, setForm }: { form: Form; setForm: (f: Form) => 
       <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-50 border border-blue-100 rounded-xl">
         <IconAlertCircle size={14} className="text-blue-500 shrink-0 mt-0.5" />
         <p className="text-[12px] text-blue-700">
-          Las vacaciones se piden de <strong>lunes a domingo</strong>, por 1 o 2 semanas.{datos.grupo ? ` ${REGLA_GRUPO[datos.grupo]}` : ''} Las semanas en gris ya no tienen lugar.
+          Las vacaciones se piden de <strong>Lunes a Domingo</strong>, por 1 o 2 semanas.{datos.grupo ? ` ${REGLA_GRUPO[datos.grupo]}` : ''} Las semanas en gris ya no tienen lugar.
         </p>
       </div>
       <div className="flex bg-gray-100 rounded-xl p-0.5">

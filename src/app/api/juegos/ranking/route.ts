@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { getSession } from '@/lib/auth'
+import { mayusFecha } from '@/lib/mayus-fecha'
 
 // Desde el 1/9/2026 el puntaje es mixto: intentos + bonus por tiempo. Antes de
 // esa fecha se mantiene la fórmula vieja (solo intentos) para no cambiar los
@@ -174,7 +175,7 @@ export async function GET(request: NextRequest) {
       const m = d.getMonth() + 1
       const inicio = `${y}-${String(m).padStart(2, '0')}-01`
       const fin = `${y}-${String(m).padStart(2, '0')}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`
-      const mesStr = d.toLocaleString('es', { month: 'long' })
+      const mesStr = mayusFecha(d.toLocaleString('es', { month: 'long' }))
       meses.push({ inicio, fin, label: `${mesStr.charAt(0).toUpperCase() + mesStr.slice(1)} ${y}` })
     }
 
