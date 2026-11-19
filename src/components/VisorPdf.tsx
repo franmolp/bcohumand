@@ -21,6 +21,7 @@ export default function VisorPdf({ url, respaldo, nombre, archivo, onClose }: { 
   const [bytes, setBytes] = useState<ArrayBuffer | null>(null)
   const [error, setError] = useState('')
   const [detalle, setDetalle] = useState('') // motivo técnico, chiquito, para poder diagnosticar
+  const [avance, setAvance] = useState<{ bajado: number; total: number; listo: boolean }>({ bajado: 0, total: 0, listo: false })
   const [zoom, setZoom] = useState(0)
   const [ancho, setAncho] = useState(0)
   const cont = useRef<HTMLDivElement>(null)
@@ -31,13 +32,16 @@ export default function VisorPdf({ url, respaldo, nombre, archivo, onClose }: { 
       try {
         let paso = 'descargar'
         try {
+          const visor = cargar() // el visor se prepara mientras baja el PDF
+          visor.catch(() => {})
           // Directo; si el teléfono no lo puede bajar (permisos de la otra web), por el plan B del servidor
           let r = await fetch(url).catch(() => null)
           if ((!r || !r.ok) && respaldo) r = await fetch(respaldo).catch(() => null)
           if (!r || !r.ok) throw new Error(`respuesta ${r?.status ?? 'sin conexión'}`)
-          const b = await r.arrayBuffer()
+          const b = await leerConAvance(r, (bajado, total) => { if (vivo) setAvance({ bajado, total, listo: false }) })
+          if (vivo) setAvance(a => ({ ...a, listo: true }))
           paso = 'cargar el visor'
-          const lib = await cargar()
+          const lib = await visor
           paso = 'leer el PDF'
           const d = await lib.getDocument({ data: b.slice(0) }).promise
           if (vivo) { setBytes(b); setDoc(d) }
@@ -79,7 +83,7 @@ export default function VisorPdf({ url, respaldo, nombre, archivo, onClose }: { 
       </div>
       <div ref={cont} className="flex-1 overflow-auto" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
         {error ? <div className="text-center mt-16 px-6"><p className="text-white/70">{error}</p>{detalle && <p className="text-white/35 text-[11px] mt-3 break-words">{detalle}</p>}</div>
-          : !doc ? <p className="text-white/60 text-center mt-16">Abriendo la lista de precios…</p>
+          : !doc ? <Cargando {...avance} />
           : anchoPagina > 0 && (
             <div className="py-2 space-y-2" style={{ width: Math.max(anchoPagina + 16, ancho), }}>
               {Array.from({ length: doc.numPages }, (_, i) => <PaginaPdf key={i} doc={doc} n={i + 1} ancho={anchoPagina} />)}
@@ -88,6 +92,40 @@ export default function VisorPdf({ url, respaldo, nombre, archivo, onClose }: { 
       </div>
     </div>,
     document.body
+  )
+}
+
+// Baja la respuesta de a pedazos para ir mostrando cuánto falta
+async function leerConAvance(r: Response, avisar: (bajado: number, total: number) => void): Promise<ArrayBuffer> {
+  const total = Number(r.headers.get('content-length')) || 0
+  if (!r.body) return r.arrayBuffer()
+  const lector = r.body.getReader(), partes: Uint8Array[] = []
+  let bajado = 0
+  for (;;) {
+    const { done, value } = await lector.read()
+    if (done) break
+    partes.push(value); bajado += value.length
+    avisar(bajado, total)
+  }
+  const todo = new Uint8Array(bajado)
+  let pos = 0
+  for (const p of partes) { todo.set(p, pos); pos += p.length }
+  return todo.buffer
+}
+
+const mb = (n: number) => (n / 1048576).toLocaleString('es-AR', { maximumFractionDigits: n < 10485760 ? 1 : 0 })
+function Cargando({ bajado, total, listo }: { bajado: number; total: number; listo: boolean }) {
+  const pct = total ? Math.min(100, Math.round(bajado / total * 100)) : 0
+  return (
+    <div className="mt-16 mx-auto w-64 max-w-[80%] text-center">
+      <p className="text-white/70 text-[15px]">{listo ? 'Preparando la lista de precios…' : 'Abriendo la lista de precios…'}</p>
+      {!listo && bajado > 0 && <>
+        <div className="mt-4 h-1.5 rounded-full bg-white/10 overflow-hidden">
+          <div className="h-full bg-white/70 rounded-full transition-[width] duration-200" style={{ width: total ? `${pct}%` : '100%' }} />
+        </div>
+        <p className="mt-2 text-white/45 text-[12px]">{total ? `${pct}% · ${mb(bajado)} de ${mb(total)} MB` : `${mb(bajado)} MB`}</p>
+      </>}
+    </div>
   )
 }
 
