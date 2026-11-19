@@ -7,6 +7,8 @@ import type { SessionUser, Solicitud } from '@/types'
 import { compressImage } from '@/lib/compress-image'
 import FileViewer from '@/components/FileViewer'
 import Hora24 from '@/components/Hora24'
+import CampoFecha from '@/components/CampoFecha'
+import SelectorMultiple from '@/components/SelectorMultiple'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -211,6 +213,12 @@ function FormFields({
         setForm({ ...form, [k]: val })
       }
     }
+    if (isDateField) return (
+      <div className="min-w-0">
+        <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">{label}</label>
+        <CampoFecha value={form[k] as string} onChange={onDateChange} min={dateMinField} />
+      </div>
+    )
     return (
       <div className="min-w-0">
         <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">{label}</label>
@@ -314,7 +322,7 @@ function FormFields({
       {/* Fechas estándar (no Horario) */}
       {!isHorario && !vacEmpleada && (
         <>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {inp('Fecha inicio', 'fecha_inicio', 'date')}
             {inp('Fecha fin', 'fecha_fin', 'date')}
           </div>
@@ -367,7 +375,7 @@ function FormFields({
       {/* Cambio de Horario — compensacion */}
       {isHorario && form.subtipo_horario === 'compensacion' && (
         <>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {inp('Día que no viene', 'fecha_inicio',       'date')}
             {inp('Día compensación', 'fecha_compensacion', 'date')}
           </div>
@@ -484,13 +492,12 @@ function SelectorSemanas({ form, setForm }: { form: Form; setForm: (f: Form) => 
         </p>
       </div>
       {duraciones.length > 1 && (
-        <div className="flex bg-gray-100 rounded-xl p-0.5">
-          {duraciones.map(d => (
-            <button key={d} type="button" onClick={() => cambiarLargo(d)}
-              className={`flex-1 py-2 text-[12px] font-medium rounded-[10px] cursor-pointer transition-all ${n === d ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
-              {d === 1 ? '1 semana (7 días)' : `${d} semanas (${d * 7} días)`}
-            </button>
-          ))}
+        <div>
+          <label className="block text-[13px] font-medium text-[var(--text-sub)] mb-1.5">Duración</label>
+          <select value={n} onChange={e => cambiarLargo(Number(e.target.value))} style={{ fontSize: 16 }}
+            className="w-full h-11 px-4 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] lg:text-sm">
+            {duraciones.map(d => <option key={d} value={d}>{d === 1 ? '1 semana (7 días)' : `${d} semanas (${d * 7} días)`}</option>)}
+          </select>
         </div>
       )}
       <div className="max-h-80 overflow-y-auto rounded-xl border border-[var(--border)] divide-y divide-[var(--border)]">
@@ -539,24 +546,15 @@ function AjustesVacaciones({ reglas, setReglas, equipos }: { reglas: ReglasVac; 
 
       <div>
         <label className="block text-[13px] font-semibold text-[var(--text)] mb-2">Duraciones permitidas</label>
-        <div className="flex flex-wrap gap-2">
-          {[1, 2, 3, 4].map(n => {
-            const on = reglas.semanas.includes(n)
-            return (
-              <button key={n} type="button" onClick={() => set({ semanas: on ? reglas.semanas.filter(x => x !== n) : [...reglas.semanas, n].sort() })}
-                className={`h-9 px-3 rounded-xl text-[13px] font-medium border cursor-pointer ${on ? 'bg-[var(--primary)] text-white border-[var(--primary)]' : 'bg-white text-gray-600 border-[var(--border)]'}`}>
-                {n === 1 ? '1 semana' : `${n} semanas`}
-              </button>
-            )
-          })}
-        </div>
+        <SelectorMultiple nombre="duraciones" className="max-w-[320px]" valor={reglas.semanas} onChange={v => set({ semanas: [...v].sort((a, b) => a - b) })}
+          opciones={[1, 2, 3, 4].map(n => [n, n === 1 ? '1 semana (7 días)' : `${n} semanas (${n * 7} días)`] as [number, string])} />
       </div>
 
       <div>
         <label className="block text-[13px] font-semibold text-[var(--text)] mb-1">Se pueden pedir hasta</label>
         <p className="text-[12px] text-gray-400 mb-2">Vacío: hasta el 31 de Marzo siguiente</p>
         <div className="flex items-center gap-2">
-          <input type="date" value={reglas.hasta ?? ''} onChange={e => set({ hasta: e.target.value || null })} style={{ fontSize: 16 }} className={inputCls} />
+          <div className="w-52 max-w-full"><CampoFecha value={reglas.hasta ?? ''} onChange={v => set({ hasta: v || null })} placeholder="31 de Marzo siguiente" /></div>
           {reglas.hasta && <button type="button" onClick={() => set({ hasta: null })} className="text-[12px] text-gray-500 underline cursor-pointer">Quitar</button>}
         </div>
       </div>
@@ -571,27 +569,21 @@ function AjustesVacaciones({ reglas, setReglas, equipos }: { reglas: ReglasVac; 
                 <input value={g.nombre} onChange={e => setGrupo(i, { nombre: e.target.value })} placeholder="Nombre del área" style={{ fontSize: 16 }} className={`${inputCls} flex-1 min-w-0 font-semibold`} />
                 <button type="button" onClick={() => set({ grupos: reglas.grupos.filter((_, j) => j !== i) })} className="p-2 text-gray-400 hover:text-red-500 cursor-pointer" title="Quitar área"><IconTrash size={16} /></button>
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                {equipos.map(e => {
-                  const on = g.equipos.includes(e.id), ocupado = !on && enOtroGrupo(e.id, i)
-                  return (
-                    <button key={e.id} type="button" disabled={ocupado} onClick={() => setGrupo(i, { equipos: on ? g.equipos.filter(x => x !== e.id) : [...g.equipos, e.id] })}
-                      className={`h-8 px-2.5 rounded-lg text-[12px] border cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${on ? 'bg-[var(--primary-light)] text-[var(--primary)] border-[var(--primary)] font-semibold' : 'bg-white text-gray-500 border-[var(--border)]'}`}>
-                      {e.nombre}
-                    </button>
-                  )
-                })}
-              </div>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-gray-600">
-                <label className="flex items-center gap-2">Máximo
-                  <input type="number" min={1} max={20} value={g.cupo} onChange={e => setGrupo(i, { cupo: Math.max(1, +e.target.value || 1) })} style={{ fontSize: 16 }} className={`${inputCls} w-16`} />
+              <SelectorMultiple nombre="equipos" valor={g.equipos} onChange={v => setGrupo(i, { equipos: v })}
+                opciones={equipos.map(e => [e.id, e.nombre] as [number, string])}
+                deshabilitadas={equipos.filter(e => enOtroGrupo(e.id, i)).map(e => e.id)} />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[12px] text-gray-500">
+                <label className="min-w-0">Máximo a la vez
+                  <input type="number" min={1} max={20} value={g.cupo} onChange={e => setGrupo(i, { cupo: Math.max(1, +e.target.value || 1) })} style={{ fontSize: 16 }} className={`${inputCls} w-full mt-1`} />
                 </label>
-                <label className="flex items-center gap-2">En los avisos:
-                  <input value={g.plural} onChange={e => setGrupo(i, { plural: e.target.value })} placeholder="ej. manicuras" title="Cómo se nombra a las personas del área (ej. Excede el número de manicuras…)" style={{ fontSize: 16 }} className={`${inputCls} w-36`} />
+                <label className="min-w-0">Se cuenta
+                  <select value={g.por_turno ? 'turno' : 'semana'} onChange={e => setGrupo(i, { por_turno: e.target.value === 'turno' })} style={{ fontSize: 16 }} className={`${inputCls} w-full mt-1`}>
+                    <option value="semana">Por semana</option>
+                    <option value="turno">Por turno (mañana/tarde)</option>
+                  </select>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={g.por_turno} onChange={e => setGrupo(i, { por_turno: e.target.checked })} className="w-4 h-4 accent-[var(--primary)]" />
-                  Por turno (mañana/tarde)
+                <label className="min-w-0">En los avisos
+                  <input value={g.plural} onChange={e => setGrupo(i, { plural: e.target.value })} placeholder="ej. manicuras" title="Cómo se nombra a las personas del área (ej. Excede el número de manicuras…)" style={{ fontSize: 16 }} className={`${inputCls} w-full mt-1`} />
                 </label>
               </div>
               <p className="text-[11px] text-gray-400">{g.por_turno ? `Como máximo ${g.cupo} de vacaciones a la vez en el mismo turno.` : `Como máximo ${g.cupo} de vacaciones por semana.`}</p>
@@ -612,12 +604,12 @@ function AjustesVacaciones({ reglas, setReglas, equipos }: { reglas: ReglasVac; 
                 <input value={c.motivo} onChange={e => setCerrada(i, { motivo: e.target.value })} placeholder="Motivo (ej. Navidad y Año Nuevo)" style={{ fontSize: 16 }} className={`${inputCls} flex-1 min-w-0`} />
                 <button type="button" onClick={() => set({ cerradas: reglas.cerradas.filter((_, j) => j !== i) })} className="p-2 text-gray-400 hover:text-red-500 cursor-pointer" title="Quitar"><IconTrash size={16} /></button>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <label className="text-[12px] text-gray-500">Desde
-                  <input type="date" value={c.desde} onChange={e => setCerrada(i, { desde: e.target.value })} style={{ fontSize: 16 }} className={`${inputCls} w-full mt-1`} />
+                  <div className="mt-1"><CampoFecha value={c.desde} onChange={v => setCerrada(i, { desde: v })} placeholder="Desde" /></div>
                 </label>
                 <label className="text-[12px] text-gray-500">Hasta
-                  <input type="date" value={c.hasta} min={c.desde || undefined} onChange={e => setCerrada(i, { hasta: e.target.value })} style={{ fontSize: 16 }} className={`${inputCls} w-full mt-1`} />
+                  <div className="mt-1"><CampoFecha value={c.hasta} min={c.desde || undefined} onChange={v => setCerrada(i, { hasta: v })} placeholder="Hasta" /></div>
                 </label>
               </div>
             </div>
