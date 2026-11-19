@@ -25,7 +25,7 @@ export function grupoVacaciones(equipo: string | null | undefined): Grupo | null
 }
 const CUPO_MANICURIA_FRANJA = 2
 const NOMBRE_GRUPO: Record<Exclude<Grupo, 'manicuria'>, string> = {
-  peluqueria: 'una peluquera', masajes: 'alguien de masajes y depilación', recepcion: 'una recepcionista',
+  peluqueria: 'peluqueras', masajes: 'masajistas y depiladoras', recepcion: 'recepcionistas',
 }
 
 export interface Semana {
@@ -150,7 +150,7 @@ export async function semanasVacaciones(usuarioId: string, desde: string, hasta:
       grupo,
       semanas: lunesLista.map(l => {
         const ocupada = Array.from({ length: 7 }, (_, i) => sumarDias(l, i)).some(f => (ausentes.get(f)?.size ?? 0) > 0)
-        return { lunes: l, domingo: sumarDias(l, 6), libre: !ocupada, motivo: ocupada ? `Ya hay ${NOMBRE_GRUPO[grupo]} de vacaciones esa semana` : null, estimada: false }
+        return { lunes: l, domingo: sumarDias(l, 6), libre: !ocupada, motivo: ocupada ? `Excede el número de ${NOMBRE_GRUPO[grupo]} por semana` : null, estimada: false }
       }),
     }
   }

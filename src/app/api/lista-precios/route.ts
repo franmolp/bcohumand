@@ -8,7 +8,8 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   if (!(await getSession())) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   const base = (process.env.BCO_TURNOS_URL || 'https://bco-turnos.vercel.app').replace(/\/$/, '')
-  const r = await fetch(`${base}/precios`, { redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(10000) }).catch(() => null)
+  // ?pdf=1: directo al PDF guardado (el link de Drive puede pedir acceso según los permisos del archivo)
+  const r = await fetch(`${base}/precios?pdf=1`, { redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(10000) }).catch(() => null)
   const url = r && r.status >= 300 && r.status < 400 ? r.headers.get('location') : null
   if (!url) return NextResponse.json({ error: r?.status === 404 ? 'La lista de precios todavía no está disponible.' : 'No se pudo abrir la lista de precios. Probá de nuevo en un rato.' }, { status: 502 })
   return NextResponse.json({ url: new URL(url, base).toString() })

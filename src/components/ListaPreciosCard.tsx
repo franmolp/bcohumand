@@ -6,10 +6,8 @@ import FileViewer from '@/components/FileViewer'
 
 // Lista de precios vigente: la misma de la web de BCO Turnos (el último PDF armado en Catálogo →
 // Lista de precios). Se pide al tocar, así siempre es la actual.
-// Los PDF que no están en Drive se muestran con el visor de Google (los celulares no muestran PDF en un iframe).
-const visible = (url: string) => /drive\.google\.com/.test(url) || !/\.pdf(\?|#|$)/i.test(url)
-  ? url : `https://docs.google.com/viewer?embedded=true&url=${encodeURIComponent(url)}`
-
+// En el celular se abre el PDF directo (el visor del teléfono es el que mejor lo muestra: un PDF dentro
+// de la página no se ve bien en iPhone ni en Android); en la compu, dentro del visor de la app.
 export default function ListaPreciosCard() {
   const [url, setUrl] = useState<string | null>(null)
   const [cargando, setCargando] = useState(false)
@@ -18,11 +16,16 @@ export default function ListaPreciosCard() {
   async function abrir() {
     if (cargando) return
     setCargando(true); setError('')
+    const celular = window.matchMedia('(pointer: coarse)').matches
+    // La pestaña se abre en el mismo toque (si no, el celular la bloquea) y después se le pone la dirección
+    const pestaña = celular ? window.open('', '_blank') : null
     try {
       const d = await fetch('/api/lista-precios').then(r => r.json())
-      if (d.url) setUrl(d.url)
-      else setError(d.error || 'No se pudo abrir la lista de precios')
-    } catch { setError('No se pudo abrir la lista de precios') }
+      if (!d.url) { pestaña?.close(); setError(d.error || 'No se pudo abrir la lista de precios'); return }
+      if (pestaña) pestaña.location.href = d.url
+      else if (celular) window.location.href = d.url // no se pudo abrir otra pestaña: se abre acá
+      else setUrl(d.url)
+    } catch { pestaña?.close(); setError('No se pudo abrir la lista de precios') }
     finally { setCargando(false) }
   }
 
@@ -43,7 +46,7 @@ export default function ListaPreciosCard() {
       </button>
 
       {url && (
-        <FileViewer url={visible(url)} name="Lista de precios" onClose={() => setUrl(null)} />
+        <FileViewer url={url} name="Lista de precios" onClose={() => setUrl(null)} />
       )}
     </>
   )
