@@ -12,7 +12,8 @@ let cargado: unknown = null
 export async function cargarPdfjs<T>(): Promise<T> {
   if (cargado) return cargado as T
   completarMap()
-  const m = await import('pdfjs-dist') as unknown as { GlobalWorkerOptions: { workerSrc: string } }
+  // Versión legacy: trae los complementos para navegadores menos nuevos (Safari del iPhone)
+  const m = await import('pdfjs-dist/legacy/build/pdf.mjs') as unknown as { GlobalWorkerOptions: { workerSrc: string } }
   m.GlobalWorkerOptions.workerSrc = '/pdf.worker.compat.mjs'
   return (cargado = m) as T
 }

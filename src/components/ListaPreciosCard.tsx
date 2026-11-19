@@ -39,7 +39,7 @@ export default function ListaPreciosCard() {
         <IconChevronRight size={16} className="text-white/60 shrink-0" />
       </button>
 
-      {url && <VisorPdf url={url} nombre="Lista de precios" archivo="Lista de precios Beauty Co.pdf" onClose={() => setUrl(null)} />}
+      {url && <VisorPdf url={url} respaldo="/api/lista-precios/pdf" nombre="Lista de precios" archivo="Lista de precios Beauty Co.pdf" onClose={() => setUrl(null)} />}
     </>
   )
 }

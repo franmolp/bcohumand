@@ -16,10 +16,11 @@ const cargar = () => cargarPdfjs<Pdfjs>()
 
 const ZOOMS = [1, 1.5, 2, 3]
 
-export default function VisorPdf({ url, nombre, archivo, onClose }: { url: string; nombre: string; archivo: string; onClose: () => void }) {
+export default function VisorPdf({ url, respaldo, nombre, archivo, onClose }: { url: string; respaldo?: string; nombre: string; archivo: string; onClose: () => void }) {
   const [doc, setDoc] = useState<Doc | null>(null)
   const [bytes, setBytes] = useState<ArrayBuffer | null>(null)
   const [error, setError] = useState('')
+  const [detalle, setDetalle] = useState('') // motivo técnico, chiquito, para poder diagnosticar
   const [zoom, setZoom] = useState(0)
   const [ancho, setAncho] = useState(0)
   const cont = useRef<HTMLDivElement>(null)
@@ -28,16 +29,23 @@ export default function VisorPdf({ url, nombre, archivo, onClose }: { url: strin
     let vivo = true
     ;(async () => {
       try {
-        const r = await fetch(url)
-        if (!r.ok) throw new Error()
-        const b = await r.arrayBuffer()
-        const lib = await cargar()
-        const d = await lib.getDocument({ data: b.slice(0) }).promise
-        if (vivo) { setBytes(b); setDoc(d) }
-      } catch { if (vivo) setError('No se pudo abrir la lista de precios') }
+        let paso = 'descargar'
+        try {
+          // Directo; si el teléfono no lo puede bajar (permisos de la otra web), por el plan B del servidor
+          let r = await fetch(url).catch(() => null)
+          if ((!r || !r.ok) && respaldo) r = await fetch(respaldo).catch(() => null)
+          if (!r || !r.ok) throw new Error(`respuesta ${r?.status ?? 'sin conexión'}`)
+          const b = await r.arrayBuffer()
+          paso = 'cargar el visor'
+          const lib = await cargar()
+          paso = 'leer el PDF'
+          const d = await lib.getDocument({ data: b.slice(0) }).promise
+          if (vivo) { setBytes(b); setDoc(d) }
+        } catch (e) { throw new Error(`No se pudo ${paso}: ${(e as Error)?.message ?? e}`) }
+      } catch (e) { if (vivo) { setError('No se pudo abrir la lista de precios'); setDetalle((e as Error).message) } }
     })()
     return () => { vivo = false }
-  }, [url])
+  }, [url, respaldo])
 
   useEffect(() => {
     const medir = () => setAncho(cont.current?.clientWidth ?? 0)
@@ -70,7 +78,7 @@ export default function VisorPdf({ url, nombre, archivo, onClose }: { url: strin
         <button onClick={onClose} className={boton} title="Cerrar"><IconX size={20} className="mx-auto" /></button>
       </div>
       <div ref={cont} className="flex-1 overflow-auto" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-        {error ? <p className="text-white/70 text-center mt-16 px-6">{error}</p>
+        {error ? <div className="text-center mt-16 px-6"><p className="text-white/70">{error}</p>{detalle && <p className="text-white/35 text-[11px] mt-3 break-words">{detalle}</p>}</div>
           : !doc ? <p className="text-white/60 text-center mt-16">Abriendo la lista de precios…</p>
           : anchoPagina > 0 && (
             <div className="py-2 space-y-2" style={{ width: Math.max(anchoPagina + 16, ancho), }}>
