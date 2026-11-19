@@ -168,7 +168,7 @@ export async function semanasVacaciones(usuarioId: string, desde: string, hasta:
         if (!mias.size) continue // ese día no trabaja: su ausencia no le saca a nadie
         for (const fr of mias) {
           const otrasAusentes = [...(ausentes.get(f) ?? [])].filter(uid => (h.franjas(uid, f) ?? new Set([0, 1])).has(fr)).length
-          if (otrasAusentes >= CUPO_MANICURIA_FRANJA) { motivo = `Ya hay ${otrasAusentes} manicuras de tu turno de vacaciones el ${corta(f)} a la ${fr === 0 ? 'mañana' : 'tarde'}`; break }
+          if (otrasAusentes >= CUPO_MANICURIA_FRANJA) { motivo = 'Excede el número de manicuras de tu mismo turno'; break }
         }
       }
       return { lunes: l, domingo: sumarDias(l, 6), libre: !motivo, motivo, estimada }
