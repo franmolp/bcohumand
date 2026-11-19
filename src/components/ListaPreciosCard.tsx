@@ -2,12 +2,11 @@
 
 import { useState } from 'react'
 import { IconSparkles, IconChevronRight } from '@/components/ui/Icons'
-import FileViewer from '@/components/FileViewer'
+import VisorPdf from '@/components/VisorPdf'
 
 // Lista de precios vigente: la misma de la web de BCO Turnos (el último PDF armado en Catálogo →
-// Lista de precios). Se pide al tocar, así siempre es la actual.
-// En el celular se abre el PDF directo (el visor del teléfono es el que mejor lo muestra: un PDF dentro
-// de la página no se ve bien en iPhone ni en Android); en la compu, dentro del visor de la app.
+// Lista de precios). Se pide al tocar, así siempre es la actual, y se muestra dentro de la app
+// (no se ve la dirección del archivo).
 export default function ListaPreciosCard() {
   const [url, setUrl] = useState<string | null>(null)
   const [cargando, setCargando] = useState(false)
@@ -16,16 +15,11 @@ export default function ListaPreciosCard() {
   async function abrir() {
     if (cargando) return
     setCargando(true); setError('')
-    const celular = window.matchMedia('(pointer: coarse)').matches
-    // La pestaña se abre en el mismo toque (si no, el celular la bloquea) y después se le pone la dirección
-    const pestaña = celular ? window.open('', '_blank') : null
     try {
       const d = await fetch('/api/lista-precios').then(r => r.json())
-      if (!d.url) { pestaña?.close(); setError(d.error || 'No se pudo abrir la lista de precios'); return }
-      if (pestaña) pestaña.location.href = d.url
-      else if (celular) window.location.href = d.url // no se pudo abrir otra pestaña: se abre acá
-      else setUrl(d.url)
-    } catch { pestaña?.close(); setError('No se pudo abrir la lista de precios') }
+      if (d.url) setUrl(d.url)
+      else setError(d.error || 'No se pudo abrir la lista de precios')
+    } catch { setError('No se pudo abrir la lista de precios') }
     finally { setCargando(false) }
   }
 
@@ -45,9 +39,7 @@ export default function ListaPreciosCard() {
         <IconChevronRight size={16} className="text-white/60 shrink-0" />
       </button>
 
-      {url && (
-        <FileViewer url={url} name="Lista de precios" onClose={() => setUrl(null)} />
-      )}
+      {url && <VisorPdf url={url} nombre="Lista de precios" archivo="Lista de precios Beauty Co.pdf" onClose={() => setUrl(null)} />}
     </>
   )
 }

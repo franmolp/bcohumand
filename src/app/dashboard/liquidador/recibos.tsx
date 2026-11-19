@@ -6,6 +6,7 @@ import { IconPlus, IconFileText, IconCheck, IconAlertCircle, IconX, IconEye, Ico
 import { MESES } from '@/lib/liquidador'
 import type { SessionUser } from '@/types'
 import FileViewer from '@/components/FileViewer'
+import { cargarPdfjs } from '@/lib/pdfjs'
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -78,10 +79,7 @@ type PdfjsLib = {
 let _pdfjs: PdfjsLib | null = null
 async function getPdfjsLib(): Promise<PdfjsLib> {
   if (_pdfjs) return _pdfjs
-  const pdfjs = await import('pdfjs-dist')
-  ;(pdfjs as unknown as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc =
-    '/pdf.worker.min.mjs'
-  _pdfjs = pdfjs as unknown as PdfjsLib
+  _pdfjs = await cargarPdfjs<PdfjsLib>()
   return _pdfjs
 }
 
