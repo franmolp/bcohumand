@@ -40,6 +40,49 @@ async function traerDeTurnos(desde: string | null): Promise<DeTurnos> {
   if (!res.ok) throw new Error(`BCO Turnos ${res.status}: ${d.error ?? 'sin detalle'}`)
   return d
 }
+// BCO Turnos llegó a guardar la misma reseña dos veces (id viejo de SerpAPI + id de la API de Google): se deja una
+// sola por persona, día y estrellas. `alias`: id repetido → id que queda.
+function sinRepetidas(lista: DeTurnos['resenas']) {
+  const vistas = new Map<string, string>(), alias = new Map<string, string>(), quedan: DeTurnos['resenas'] = []
+  for (const r of lista) {
+    const k = `${normalizar(r.autor ?? '')}|${(r.fecha_iso ?? '').slice(0, 10)}|${r.estrellas}`
+    const ya = vistas.get(k)
+    if (ya) { alias.set(r.id, ya); continue }
+    vistas.set(k, r.id); quedan.push(r)
+  }
+  return { quedan, alias }
+}
+
+// Concurso del mes: lo que quedó de SerpAPI o repetido pasa a la reseña de Google que corresponde (conservando la
+// asignación hecha a mano) y lo que ya no está en Google se borra. Solo con la lista de BCO Turnos completa del mes.
+async function limpiarMenciones(mes: string, resenas: DeTurnos['resenas'], alias: Map<string, string>) {
+  if (!resenas.length) return { movidas: 0, borradas: 0 }
+  const ids = new Set(resenas.map(r => r.id))
+  const delMes = resenas.filter(r => (r.fecha_iso ?? '').slice(0, 7) === mes)
+  const porAutor = new Map<string, string[]>()
+  for (const r of delMes) { const k = normalizar(r.autor ?? ''); porAutor.set(k, [...(porAutor.get(k) ?? []), r.id]) }
+  const { data: filas } = await supabaseAdmin.from('google_menciones').select('review_key, author, asignados, revisado').eq('mes', mes)
+  const actuales = new Map((filas ?? []).map(f => [f.review_key as string, f]))
+  let movidas = 0, borradas = 0
+  for (const f of filas ?? []) {
+    const key = f.review_key as string
+    if (ids.has(key)) continue
+    const candidatas = porAutor.get(normalizar((f.author as string) ?? '')) ?? []
+    const destino = alias.get(key) ?? (candidatas.length === 1 ? candidatas[0] : null)
+    if (!destino) { await supabaseAdmin.from('google_menciones').delete().eq('review_key', key); actuales.delete(key); borradas++; continue }
+    const otra = actuales.get(destino)
+    if (otra) {
+      // Ya está la de Google: se le pasa la asignación revisada a mano (si la de Google no se revisó) y se borra la vieja
+      if (f.revisado && !otra.revisado) await supabaseAdmin.from('google_menciones').update({ asignados: f.asignados, revisado: true }).eq('review_key', destino)
+      await supabaseAdmin.from('google_menciones').delete().eq('review_key', key); actuales.delete(key); borradas++
+    } else {
+      await supabaseAdmin.from('google_menciones').update({ review_key: destino }).eq('review_key', key)
+      actuales.delete(key); actuales.set(destino, { ...f, review_key: destino }); movidas++
+    }
+  }
+  return { movidas, borradas }
+}
+
 const aResena = (r: DeTurnos['resenas'][number]): ResenaG => ({ review_id: r.id, user: { name: r.autor, thumbnail: r.foto ?? undefined }, rating: r.estrellas, iso_date: r.fecha_iso ?? undefined, date: '', snippet: r.texto })
 
 // Clave estable por reseña: cada persona deja como mucho una reseña por lugar, así
@@ -186,7 +229,8 @@ async function refrescar() {
   // Para el concurso alcanza desde el mes anterior al del concurso; el carrusel usa las más nuevas
   const desde = cfg0?.activo && cfg0.mes ? `${cfg0.mes}-01` : null
   const t = await traerDeTurnos(desde)
-  const pagina1 = t.resenas.map(aResena)
+  const { quedan, alias } = sinRepetidas(t.resenas)
+  const pagina1 = quedan.map(aResena)
   await supabaseAdmin.from('configuracion').upsert({ clave: 'google_lugar', valor: { data_id: null, rating: t.rating, total: t.total, en: new Date().toISOString() } satisfies LugarGoogle }, { onConflict: 'clave' })
 
   // Snapshot del carrusel (las 10 más nuevas 4-5★ con texto)
@@ -208,9 +252,12 @@ async function refrescar() {
   let camposSinComentario: string[] = []
   let leidas = 0
   let paginas = 0
+  let limpieza = { movidas: 0, borradas: 0 }
   try {
     const cfg = await getConcursoConfig()
     if (cfg.activo && cfg.mes) {
+      // Solo si la lista trae el mes completo (pedida desde el 1° del mes del concurso)
+      if (desde === `${cfg.mes}-01`) limpieza = await limpiarMenciones(cfg.mes, quedan, alias)
       const r = await acumularMenciones(pagina1, cfg.mes, cfg.aliases)
       mencionesNuevas = r.insertadas
       mencionesError = r.error
@@ -226,7 +273,7 @@ async function refrescar() {
     console.error('[concurso-google] acumular menciones falló:', e)
   }
 
-  return { updated: reviews.length, mencionesNuevas, mencionesTotal, mencionesError, camposSinComentario, leidas, paginas }
+  return { updated: reviews.length, mencionesNuevas, mencionesTotal, mencionesError, camposSinComentario, leidas, paginas, repetidasDeTurnos: alias.size, limpieza }
 }
 
 // Ruta standalone (debug/manual) — el cron de Vercel llama a /api/cron/diario
