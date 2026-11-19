@@ -447,36 +447,32 @@ function FormFields({
 // ─── Vacaciones por semanas y cupos ───────────────────────────────────────────
 
 interface SemanaVac { lunes: string; domingo: string; libre: boolean; motivo: string | null; estimada: boolean }
-type GrupoVac = 'manicuria' | 'peluqueria' | 'masajes' | 'recepcion' | null
-const REGLA_GRUPO: Record<string, string> = {
-  manicuria: 'Como máximo 2 manicuras de tu mismo turno de vacaciones a la vez.',
-  peluqueria: 'Como máximo 1 peluquera de vacaciones por semana.',
-  masajes: 'Como máximo 1 persona de masajes y depilación de vacaciones por semana.',
-  recepcion: 'Como máximo 1 recepcionista de vacaciones por semana.',
-}
+type DatosSemanas = { grupo: string | null; regla: string | null; duraciones: number[]; semanas: SemanaVac[] }
 const DIAS_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 const MESES_VAC = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 const fCorta = (f: string) => `${DIAS_CORTOS[new Date(f + 'T12:00:00Z').getUTCDay()]} ${Number(f.slice(8))}/${Number(f.slice(5, 7))}`
 
 function SelectorSemanas({ form, setForm }: { form: Form; setForm: (f: Form) => void }) {
-  const [datos, setDatos] = useState<{ grupo: GrupoVac; semanas: SemanaVac[] } | null>(null)
+  const [datos, setDatos] = useState<DatosSemanas | null>(null)
   const [error, setError] = useState('')
-  const [largo, setLargo] = useState<7 | 14>(() => calcDias(form.fecha_inicio, form.fecha_fin) === 14 ? 14 : 7)
+  const [largo, setLargo] = useState(() => Math.max(1, Math.round(calcDias(form.fecha_inicio, form.fecha_fin) / 7))) // semanas
   useEffect(() => {
     fetch('/api/vacaciones/semanas').then(r => r.json()).then(d => { if (d.semanas) setDatos(d); else setError(d.error || 'No se pudieron cargar las semanas') })
       .catch(() => setError('No se pudieron cargar las semanas'))
   }, [])
   const elegir = (inicio: string, fin: string) => setForm({ ...form, fecha_inicio: inicio, fecha_fin: fin })
-  const cambiarLargo = (n: 7 | 14) => { setLargo(n); setForm({ ...form, fecha_inicio: '', fecha_fin: '' }) }
+  const cambiarLargo = (n: number) => { setLargo(n); setForm({ ...form, fecha_inicio: '', fecha_fin: '' }) }
 
   if (error) return <p className="text-[13px] text-red-600">{error}</p>
   if (!datos) return <p className="text-[13px] text-[var(--text-muted)]">Buscando semanas disponibles…</p>
   const sem = datos.semanas
+  const duraciones = datos.duraciones?.length ? datos.duraciones : [1, 2]
+  const n = duraciones.includes(largo) ? largo : duraciones[0]
   const opciones = sem.map((s, i) => {
-    const ult = largo === 14 ? sem[i + 1] : s
-    if (!ult) return null
-    const bloqueada = !s.libre ? s : largo === 14 && !ult.libre ? ult : null
-    return { inicio: s.lunes, fin: ult.domingo, libre: !bloqueada, motivo: bloqueada?.motivo ?? null, estimada: s.estimada || ult.estimada }
+    const tramo = sem.slice(i, i + n)
+    if (tramo.length < n) return null
+    const bloqueada = tramo.find(x => !x.libre)
+    return { inicio: s.lunes, fin: tramo.at(-1)!.domingo, libre: !bloqueada, motivo: bloqueada?.motivo ?? null, estimada: tramo.some(x => x.estimada) }
   }).filter((o): o is NonNullable<typeof o> => !!o)
   const mesDe = (f: string) => MESES_VAC[Number(f.slice(5, 7)) - 1] + ' ' + f.slice(0, 4)
   return (
@@ -484,17 +480,19 @@ function SelectorSemanas({ form, setForm }: { form: Form; setForm: (f: Form) => 
       <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-50 border border-blue-100 rounded-xl">
         <IconAlertCircle size={14} className="text-blue-500 shrink-0 mt-0.5" />
         <p className="text-[12px] text-blue-700">
-          Las vacaciones se piden de <strong>Lunes a Domingo</strong>, por 1 o 2 semanas.{datos.grupo ? ` ${REGLA_GRUPO[datos.grupo]}` : ''} Las semanas en gris ya no tienen lugar.
+          Las vacaciones se piden de <strong>Lunes a Domingo</strong>, por {duraciones.length === 1 ? `${duraciones[0]} semana${duraciones[0] > 1 ? 's' : ''}` : `${duraciones.slice(0, -1).join(', ')} o ${duraciones.at(-1)} semanas`}.{datos.regla ? ` ${datos.regla}` : ''} Las semanas en gris no se pueden pedir.
         </p>
       </div>
-      <div className="flex bg-gray-100 rounded-xl p-0.5">
-        {([7, 14] as const).map(n => (
-          <button key={n} type="button" onClick={() => cambiarLargo(n)}
-            className={`flex-1 py-2 text-[12px] font-medium rounded-[10px] cursor-pointer transition-all ${largo === n ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
-            {n === 7 ? '1 semana (7 días)' : '2 semanas (14 días)'}
-          </button>
-        ))}
-      </div>
+      {duraciones.length > 1 && (
+        <div className="flex bg-gray-100 rounded-xl p-0.5">
+          {duraciones.map(d => (
+            <button key={d} type="button" onClick={() => cambiarLargo(d)}
+              className={`flex-1 py-2 text-[12px] font-medium rounded-[10px] cursor-pointer transition-all ${n === d ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+              {d === 1 ? '1 semana (7 días)' : `${d} semanas (${d * 7} días)`}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="max-h-80 overflow-y-auto rounded-xl border border-[var(--border)] divide-y divide-[var(--border)]">
         {opciones.map((o, i) => {
           const cabecera = i === 0 || mesDe(o.inicio) !== mesDe(opciones[i - 1].inicio) ? mesDe(o.inicio) : null
@@ -517,6 +515,116 @@ function SelectorSemanas({ form, setForm }: { form: Form; setForm: (f: Form) => 
           )
         })}
         {!opciones.length && <p className="px-3 py-4 text-[13px] text-[var(--text-muted)]">No hay semanas para elegir todavía.</p>}
+      </div>
+    </div>
+  )
+}
+
+// ─── Ajustes de vacaciones (admin/RRHH) ───────────────────────────────────────
+interface GrupoVacCfg { id: string; nombre: string; plural: string; equipos: number[]; cupo: number; por_turno: boolean }
+interface ReglasVac { semanas: number[]; hasta: string | null; grupos: GrupoVacCfg[]; cerradas: { desde: string; hasta: string; motivo: string }[] }
+const inputCls = 'h-10 px-3 bg-white border border-[var(--border)] rounded-xl text-[var(--text)] outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]'
+
+function AjustesVacaciones({ reglas, setReglas, equipos }: { reglas: ReglasVac; setReglas: (r: ReglasVac) => void; equipos: { id: number; nombre: string }[] }) {
+  const set = (c: Partial<ReglasVac>) => setReglas({ ...reglas, ...c })
+  const setGrupo = (i: number, c: Partial<GrupoVacCfg>) => set({ grupos: reglas.grupos.map((g, j) => j === i ? { ...g, ...c } : g) })
+  const setCerrada = (i: number, c: Partial<ReglasVac['cerradas'][number]>) => set({ cerradas: reglas.cerradas.map((x, j) => j === i ? { ...x, ...c } : x) })
+  const enOtroGrupo = (id: number, i: number) => reglas.grupos.some((g, j) => j !== i && g.equipos.includes(id))
+  return (
+    <div className="space-y-5 pt-4 border-t border-gray-100">
+      <div>
+        <p className="text-[15px] font-bold text-[var(--text)]">Vacaciones</p>
+        <p className="text-[12px] text-gray-400">Se piden de Lunes a Domingo. Lo que configures acá vale para lo que pidan las empleadas; Admin y HR pueden cargar excepciones.</p>
+      </div>
+
+      <div>
+        <label className="block text-[13px] font-semibold text-[var(--text)] mb-2">Duraciones permitidas</label>
+        <div className="flex flex-wrap gap-2">
+          {[1, 2, 3, 4].map(n => {
+            const on = reglas.semanas.includes(n)
+            return (
+              <button key={n} type="button" onClick={() => set({ semanas: on ? reglas.semanas.filter(x => x !== n) : [...reglas.semanas, n].sort() })}
+                className={`h-9 px-3 rounded-xl text-[13px] font-medium border cursor-pointer ${on ? 'bg-[var(--primary)] text-white border-[var(--primary)]' : 'bg-white text-gray-600 border-[var(--border)]'}`}>
+                {n === 1 ? '1 semana' : `${n} semanas`}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-[13px] font-semibold text-[var(--text)] mb-1">Se pueden pedir hasta</label>
+        <p className="text-[12px] text-gray-400 mb-2">Vacío: hasta el 31 de Marzo siguiente</p>
+        <div className="flex items-center gap-2">
+          <input type="date" value={reglas.hasta ?? ''} onChange={e => set({ hasta: e.target.value || null })} style={{ fontSize: 16 }} className={inputCls} />
+          {reglas.hasta && <button type="button" onClick={() => set({ hasta: null })} className="text-[12px] text-gray-500 underline cursor-pointer">Quitar</button>}
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-[13px] font-semibold text-[var(--text)] mb-1">Cupos por área</label>
+        <p className="text-[12px] text-gray-400 mb-2">Cuántas personas de esos equipos pueden estar de vacaciones a la vez. &quot;Por turno&quot;: se cuenta día por día según si trabajan a la mañana o a la tarde (para turnos rotativos). Los equipos sin área no tienen cupo.</p>
+        <div className="space-y-3">
+          {reglas.grupos.map((g, i) => (
+            <div key={g.id} className="border border-[var(--border)] rounded-2xl p-3 space-y-2.5">
+              <div className="flex items-center gap-2">
+                <input value={g.nombre} onChange={e => setGrupo(i, { nombre: e.target.value })} placeholder="Nombre del área" style={{ fontSize: 16 }} className={`${inputCls} flex-1 min-w-0 font-semibold`} />
+                <button type="button" onClick={() => set({ grupos: reglas.grupos.filter((_, j) => j !== i) })} className="p-2 text-gray-400 hover:text-red-500 cursor-pointer" title="Quitar área"><IconTrash size={16} /></button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {equipos.map(e => {
+                  const on = g.equipos.includes(e.id), ocupado = !on && enOtroGrupo(e.id, i)
+                  return (
+                    <button key={e.id} type="button" disabled={ocupado} onClick={() => setGrupo(i, { equipos: on ? g.equipos.filter(x => x !== e.id) : [...g.equipos, e.id] })}
+                      className={`h-8 px-2.5 rounded-lg text-[12px] border cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${on ? 'bg-[var(--primary-light)] text-[var(--primary)] border-[var(--primary)] font-semibold' : 'bg-white text-gray-500 border-[var(--border)]'}`}>
+                      {e.nombre}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-gray-600">
+                <label className="flex items-center gap-2">Máximo
+                  <input type="number" min={1} max={20} value={g.cupo} onChange={e => setGrupo(i, { cupo: Math.max(1, +e.target.value || 1) })} style={{ fontSize: 16 }} className={`${inputCls} w-16`} />
+                </label>
+                <label className="flex items-center gap-2">En los avisos:
+                  <input value={g.plural} onChange={e => setGrupo(i, { plural: e.target.value })} placeholder="ej. manicuras" title="Cómo se nombra a las personas del área (ej. Excede el número de manicuras…)" style={{ fontSize: 16 }} className={`${inputCls} w-36`} />
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={g.por_turno} onChange={e => setGrupo(i, { por_turno: e.target.checked })} className="w-4 h-4 accent-[var(--primary)]" />
+                  Por turno (mañana/tarde)
+                </label>
+              </div>
+              <p className="text-[11px] text-gray-400">{g.por_turno ? `Como máximo ${g.cupo} de vacaciones a la vez en el mismo turno.` : `Como máximo ${g.cupo} de vacaciones por semana.`}</p>
+            </div>
+          ))}
+          <button type="button" onClick={() => set({ grupos: [...reglas.grupos, { id: `g${Date.now()}`, nombre: '', plural: '', equipos: [], cupo: 1, por_turno: false }] })}
+            className="h-9 px-3 rounded-xl text-[13px] font-medium border border-dashed border-[var(--primary)] text-[var(--primary)] cursor-pointer">+ Agregar área</button>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-[13px] font-semibold text-[var(--text)] mb-1">Semanas cerradas</label>
+        <p className="text-[12px] text-gray-400 mb-2">Nadie puede pedir vacaciones en las semanas que toquen estas fechas (ej. Navidad y Año Nuevo).</p>
+        <div className="space-y-2">
+          {reglas.cerradas.map((c, i) => (
+            <div key={i} className="border border-[var(--border)] rounded-2xl p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <input value={c.motivo} onChange={e => setCerrada(i, { motivo: e.target.value })} placeholder="Motivo (ej. Navidad y Año Nuevo)" style={{ fontSize: 16 }} className={`${inputCls} flex-1 min-w-0`} />
+                <button type="button" onClick={() => set({ cerradas: reglas.cerradas.filter((_, j) => j !== i) })} className="p-2 text-gray-400 hover:text-red-500 cursor-pointer" title="Quitar"><IconTrash size={16} /></button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-[12px] text-gray-500">Desde
+                  <input type="date" value={c.desde} onChange={e => setCerrada(i, { desde: e.target.value })} style={{ fontSize: 16 }} className={`${inputCls} w-full mt-1`} />
+                </label>
+                <label className="text-[12px] text-gray-500">Hasta
+                  <input type="date" value={c.hasta} min={c.desde || undefined} onChange={e => setCerrada(i, { hasta: e.target.value })} style={{ fontSize: 16 }} className={`${inputCls} w-full mt-1`} />
+                </label>
+              </div>
+            </div>
+          ))}
+          <button type="button" onClick={() => set({ cerradas: [...reglas.cerradas, { desde: '', hasta: '', motivo: '' }] })}
+            className="h-9 px-3 rounded-xl text-[13px] font-medium border border-dashed border-[var(--primary)] text-[var(--primary)] cursor-pointer">+ Cerrar semanas</button>
+        </div>
       </div>
     </div>
   )
@@ -845,6 +953,9 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
   const [configModal, setConfigModal] = useState(false)
   const [configForm, setConfigForm] = useState(DEFAULT_CONFIG)
   const [configSaving, setConfigSaving] = useState(false)
+  const [reglasVac, setReglasVac] = useState<ReglasVac | null>(null) // reglas de vacaciones (se cargan al abrir Ajustes)
+  const [equiposVac, setEquiposVac] = useState<{ id: number; nombre: string }[]>([])
+  const [configError, setConfigError] = useState('')
 
   const [convirtiendo, setConvirtiendo] = useState(false)
 
@@ -905,15 +1016,24 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
 
   // ─── Guardar config de plazos ───
   async function saveConfig() {
-    setConfigSaving(true)
+    setConfigSaving(true); setConfigError('')
     const res = await fetch('/api/solicitudes/config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(configForm),
     })
     const d = await res.json()
+    let errVac = ''
+    if (res.ok && reglasVac) {
+      const rv = await fetch('/api/vacaciones/reglas', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reglasVac) })
+      const dv = await rv.json().catch(() => ({}))
+      if (!rv.ok) errVac = dv.error || 'No se pudieron guardar las reglas de vacaciones'
+    }
     setConfigSaving(false)
-    if (res.ok) { setConfig(d); setConfigModal(false); setToast('Ajustes guardados') }
+    if (!res.ok) { setConfigError(d.error || 'No se pudo guardar'); return }
+    setConfig(d)
+    if (errVac) { setConfigError(errVac); return }
+    setConfigModal(false); setToast('Ajustes guardados')
   }
 
   // ─── Convertir manualmente ausencias por salud sin certificado (mes anterior) ───
@@ -1209,7 +1329,11 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
           )}
           {isAdminOrHR && (
             <button
-              onClick={() => { setConfigForm(config); setConfigModal(true) }}
+              onClick={() => {
+                setConfigForm(config); setConfigError(''); setReglasVac(null); setConfigModal(true)
+                fetch('/api/vacaciones/reglas').then(r => r.json()).then(d => { if (d.semanas) setReglasVac(d) }).catch(() => {})
+                fetch('/api/equipos').then(r => r.json()).then(d => { if (Array.isArray(d)) setEquiposVac(d) }).catch(() => {})
+              }}
               className="p-2 text-gray-400 hover:text-[var(--primary)] hover:bg-[var(--primary-light)] rounded-xl transition-colors cursor-pointer"
               title="Ajustes de solicitudes"
             >
@@ -1531,6 +1655,8 @@ export default function SolicitudesClient({ user }: { user: SessionUser }) {
             <p><span className="font-medium text-gray-700">Ausencia por Salud:</span> se puede pedir a partir de hoy</p>
             <p><span className="font-medium text-gray-700">Admin y HR:</span> pueden crear cualquier solicitud sin restricciones de plazo</p>
           </div>
+          {reglasVac ? <AjustesVacaciones reglas={reglasVac} setReglas={setReglasVac} equipos={equiposVac} /> : <div className="py-4 flex justify-center"><Spinner /></div>}
+          {configError && <p className="text-[13px] text-red-600">{configError}</p>}
         </div>
       </Modal>
 

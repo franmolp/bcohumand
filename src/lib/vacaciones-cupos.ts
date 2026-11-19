@@ -2,31 +2,55 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { toMin, turnosDeTipo } from '@/lib/gaps'
 
 // ─── Cupos de vacaciones ─────────────────────────────────────────────────────────
-// Reglas (reglamento de vacaciones):
-//  - Se piden 7 o 14 días corridos, de lunes a domingo (las excepciones las carga admin/RRHH).
-//  - Manicuría: como máximo 2 manicuras de vacaciones en la MISMA franja (mañana/tarde) del mismo día.
-//    Como los turnos rotan, se mira día por día con el horario programado de cada una: solo se cruzan
-//    los días y franjas en que de verdad hubieran trabajado juntas.
-//  - Peluquería, Recepción y Masajes+Depilación (un solo grupo): como máximo 1 persona por semana.
-//  - Cuentan las vacaciones aprobadas y las pendientes (se respeta el orden en que se pidieron:
-//    la que pide después ya ve la semana ocupada).
-//  - Para las semanas sin horario cargado todavía (se cargan 90 días adelante) se estima con el
-//    patrón de las últimas semanas de cada persona (detecta rotaciones de 1 a 4 semanas).
+// Las reglas se configuran en Solicitudes → Ajustes (configuracion 'vacaciones_reglas'):
+//  - Duraciones permitidas (1, 2… semanas, siempre de lunes a domingo). Las excepciones las carga admin/RRHH.
+//  - Grupos con cupo: equipos que comparten cupo (ej. Masajes + Depilación) y cuántas personas pueden estar de
+//    vacaciones a la vez. "Por turno": se mira día por día y franja (mañana/tarde) con el horario programado de
+//    cada una (con turnos rotativos solo se cruzan donde de verdad hubieran trabajado juntas); si no, por semana.
+//  - Semanas cerradas (ej. Navidad y Año Nuevo): nadie puede pedirlas.
+//  - Cuentan las vacaciones aprobadas y las pendientes (se respeta el orden en que se pidieron).
+//  - Para las semanas sin horario cargado todavía (se cargan 90 días adelante) se estima con el patrón de las
+//    últimas semanas de cada persona (detecta rotaciones de 1 a 4 semanas).
 
-export type Grupo = 'manicuria' | 'peluqueria' | 'masajes' | 'recepcion'
-const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-export function grupoVacaciones(equipo: string | null | undefined): Grupo | null {
-  const n = norm(equipo ?? '')
-  if (n.includes('peluq')) return 'peluqueria'
-  if (n.includes('masaj') || n.includes('depilac')) return 'masajes'
-  if (n.includes('recep')) return 'recepcion'
-  if (['manic', 'unas', 'manos', 'pedic', 'podolog'].some(k => n.includes(k))) return 'manicuria'
-  return null
+export interface GrupoCupo { id: string; nombre: string; plural: string; equipos: number[]; cupo: number; por_turno: boolean }
+export interface SemanaCerrada { desde: string; hasta: string; motivo: string }
+export interface ReglasVacaciones { semanas: number[]; hasta: string | null; grupos: GrupoCupo[]; cerradas: SemanaCerrada[] }
+export const CLAVE_REGLAS = 'vacaciones_reglas'
+
+const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+// Grupos iniciales (antes de que se configure nada), según el nombre de cada equipo
+function gruposIniciales(equipos: { id: number; nombre: string }[]): GrupoCupo[] {
+  const base = [
+    { id: 'manicuria', nombre: 'Manicuría', plural: 'manicuras', cupo: 2, por_turno: true, claves: ['manic', 'unas', 'manos', 'pedic', 'podolog'] },
+    { id: 'peluqueria', nombre: 'Peluquería', plural: 'peluqueras', cupo: 1, por_turno: false, claves: ['peluq'] },
+    { id: 'masajes', nombre: 'Masajes y depilación', plural: 'masajistas y depiladoras', cupo: 1, por_turno: false, claves: ['masaj', 'depilac'] },
+    { id: 'recepcion', nombre: 'Recepción', plural: 'recepcionistas', cupo: 1, por_turno: false, claves: ['recep'] },
+  ]
+  const usados = new Set<number>()
+  return base.map(({ claves, ...g }) => {
+    const ids = equipos.filter(e => !usados.has(e.id) && claves.some(k => norm(e.nombre).includes(k))).map(e => e.id)
+    ids.forEach(i => usados.add(i))
+    return { ...g, equipos: ids }
+  }).filter(g => g.equipos.length)
 }
-const CUPO_MANICURIA_FRANJA = 2
-const NOMBRE_GRUPO: Record<Exclude<Grupo, 'manicuria'>, string> = {
-  peluqueria: 'peluqueras', masajes: 'masajistas y depiladoras', recepcion: 'recepcionistas',
+
+export async function leerReglas(): Promise<ReglasVacaciones> {
+  const [{ data }, { data: equipos }] = await Promise.all([
+    supabaseAdmin.from('configuracion').select('valor').eq('clave', CLAVE_REGLAS).maybeSingle(),
+    supabaseAdmin.from('equipos').select('id, nombre'),
+  ])
+  const v = data?.valor as Partial<ReglasVacaciones> | null
+  return {
+    semanas: Array.isArray(v?.semanas) && v!.semanas.length ? v!.semanas : [1, 2],
+    hasta: v?.hasta ?? null,
+    grupos: Array.isArray(v?.grupos) ? v!.grupos : gruposIniciales((equipos ?? []) as { id: number; nombre: string }[]),
+    cerradas: Array.isArray(v?.cerradas) ? v!.cerradas : [],
+  }
 }
+
+// Texto de la regla para quien pide (sin nombres)
+export const textoRegla = (g: GrupoCupo) =>
+  `Como máximo ${g.cupo === 1 ? `una persona de ${g.nombre}` : `${g.cupo} ${g.plural}`} de vacaciones ${g.por_turno ? 'a la vez en el mismo turno' : 'por semana'}.`
 
 export interface Semana {
   lunes: string
@@ -113,22 +137,29 @@ async function cargarHorarios(uids: string[], hasta: string): Promise<Horarios> 
 
 // Semanas (lunes a domingo) entre `desde` y `hasta` para pedir vacaciones, con si hay cupo para esta persona.
 // `excluirId`: solicitud que no se cuenta (la propia, si se está revisando una ya cargada).
-export async function semanasVacaciones(usuarioId: string, desde: string, hasta: string, excluirId?: string): Promise<{ grupo: Grupo | null; semanas: Semana[] }> {
+export async function semanasVacaciones(usuarioId: string, desde: string, hasta: string, excluirId?: string, reglasDadas?: ReglasVacaciones): Promise<{ grupo: GrupoCupo | null; semanas: Semana[]; reglas: ReglasVacaciones }> {
+  const reglas = reglasDadas ?? await leerReglas()
   const primerLunes = diaSemana(desde) === 0 ? desde : sumarDias(lunesDe(desde), 7)
   const lunesLista: string[] = []
   for (let l = primerLunes; l <= hasta; l = sumarDias(l, 7)) lunesLista.push(l)
   const fin = lunesLista.length ? sumarDias(lunesLista.at(-1)!, 6) : hasta
 
-  const { data: yo } = await supabaseAdmin.from('usuarios').select('id, equipo:equipos(nombre)').eq('id', usuarioId).single()
-  const grupo = grupoVacaciones((yo?.equipo as unknown as { nombre: string } | null)?.nombre)
-  const todasLibres = () => lunesLista.map(l => ({ lunes: l, domingo: sumarDias(l, 6), libre: true, motivo: null, estimada: false }))
-  if (!grupo) return { grupo, semanas: todasLibres() }
+  // Semanas cerradas para todos (ej. Navidad y Año Nuevo): cualquier semana que toque el rango cerrado
+  const cerrada = (l: string) => reglas.cerradas.find(c => c.desde && c.desde <= sumarDias(l, 6) && (c.hasta || c.desde) >= l)
+  const armar = (l: string, motivo: string | null, estimada = false): Semana => {
+    const c = cerrada(l)
+    return { lunes: l, domingo: sumarDias(l, 6), libre: !c && !motivo, motivo: c ? `Semana cerrada${c.motivo ? `: ${c.motivo}` : ''}` : motivo, estimada }
+  }
+
+  const { data: yo } = await supabaseAdmin.from('usuarios').select('id, equipo_id').eq('id', usuarioId).single()
+  const grupo = reglas.grupos.find(g => yo?.equipo_id != null && g.equipos.includes(yo.equipo_id as number)) ?? null
+  const todasLibres = () => lunesLista.map(l => armar(l, null))
+  if (!grupo) return { grupo, semanas: todasLibres(), reglas }
 
   // Compañeras del mismo grupo (activas) y sus vacaciones aprobadas o pendientes en el rango
-  const { data: usuarios } = await supabaseAdmin.from('usuarios').select('id, equipo:equipos(nombre)').eq('estado_cuenta', 'activo')
-  const grupoIds = (usuarios ?? []).filter(u => grupoVacaciones((u.equipo as unknown as { nombre: string } | null)?.nombre) === grupo).map(u => u.id as string)
-  const otras = grupoIds.filter(id => id !== usuarioId)
-  if (!otras.length) return { grupo, semanas: todasLibres() }
+  const { data: usuarios } = await supabaseAdmin.from('usuarios').select('id').eq('estado_cuenta', 'activo').in('equipo_id', grupo.equipos.length ? grupo.equipos : [-1])
+  const otras = (usuarios ?? []).map(u => u.id as string).filter(id => id !== usuarioId)
+  if (!otras.length) return { grupo, semanas: todasLibres(), reglas }
   let q = supabaseAdmin.from('solicitudes').select('id, usuario_id, fecha_inicio, fecha_fin')
     .eq('tipo', 'Vacaciones').in('estado', ['pending', 'approved']).in('usuario_id', otras)
     .lte('fecha_inicio', fin).or(`fecha_fin.gte.${primerLunes},fecha_fin.is.null`)
@@ -144,21 +175,23 @@ export async function semanasVacaciones(usuarioId: string, desde: string, hasta:
     }
   }
 
-  if (grupo !== 'manicuria') {
-    // 1 persona por semana: alcanza con que otra del grupo tenga algún día de vacaciones esa semana
+  const cupo = Math.max(1, grupo.cupo || 1)
+  if (!grupo.por_turno) {
+    // Por semana: cuántas otras del grupo tienen algún día de vacaciones esa semana
     return {
-      grupo,
+      grupo, reglas,
       semanas: lunesLista.map(l => {
-        const ocupada = Array.from({ length: 7 }, (_, i) => sumarDias(l, i)).some(f => (ausentes.get(f)?.size ?? 0) > 0)
-        return { lunes: l, domingo: sumarDias(l, 6), libre: !ocupada, motivo: ocupada ? `Excede el número de ${NOMBRE_GRUPO[grupo]} por semana` : null, estimada: false }
+        const enLaSemana = new Set<string>()
+        for (let i = 0; i < 7; i++) for (const uid of ausentes.get(sumarDias(l, i)) ?? []) enLaSemana.add(uid)
+        return armar(l, enLaSemana.size >= cupo ? `Excede el número de ${grupo.plural} por semana` : null)
       }),
     }
   }
 
-  // Manicuría: día por día y franja por franja
+  // Por turno: día por día y franja por franja
   const h = await cargarHorarios([usuarioId, ...otras], fin)
   return {
-    grupo,
+    grupo, reglas,
     semanas: lunesLista.map(l => {
       let motivo: string | null = null, estimada = false
       for (let i = 0; i < 7 && !motivo; i++) {
@@ -168,28 +201,37 @@ export async function semanasVacaciones(usuarioId: string, desde: string, hasta:
         if (!mias.size) continue // ese día no trabaja: su ausencia no le saca a nadie
         for (const fr of mias) {
           const otrasAusentes = [...(ausentes.get(f) ?? [])].filter(uid => (h.franjas(uid, f) ?? new Set([0, 1])).has(fr)).length
-          if (otrasAusentes >= CUPO_MANICURIA_FRANJA) { motivo = 'Excede el número de manicuras de tu mismo turno'; break }
+          if (otrasAusentes >= cupo) { motivo = `Excede el número de ${grupo.plural} de tu mismo turno`; break }
         }
       }
-      return { lunes: l, domingo: sumarDias(l, 6), libre: !motivo, motivo, estimada }
+      return armar(l, motivo, estimada)
     }),
   }
 }
 
-// Hasta cuándo se ofrecen semanas: al menos hasta el 31 de marzo siguiente
-export function horizonteVacaciones(hoy: string) {
+// Hasta cuándo se ofrecen semanas: la fecha configurada o, si no hay, el 31 de marzo siguiente
+export function horizonteVacaciones(hoy: string, reglas?: ReglasVacaciones) {
+  if (reglas?.hasta && reglas.hasta > hoy) return reglas.hasta
   const anio = Number(hoy.slice(0, 4)), mes = Number(hoy.slice(5, 7))
   return `${mes >= 4 ? anio + 1 : anio}-03-31`
 }
 
-// Valida un pedido de vacaciones de una empleada: lunes a domingo, 7 o 14 días, y con cupo en cada semana
+const textoDuraciones = (semanas: number[]) => {
+  const d = [...semanas].sort((a, b) => a - b).map(n => `${n * 7}`)
+  return d.length === 1 ? d[0] : `${d.slice(0, -1).join(', ')} o ${d.at(-1)}`
+}
+
+// Valida un pedido de vacaciones de una empleada: lunes a domingo, duración permitida, y con cupo en cada semana
 export async function validarPedidoVacaciones(usuarioId: string, inicio: string, fin: string | null): Promise<string | null> {
+  const reglas = await leerReglas()
   const finReal = fin ?? inicio
   const dias = Math.round((d0(finReal).getTime() - d0(inicio).getTime()) / 864e5) + 1
-  if (diaSemana(inicio) !== 0 || diaSemana(finReal) !== 6 || (dias !== 7 && dias !== 14)) {
-    return 'Las vacaciones se piden de Lunes a Domingo, por 7 o 14 días corridos'
+  if (diaSemana(inicio) !== 0 || diaSemana(finReal) !== 6 || !reglas.semanas.includes(dias / 7)) {
+    return `Las vacaciones se piden de Lunes a Domingo, por ${textoDuraciones(reglas.semanas)} días corridos`
   }
-  const { semanas } = await semanasVacaciones(usuarioId, inicio, finReal)
+  const { semanas } = await semanasVacaciones(usuarioId, inicio, finReal, undefined, reglas)
   const ocupada = semanas.find(s => !s.libre)
-  return ocupada ? `No hay cupo la semana del ${corta(ocupada.lunes)}: ${ocupada.motivo}` : null
+  if (!ocupada) return null
+  const c = reglas.cerradas.find(x => x.desde <= ocupada.domingo && (x.hasta || x.desde) >= ocupada.lunes)
+  return c ? `La semana del ${corta(ocupada.lunes)} está cerrada${c.motivo ? ` (${c.motivo})` : ''}` : `No hay cupo la semana del ${corta(ocupada.lunes)}: ${ocupada.motivo}`
 }

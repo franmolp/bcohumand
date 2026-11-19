@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { semanasVacaciones, horizonteVacaciones, sumarDias } from '@/lib/vacaciones-cupos'
+import { semanasVacaciones, horizonteVacaciones, sumarDias, leerReglas, textoRegla } from '@/lib/vacaciones-cupos'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     const { data } = await supabaseAdmin.from('configuracion').select('valor').eq('clave', 'solicitudes_config').maybeSingle()
     desde = sumarDias(hoy, (data?.valor as { vacaciones_min_dias?: number } | null)?.vacaciones_min_dias ?? 15)
   }
-  const r = await semanasVacaciones(uid, desde, horizonteVacaciones(hoy))
-  return NextResponse.json(r)
+  const reglas = await leerReglas()
+  const r = await semanasVacaciones(uid, desde, horizonteVacaciones(hoy, reglas), undefined, reglas)
+  return NextResponse.json({ grupo: r.grupo?.nombre ?? null, regla: r.grupo ? textoRegla(r.grupo) : null, duraciones: reglas.semanas, semanas: r.semanas })
 }
