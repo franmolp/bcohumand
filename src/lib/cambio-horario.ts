@@ -5,7 +5,7 @@
 // - compensacion: no viene el día fecha_inicio, y el día fecha_compensacion se le suman las horas pedidas
 //   (si ese día ya trabajaba de 15 a 20 y pide de 9 a 20, se le suma de 9 a 15).
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { defaultCapacity, findGapsForDay, isMasajistaODepiladora, isPeluqueria, isRecepcion, overlaps, restarAprobados, toMin, minToStr } from '@/lib/gaps'
+import { defaultCapacity, findGapsForDay, isMasajistaODepiladora, isPeluqueria, isRecepcion, ocupacionDelDia, toMin, minToStr } from '@/lib/gaps'
 import { getAusenciasOcupacion } from '@/lib/ausencias'
 
 type Sol = { id: string; usuario_id: string; tipo: string; estado?: string; subtipo_horario: string | null; fecha_inicio: string; fecha_compensacion: string | null; horario_nuevo: string | null; horario_previo?: Record<string, Fila[]> | null }
@@ -50,7 +50,8 @@ export async function evaluarCambio(s: Sol): Promise<{ posible: boolean; mensaje
   const ids = [...new Set([...(miembros.data ?? []).map(m => m.id), s.usuario_id])]
   const [hor, pue, ausencias] = await Promise.all([
     supabaseAdmin.from('horarios_base').select('usuario_id, inicio_base, fin_base').eq('fecha', d.dia).in('usuario_id', ids),
-    supabaseAdmin.from('solicitudes_puesto').select('usuario_id, hora_inicio, hora_fin, lane').eq('fecha', d.dia).eq('estado', 'approved').in('usuario_id', ids),
+    // Puestos aprobados en las mesas de su equipo (de quien sea: también los pide gente de otros equipos)
+    yo?.equipo_id ? supabaseAdmin.from('solicitudes_puesto').select('usuario_id, hora_inicio, hora_fin').eq('fecha', d.dia).eq('estado', 'approved').eq('equipo_id', yo.equipo_id) : Promise.resolve({ data: [] as { usuario_id: string; hora_inicio: string; hora_fin: string }[] }),
     // Quien está ausente aprobado ese día no ocupa lugar: su mesa cuenta como libre.
     getAusenciasOcupacion(d.dia, d.dia),
   ])
@@ -58,9 +59,11 @@ export async function evaluarCambio(s: Sol): Promise<{ posible: boolean; mensaje
   const propios = turnos.filter(t => t.usuario_id === s.usuario_id).map(t => ({ inicio: toMin(t.inicio), fin: toMin(t.fin) }))
   // Mismo día: su turno de ese día se reemplaza, así que no ocupa lugar; compensación: lo conserva
   const delEquipo = s.subtipo_horario === 'compensacion' ? turnos : turnos.filter(t => t.usuario_id !== s.usuario_id)
-  const aprobados = (pue.data ?? []).filter(p => !turnos.some(t => t.usuario_id === p.usuario_id && overlaps(toMin(hm(p.hora_inicio)), toMin(hm(p.hora_fin)), toMin(t.inicio), toMin(t.fin))))
-    .map(p => ({ lane: p.lane, start: toMin(hm(p.hora_inicio)), end: toMin(hm(p.hora_fin)) }))
-  const libres = restarAprobados(findGapsForDay(delEquipo, capacidad, 1), aprobados, 1)
+  // Ocupación real del día (turnos base + puestos aprobados, unidos por persona), igual que la vista de Ocupación.
+  // Mismo día: los puestos aprobados de quien pide también se liberan (cambia todo su horario de ese día).
+  const aprobados = (pue.data ?? []).filter(p => s.subtipo_horario === 'compensacion' || p.usuario_id !== s.usuario_id)
+    .map(p => ({ usuario_id: p.usuario_id as string, inicio: hm(p.hora_inicio), fin: hm(p.hora_fin) }))
+  const libres = findGapsForDay(ocupacionDelDia(delEquipo, aprobados), capacidad, 1)
   const piezas = tramosNuevos(s, d, propios)
   if (!piezas.length) return { posible: true, mensaje: `${fmt(d.dia)[0].toUpperCase()}${fmt(d.dia).slice(1)} ya trabaja en ese horario: no hace falta lugar extra.` }
   const falta = piezas.find(p => !libres.some(g => g.start <= p.start && g.end >= p.end))

@@ -173,6 +173,32 @@ function tramosConCupo(
 }
 
 // Huecos >= MIN_GAP_MINUTOS por carril, para un solo día de un solo equipo.
+// Ocupación real de un día, igual que la vista de Ocupación del Espacio de trabajo: los turnos base más los
+// puestos aprobados, unidos por persona (una persona ocupa UNA sola mesa aunque su base y un puesto aprobado se
+// toquen o se pisen). Un puesto aprobado que ya quedó dentro del turno base de esa persona no suma nada.
+// Así los huecos salen de la ocupación de verdad: antes los aprobados se descontaban del número de mesa
+// guardado al aprobarlos, y si las mesas se reacomodaban quedaba libre otra mesa que en realidad estaba ocupada.
+export function ocupacionDelDia(
+  base: { usuario_id: string; inicio: string; fin: string }[],
+  aprobados: { usuario_id: string; inicio: string; fin: string }[],
+): { usuario_id: string; inicio: string; fin: string }[] {
+  const vigentes = aprobados.filter(a => !base.some(t => t.usuario_id === a.usuario_id && toMin(t.inicio) <= toMin(a.inicio) && toMin(t.fin) >= toMin(a.fin)))
+  const porPersona = new Map<string, { usuario_id: string; inicio: string; fin: string }[]>()
+  for (const t of [...base, ...vigentes]) {
+    if (!porPersona.has(t.usuario_id)) porPersona.set(t.usuario_id, [])
+    porPersona.get(t.usuario_id)!.push(t)
+  }
+  const out: { usuario_id: string; inicio: string; fin: string }[] = []
+  for (const lista of porPersona.values()) {
+    let cur: { usuario_id: string; inicio: string; fin: string } | null = null
+    for (const t of [...lista].sort((a, b) => toMin(a.inicio) - toMin(b.inicio))) {
+      if (cur && toMin(t.inicio) <= toMin(cur.fin)) { if (toMin(t.fin) > toMin(cur.fin)) cur.fin = t.fin }
+      else { cur = { usuario_id: t.usuario_id, inicio: t.inicio, fin: t.fin }; out.push(cur) }
+    }
+  }
+  return out
+}
+
 export function findGapsForDay<T extends { inicio: string; fin: string }>(
   shifts: T[],
   capacity: number,

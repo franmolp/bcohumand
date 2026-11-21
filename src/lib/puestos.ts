@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { tipoRecurso, defaultCapacity, findGapsForDay, toMin, minToStr, overlaps, restarAprobados, decomponerGap, minGapParaEquipo, MIN_GAP_CONTIGUO, contiguidadConTurno, turnosDeTipo, type TipoContiguidad } from '@/lib/gaps'
+import { tipoRecurso, defaultCapacity, findGapsForDay, toMin, minToStr, overlaps, ocupacionDelDia, decomponerGap, minGapParaEquipo, MIN_GAP_CONTIGUO, contiguidadConTurno, turnosDeTipo, type TipoContiguidad } from '@/lib/gaps'
 import { getAusenciasOcupacion } from '@/lib/ausencias'
 
 function addDays(date: string, n: number): string {
@@ -178,8 +178,11 @@ export async function getPuestosDisponibles(
 
   for (const [fecha, shiftsDia] of turnosPorFecha.entries()) {
     if (diasCerrados.has(fecha)) continue // feriado / local cerrado: no se ofrecen puestos
-    const gapsCrudos = findGapsForDay(shiftsDia, capacity, piso)
     const solicitudesDia = solicitudesPorFecha.get(fecha) ?? []
+    // Huecos sobre la ocupación real: turnos base + puestos aprobados, unidos por persona
+    const ocupacion = ocupacionDelDia(shiftsDia, solicitudesDia.filter(s => s.estado === 'approved')
+      .map(s => ({ usuario_id: s.usuario_id, inicio: s.hora_inicio.slice(0, 5), fin: s.hora_fin.slice(0, 5) })))
+    const gapsLibres = findGapsForDay(ocupacion, capacity, piso)
 
     // "Turnos propios" para no ofrecer huecos que se pisen: los reales de Fresha
     // más los puestos que ya me aprobaron ese mismo día — si no, después de que
@@ -194,22 +197,6 @@ export async function getPuestosDisponibles(
     ]
     const misTurnosMin = misTurnosDia.map(t => ({ inicio: toMin(t.inicio), fin: toMin(t.fin) }))
 
-    // Resta lo ya aprobado (puede partir un hueco en dos) antes de ofrecer nada.
-    // Ignora solicitudes aprobadas OBSOLETAS: si un turno regular (horarios_base) ya
-    // CONTIENE entero lo que pidió, la solicitud quedó vieja (ej. tras formalizarse su
-    // horario pasó a día completo) y no debe seguir ocupando el carril. OJO: tiene que
-    // contenerlo ENTERO, no apenas pisarse — si la base es 13–20 y el puesto aprobado
-    // 09–14:30, la base NO cubre la mañana, así que el puesto sigue ocupando esa mesa
-    // (si lo descartáramos, la mañana figuraría libre y se la ofreceríamos a otra).
-    const turnosDia = turnosPorFecha.get(fecha) ?? []
-    const aprobadosDia = solicitudesDia
-      .filter(s => s.estado === 'approved')
-      .filter(s => {
-        const ini = toMin(s.hora_inicio.slice(0, 5)), fin = toMin(s.hora_fin.slice(0, 5))
-        return !turnosDia.some(t => t.usuario_id === s.usuario_id && toMin(t.inicio) <= ini && toMin(t.fin) >= fin)
-      })
-      .map(s => ({ lane: s.lane, start: toMin(s.hora_inicio.slice(0, 5)), end: toMin(s.hora_fin.slice(0, 5)) }))
-    const gapsLibres = restarAprobados(gapsCrudos, aprobadosDia, piso)
 
     // Descompone en turnos fijos (mañana/tarde) cuando el hueco cubre uno entero, para no
     // ofrecer "todo el día" como un solo bloque gigante; y fusiona por carril para no mostrar

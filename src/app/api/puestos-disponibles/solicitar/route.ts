@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { defaultCapacity, findGapsForDay, restarAprobados, toMin, minToStr, overlaps, conArticulo, minGapParaEquipo, MIN_GAP_CONTIGUO, esContiguoAturno } from '@/lib/gaps'
+import { defaultCapacity, findGapsForDay, ocupacionDelDia, toMin, minToStr, overlaps, conArticulo, minGapParaEquipo, MIN_GAP_CONTIGUO, esContiguoAturno } from '@/lib/gaps'
 import { fmtFechaLarga } from '@/lib/fecha'
 import { resolverAccesoPuestos } from '@/lib/puestos'
 import { getAusenciasOcupacion } from '@/lib/ausencias'
@@ -74,23 +74,14 @@ export async function POST(req: NextRequest) {
 
   const solicitudesExistentes = (solicitudesRes.data ?? []) as { id: string; usuario_id: string; hora_inicio: string; hora_fin: string; lane: number; estado: string }[]
 
-  // Revalidar server-side que el hueco sigue libre — nunca confiar en lo que mandó el cliente.
-  // Se resta lo ya aprobado (puede haber partido un hueco en dos) y se busca algún carril que
-  // todavía contenga completo el horario pedido. Se busca desde el piso corto (1hs).
+  // Revalidar server-side que el hueco sigue libre — nunca confiar en lo que mandó el cliente. Se calcula sobre la
+  // ocupación real (turnos base + puestos aprobados, unidos por persona), igual que la vista de disponibles.
+  // Se busca desde el piso corto (1hs).
   const minGap = minGapParaEquipo(equipoRow.nombre)
   const piso = Math.min(minGap, MIN_GAP_CONTIGUO)
-  const gapsCrudos = findGapsForDay(shiftsDia, capacity, piso)
-  const aprobadosDia = solicitudesExistentes
-    .filter(s => s.estado === 'approved')
-    // Ignora solicitudes aprobadas OBSOLETAS (misma lógica que /lib/puestos y la vista
-    // de Ocupación): solo si un turno regular CONTIENE entero lo que pidió, la solicitud
-    // quedó vieja. Si apenas se pisa parcialmente, el puesto sigue ocupando el carril.
-    .filter(s => {
-      const ini = toMin(s.hora_inicio.slice(0, 5)), fin = toMin(s.hora_fin.slice(0, 5))
-      return !shiftsDia.some(t => t.usuario_id === s.usuario_id && toMin(t.inicio) <= ini && toMin(t.fin) >= fin)
-    })
-    .map(s => ({ lane: s.lane, start: toMin(s.hora_inicio.slice(0, 5)), end: toMin(s.hora_fin.slice(0, 5)) }))
-  const gapsLibres = restarAprobados(gapsCrudos, aprobadosDia, piso)
+  const ocupacion = ocupacionDelDia(shiftsDia, solicitudesExistentes.filter(s => s.estado === 'approved')
+    .map(s => ({ usuario_id: s.usuario_id, inicio: s.hora_inicio.slice(0, 5), fin: s.hora_fin.slice(0, 5) })))
+  const gapsLibres = findGapsForDay(ocupacion, capacity, piso)
   const lanesDisponibles = [...new Set(
     gapsLibres.filter(g => g.start <= start && g.end >= end).map(g => g.lane)
   )]

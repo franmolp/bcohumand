@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { tipoRecurso, defaultCapacity, findGapsForDay, restarAprobados, decomponerGap, toMin, minGapParaEquipo } from '@/lib/gaps'
+import { tipoRecurso, defaultCapacity, findGapsForDay, ocupacionDelDia, decomponerGap, minGapParaEquipo } from '@/lib/gaps'
 import { getEquiposHabilitadosPuestos } from '@/lib/puestos'
 import { getAusenciasOcupacion } from '@/lib/ausencias'
 import { crearNotificaciones, getUserIdsByEquipo } from '@/lib/notificaciones'
@@ -49,7 +49,7 @@ async function enviarAvisoSemanal() {
     const [horariosRes, solicitudesRes] = await Promise.all([
       supabaseAdmin.from('horarios_base').select('usuario_id, fecha, inicio_base, fin_base')
         .in('usuario_id', miembroIds).gte('fecha', lunes).lte('fecha', sabado),
-      supabaseAdmin.from('solicitudes_puesto').select('fecha, lane, hora_inicio, hora_fin')
+      supabaseAdmin.from('solicitudes_puesto').select('fecha, usuario_id, hora_inicio, hora_fin')
         .eq('equipo_id', equipo.id).eq('estado', 'approved').gte('fecha', lunes).lte('fecha', sabado),
     ])
 
@@ -62,20 +62,19 @@ async function enviarAvisoSemanal() {
       turnosPorFecha.get(f)!.push({ usuario_id: h.usuario_id as string, inicio: normalizeTime(h.inicio_base as string), fin: normalizeTime(h.fin_base as string) })
     }
 
-    const aprobadosPorFecha = new Map<string, { lane: number; start: number; end: number }[]>()
+    const aprobadosPorFecha = new Map<string, { usuario_id: string; inicio: string; fin: string }[]>()
     for (const s of (solicitudesRes.data ?? [])) {
       const f = s.fecha as string
       if (!aprobadosPorFecha.has(f)) aprobadosPorFecha.set(f, [])
-      aprobadosPorFecha.get(f)!.push({ lane: s.lane as number, start: toMin((s.hora_inicio as string).slice(0, 5)), end: toMin((s.hora_fin as string).slice(0, 5)) })
+      aprobadosPorFecha.get(f)!.push({ usuario_id: s.usuario_id as string, inicio: (s.hora_inicio as string).slice(0, 5), fin: (s.hora_fin as string).slice(0, 5) })
     }
 
     let huecosTotal = 0
     const minGap = minGapParaEquipo(equipo.nombre)
 
     for (const [fecha, shiftsDia] of turnosPorFecha.entries()) {
-      const gapsCrudos = findGapsForDay(shiftsDia, capacity, minGap)
-      const aprobadosDia = aprobadosPorFecha.get(fecha) ?? []
-      const gapsLibres = restarAprobados(gapsCrudos, aprobadosDia, minGap)
+      // Sobre la ocupación real (turnos base + puestos aprobados, unidos por persona)
+      const gapsLibres = findGapsForDay(ocupacionDelDia(shiftsDia, aprobadosPorFecha.get(fecha) ?? []), capacity, minGap)
       for (const gap of gapsLibres) {
         huecosTotal += decomponerGap(gap, tipo, minGap).length
       }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import {
-  defaultCapacity, findGapsForDay, restarAprobados, decomponerGap,
+  defaultCapacity, findGapsForDay, ocupacionDelDia, decomponerGap,
   toMin, minToStr, minGapParaEquipo, MIN_GAP_CONTIGUO, tipoRecurso,
 } from '@/lib/gaps'
 
@@ -60,9 +60,8 @@ export async function GET(req: NextRequest) {
 
   const minGap = minGapParaEquipo(equipoRow.nombre)
   const piso = Math.min(minGap, MIN_GAP_CONTIGUO)
-  const gapsCrudos = findGapsForDay(shiftsDia, capacity, piso)
-  const aprobadosDiaNuevo = aprobados.filter(s => !contiene(s)).map(s => ({ lane: s.lane, start: toMin(hm(s.hora_inicio)), end: toMin(hm(s.hora_fin)) }))
-  const gapsLibres = restarAprobados(gapsCrudos, aprobadosDiaNuevo, piso)
+  // Igual que la vista de disponibles: huecos sobre la ocupación real (base + aprobados, unidos por persona)
+  const gapsLibres = findGapsForDay(ocupacionDelDia(shiftsDia, aprobados.map(s => ({ usuario_id: s.usuario_id, inicio: hm(s.hora_inicio), fin: hm(s.hora_fin) }))), capacity, piso)
 
   const ofrecidos: { inicio: string; fin: string; turno: string | null; lane: number }[] = []
   for (const g of gapsLibres) {
@@ -88,9 +87,7 @@ export async function GET(req: NextRequest) {
         apenas_se_pisa_con_base: p.estado === 'approved' ? sePisa(p) : null,
       }))
       .sort((a, b) => a.horario.localeCompare(b.horario)),
-    gaps_crudos: gapsCrudos.map(g => ({ lane: g.lane, de: minToStr(g.start), a: minToStr(g.end) })),
-    aprobados_que_ocupan_mesa: aprobadosDiaNuevo.map(a => ({ lane: a.lane, de: minToStr(a.start), a: minToStr(a.end) })),
-    gaps_libres_tras_restar: gapsLibres.map(g => ({ lane: g.lane, de: minToStr(g.start), a: minToStr(g.end) })),
+    gaps_libres: gapsLibres.map(g => ({ lane: g.lane, de: minToStr(g.start), a: minToStr(g.end) })),
     puestos_que_se_ofrecerian_ahora: ofrecidos,
   }, { headers: { 'Cache-Control': 'no-store' } })
 }
